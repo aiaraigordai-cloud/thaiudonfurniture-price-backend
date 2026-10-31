@@ -3,7 +3,8 @@ import { getDb } from './db';
 import { cookies } from 'next/headers';
 
 const SESSION_COOKIE = 'catalog_a_session';
-const SECRET_KEY = process.env.APP_SECRET || 'catalog-a-super-secret-production-grade-key-2026';
+const SECRET_KEY = process.env.APP_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'local-development-only-secret');
+if (!SECRET_KEY) throw new Error('APP_SECRET is required in production');
 
 export interface UserSession {
   id: string;

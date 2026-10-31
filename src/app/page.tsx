@@ -9,8 +9,8 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
 
   // Login form
-  const [loginUsername, setLoginUsername] = useState('davidsuksomboriboon');
-  const [loginPassword, setLoginPassword] = useState('davidesther090722');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -244,16 +244,6 @@ export default function AuthPage() {
                   </>
                 )}
               </button>
-
-              {/* System Owner Credentials Hint */}
-              <div className="mt-4 p-3.5 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs text-[#705E4F] space-y-1">
-                <div className="font-bold text-[#805216] flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-[#C5A059]" />
-                  System Owner Pre-configured:
-                </div>
-                <div>Username: <code className="text-[#402E20] font-mono font-bold">davidsuksomboriboon</code></div>
-                <div>Password: <code className="text-[#402E20] font-mono font-bold">********</code></div>
-              </div>
             </form>
           ) : (
             <form onSubmit={handleSignup} className="space-y-3.5">

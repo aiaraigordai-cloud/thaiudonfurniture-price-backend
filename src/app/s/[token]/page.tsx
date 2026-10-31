@@ -205,7 +205,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 </span>
               </div>
               <div className="text-xs text-slate-500 font-medium mt-0.5">
-                {catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ'}
+                {(catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ').replace(/\s*\(?\bVIP\b\)?/gi, '').trim() || 'แคตตาล็อกสินค้าทางการ'}
               </div>
             </div>
           </div>

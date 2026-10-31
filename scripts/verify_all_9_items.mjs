@@ -8,7 +8,7 @@ async function verifyAll() {
   const homeHtml = await homeRes.text();
   console.log('1. Home contains "ระบบจัดการแคตตาล็อกสินค้าไทยอุดรเฟอร์นิเจอร์":', homeHtml.includes('ระบบจัดการแคตตาล็อกสินค้าไทยอุดรเฟอร์นิเจอร์'));
   console.log('   Old text "ตู้โล (121 รายการ) & น็อคดาวน์" removed:', !homeHtml.includes('ตู้โล (121 รายการ) & น็อคดาวน์'));
-  console.log('2. System Owner password hidden as ********:', homeHtml.includes('********') && !homeHtml.includes('davidesther090722'));
+  console.log('2. System Owner password not embedded in page:', !process.env.OWNER_PASSWORD || !homeHtml.includes(process.env.OWNER_PASSWORD));
 
   // Test 3: Top Right Preview button removed in Admin
   const adminRes = await fetch('http://localhost:3000/admin');

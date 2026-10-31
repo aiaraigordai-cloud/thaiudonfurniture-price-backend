@@ -232,7 +232,10 @@ console.log('✓ Seeded 4 Price Tiers');
 
 // 2. Seed System Owner
 const ownerUsername = 'davidsuksomboriboon';
-const ownerPassword = 'davidesther090722';
+const ownerPassword = process.env.OWNER_PASSWORD;
+if (!ownerPassword || ownerPassword.length < 16) {
+  throw new Error('Set OWNER_PASSWORD to a unique password of at least 16 characters before seeding.');
+}
 const ownerEmail = 'davidsuksomboriboon@gmail.com';
 const ownerEmpName = 'ดาวิด สุขสมบริบูรณ์';
 const ownerId = 'usr_owner_david_001';
@@ -407,7 +410,7 @@ console.log('✓ Seeded Products, 4-tier Prices, Categories, Demo Share Link');
 console.log('----------------------------------------------------');
 console.log('System Owner Ready:');
 console.log(`Username: ${ownerUsername}`);
-console.log(`Password: ${ownerPassword}`);
+console.log('Password: set through OWNER_PASSWORD');
 console.log(`Email:    ${ownerEmail}`);
 console.log(`Name:     ${ownerEmpName}`);
 console.log(`Role:     SYSTEM_OWNER`);

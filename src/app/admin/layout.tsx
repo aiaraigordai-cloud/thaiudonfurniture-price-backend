@@ -71,7 +71,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navLinks: { href: string; label: string; icon: any; badge?: string }[] = [
     { href: '/admin', label: 'ภาพรวมระบบ', icon: LayoutDashboard },
     { href: '/admin/products', label: 'จัดการสินค้า (310 รายการ)', icon: Package },
-    { href: '/admin/categories', label: 'หมวดหมู่สินค้า', icon: Layers },
+    { href: '/admin/categories', label: 'นำเข้าสินค้า/แคตตาล็อก', icon: Layers },
     { href: '/admin/prices', label: 'แก้ไขราคา 4 ระดับ', icon: Coins },
     { href: '/admin/prices/bulk-update', label: 'อัปเดตราคาด้วยไฟล์', icon: FileSpreadsheet },
     { href: '/admin/prices/import-history', label: 'ประวัตินำเข้า / Rollback', icon: History },

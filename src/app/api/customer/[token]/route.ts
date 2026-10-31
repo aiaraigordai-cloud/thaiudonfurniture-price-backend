@@ -123,9 +123,13 @@ export async function GET(request: Request, { params }: { params: { token: strin
       };
     });
 
+    // Sanitize customer name to ensure VIP / tier names are NEVER revealed in the customer header
+    let sanitizedCustomerName = link.customer_name ? link.customer_name.replace(/\s*\(?\bVIP\b\)?/gi, '').trim() : '';
+    if (!sanitizedCustomerName) sanitizedCustomerName = 'แคตตาล็อกสินค้าทางการ';
+
     return NextResponse.json({
       success: true,
-      customerName: link.customer_name,
+      customerName: sanitizedCustomerName,
       sharingMode: link.sharing_mode,
       catalogFilter: link.catalog_filter || 'all',
       products,

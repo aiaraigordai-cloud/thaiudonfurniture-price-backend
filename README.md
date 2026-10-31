@@ -16,7 +16,7 @@
 ระบบได้รับการตั้งค่าบัญชี System Owner เริ่มต้นเรียบร้อยแล้ว:
 
 - **ชื่อผู้ใช้ (Username):** `davidsuksomboriboon`
-- **รหัสผ่าน (Password):** `davidesther090722`
+- **รหัสผ่าน (Password):** ตั้งค่า `OWNER_PASSWORD` เป็นรหัสผ่านใหม่ที่ยาวอย่างน้อย 16 ตัวอักษรก่อนรัน `npm run seed`
 - **อีเมล (Email):** `davidsuksomboriboon@gmail.com`
 - **ชื่อพนักงาน:** `ดาวิด สุขสมบริบูรณ์`
 - **สิทธิ์:** `SYSTEM_OWNER` (มีสิทธิ์ทุกฟังก์ชัน รวมถึงเมนูจัดการสิทธิ์ `admin/permissions`, จัดการพนักงาน `admin/employees`, และดู Audit Logs)

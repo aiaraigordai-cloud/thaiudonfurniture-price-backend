@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS public.products (
   depth NUMERIC(10,2),
   color VARCHAR(100),
   status VARCHAR(20) DEFAULT 'Published' CHECK(status IN ('Draft', 'Published', 'Archived')),
+  catalog_type TEXT DEFAULT 'knockdown',
+  size_text TEXT,
+  ref_image_url TEXT,
+  ref_filename TEXT,
+  graphic_filename TEXT,
+  page_num INTEGER DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -123,6 +129,7 @@ CREATE TABLE IF NOT EXISTS public.share_links (
   customer_name VARCHAR(255),
   expires_at TIMESTAMPTZ,
   is_revoked BOOLEAN DEFAULT FALSE,
+  catalog_filter TEXT DEFAULT 'all',
   created_by UUID REFERENCES public.profiles(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -199,6 +206,17 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   actor_id UUID REFERENCES public.profiles(id),
   actor_username VARCHAR(100),
   details JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Recovery tokens are stored hashed by the application and expire by timestamp.
+CREATE TABLE IF NOT EXISTS public.account_recovery_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  is_used BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

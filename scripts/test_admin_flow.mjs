@@ -5,7 +5,7 @@ async function testAdminFlow() {
   const loginRes = await fetch('http://localhost:3000/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'davidsuksomboriboon', password: 'davidesther090722' })
+    body: JSON.stringify({ username: process.env.OWNER_USERNAME, password: process.env.OWNER_PASSWORD })
   });
   const cookie = loginRes.headers.get('set-cookie');
   console.log('Login status:', loginRes.status, 'Cookie received:', Boolean(cookie));
