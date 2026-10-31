@@ -1,0 +1,30 @@
+[
+  {
+    "id": "tier_sale",
+    "code": "SALE_PRICE",
+    "name_th": "ราคาเซลล์",
+    "description": "ราคาโปรโมชั่นพิเศษหรือลดราคา",
+    "display_order": 1
+  },
+  {
+    "id": "tier_retail",
+    "code": "RETAIL_PRICE",
+    "name_th": "ราคาปลีก",
+    "description": "ราคาจำหน่ายหน้าร้านทั่วไป",
+    "display_order": 2
+  },
+  {
+    "id": "tier_vip",
+    "code": "VIP_PRICE",
+    "name_th": "ราคา VIP",
+    "description": "ราคาพิเศษสำหรับลูกค้า VIP และสมาชิกองค์กร",
+    "display_order": 3
+  },
+  {
+    "id": "tier_general",
+    "code": "GENERAL_PRICE",
+    "name_th": "ราคาทั่วไป",
+    "description": "ราคามาตรฐานโครงการและตัวแทน",
+    "display_order": 4
+  }
+]

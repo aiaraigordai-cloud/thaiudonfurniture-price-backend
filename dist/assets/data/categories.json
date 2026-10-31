@@ -1,0 +1,137 @@
+[
+  {
+    "id": "cat_tuulo_kitchen",
+    "name": "ตู้กับข้าวและตู้ครัวอลูมิเนียม",
+    "slug": "tuulo-kitchen",
+    "description": "ตู้กับข้าวอลูมิเนียม ตู้ครัว เคาเตอร์ท็อปหิน คุณภาพสูง",
+    "display_order": 1,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_tuulo_food",
+    "name": "ตู้กับข้าวและตู้อาหาร",
+    "slug": "tuulo-food",
+    "description": "ตู้กับข้าว ตู้อาหาร ตาข่ายระบายอากาศ ป้องกันแมลง คุณภาพสูง",
+    "display_order": 1,
+    "created_at": "2026-10-30 08:19:24",
+    "updated_at": "2026-10-30 08:19:24"
+  },
+  {
+    "id": "cat_bedroom",
+    "name": "ชุดห้องนอน & เตียง",
+    "slug": "bedroom",
+    "description": "ชุดห้องนอนโมเดิร์นลักชูรี่ เตียงนอน ตู้ข้างเตียง",
+    "display_order": 2,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_tuulo_tile",
+    "name": "ตู้กระเบื้อง",
+    "slug": "tuulo-tile",
+    "description": "ตู้กระเบื้องปูท็อปทนความร้อน อ่างล้างจานอลูมิเนียมและสแตนเลส",
+    "display_order": 2,
+    "created_at": "2026-10-30 08:19:24",
+    "updated_at": "2026-10-30 08:19:24"
+  },
+  {
+    "id": "cat_tv_showcase",
+    "name": "ชุดโชว์ทีวี & ตู้วางทีวี",
+    "slug": "tv-showcase",
+    "description": "ตู้โชว์ทีวี แผงประดับทีวี ตู้วางทีวี",
+    "display_order": 3,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_tuulo_kitchen_tall",
+    "name": "ตู้ครัวสูง",
+    "slug": "tuulo-kitchen-tall",
+    "description": "ตู้ครัวทรงสูง ชั้นวางของและซิงค์ล้างจานครบวงจร",
+    "display_order": 3,
+    "created_at": "2026-10-30 08:19:24",
+    "updated_at": "2026-10-30 08:19:24"
+  },
+  {
+    "id": "cat_wardrobe",
+    "name": "ตู้เสื้อผ้า & ตู้ทึบ",
+    "slug": "wardrobe",
+    "description": "ตู้เสื้อผ้าบานเปิด บานเลื่อน ตู้กระจกเงา",
+    "display_order": 4,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_tuulo_wardrobe",
+    "name": "ตู้เสื้อผ้าและตู้โชว์อลูมิเนียม",
+    "slug": "tuulo-wardrobe",
+    "description": "ตู้เสื้อผ้าอลูมิเนียม 2 บาน 3 บาน 8 บาน ตู้โชว์ทีวี",
+    "display_order": 4,
+    "created_at": "2026-10-30 08:19:24",
+    "updated_at": "2026-10-30 08:19:24"
+  },
+  {
+    "id": "cat_tuulo_counter_gas",
+    "name": "เคาน์เตอร์ครัวและตู้วางเตาแก๊ส",
+    "slug": "tuulo-counter-gas",
+    "description": "เคาน์เตอร์ท็อปหิน ตู้วางเตาแก๊ส และตู้อ่างอเนกประสงค์",
+    "display_order": 5,
+    "created_at": "2026-10-30 08:19:24",
+    "updated_at": "2026-10-30 08:19:24"
+  },
+  {
+    "id": "cat_vanity",
+    "name": "โต๊ะเครื่องแป้ง",
+    "slug": "vanity",
+    "description": "โต๊ะเครื่องแป้งพร้อมสตูล ไฟ LED กระจกบานใหญ่",
+    "display_order": 5,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_living_showcase",
+    "name": "ตู้โชว์ & ตู้คอนโซล",
+    "slug": "living-showcase",
+    "description": "ตู้โชว์ดาวน์ไลท์ ตู้คอนโซลหรู",
+    "display_order": 6,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_kitchen_counter",
+    "name": "เคาน์เตอร์ครัว",
+    "slug": "kitchen-counter",
+    "description": "เคาน์เตอร์ครัวสำเร็จรูป ตู้แขวนผนัง",
+    "display_order": 7,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_buddha",
+    "name": "ตู้พระมงคล",
+    "slug": "buddha",
+    "description": "ตู้พระเสริมมงคล ชั้นวางพระสง่างาม",
+    "display_order": 8,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_shoes",
+    "name": "ตู้รองเท้า",
+    "slug": "shoes",
+    "description": "ตู้รองเท้าระบายอากาศ จุได้เยอะ",
+    "display_order": 9,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  },
+  {
+    "id": "cat_drawer",
+    "name": "ตู้ลิ้นชัก",
+    "slug": "drawer",
+    "description": "ตู้ลิ้นชักเก็บของอเนกประสงค์",
+    "display_order": 10,
+    "created_at": "2026-10-30 06:58:46",
+    "updated_at": "2026-10-30 06:58:46"
+  }
+]

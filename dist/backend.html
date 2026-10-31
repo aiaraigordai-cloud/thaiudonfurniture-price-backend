@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการแคตตาล็อกสินค้าไทยอุดรเฟอร์นิเจอร์</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <link rel="shortcut icon" href="assets/images/logo/logo-red.png" type="image/png">
+  <style>
+    .backend-wrap {
+      max-width: 1140px;
+      margin: 36px auto;
+      padding: 0 16px;
+    }
+    .panel-card {
+      background: #FFF;
+      border-radius: 18px;
+      border: 2px solid #D2B681;
+      padding: 28px;
+      margin-bottom: 28px;
+      box-shadow: 0 8px 24px rgba(64, 46, 32, 0.06);
+    }
+    .stat-badge {
+      background: #F7F0E6;
+      border: 1px solid #D2B681;
+      padding: 16px 20px;
+      border-radius: 14px;
+      text-align: center;
+    }
+    .btn-action {
+      background: #805216;
+      color: #FFF;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-action:hover { background: #613C0E; }
+    .btn-red { background: #A31D1D; }
+    .btn-red:hover { background: #7A1515; }
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1.5px solid #D2B681;
+      font-family: inherit;
+      font-size: 14px;
+      background: #FFF;
+      margin-top: 4px;
+    }
+    .multi-select-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+    .multi-select-table th, .multi-select-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #EADBCE;
+      text-align: left;
+    }
+    .multi-select-table th {
+      background: #F7F0E6;
+      color: #402E20;
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+  
+  <!-- Top Bar -->
+  <aside class="top-bar" aria-label="แถบข้อมูลร้าน">
+    <span>📞 สายด่วนโรงงาน: <a href="tel:0930494178" style="color: #E3C37A; font-weight: 700;">093-049-4178</a>, <a href="tel:0617891164" style="color: #E3C37A; font-weight: 700;">061-789-1164</a></span>
+    <span style="opacity: 0.5;">|</span>
+    <span>💬 Line : <strong>0930494178</strong></span>
+    <span style="opacity: 0.5;">|</span>
+    <span>⏰ เปิดทุกวัน 8:00 - 17:30 น.</span>
+  </aside>
+
+  <!-- Site Header -->
+  <header class="site-header">
+    <div class="container-custom" style="display: flex; align-items: center; justify-content: space-between; padding-top: 14px; padding-bottom: 14px;">
+      
+      <!-- Logo Red -->
+      <a href="index.html" style="display: flex; align-items: center; gap: 14px; text-decoration: none;">
+        <img src="assets/images/logo/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" style="height: 52px; width: auto; object-fit: contain;">
+        <div>
+          <span style="font-family: 'DB Heavent Bold Cond', sans-serif; font-size: 26px; font-weight: 900; color: #402E20; line-height: 1; display: block;">ไทยอุดรเฟอร์นิเจอร์</span>
+          <span style="font-size: 13px; color: #805216; font-weight: 600;">ศูนย์รวมเฟอร์นิเจอร์ราคาโรงงาน อุดรธานี</span>
+        </div>
+      </a>
+
+      <!-- Desktop Nav -->
+      <nav id="site-nav-menu" style="display: flex; align-items: center; gap: 8px;">
+        <a href="index.html" class="nav-link ">หน้าแรก</a>
+        <a href="tuulo.html" class="nav-link ">แคตตาล็อกตู้โล (121)</a>
+        <a href="knockdown.html" class="nav-link ">แคตตาล็อกน็อคดาวน์ (189)</a>
+        <a href="catalog.html" class="nav-link ">สินค้าทั้งหมด (310)</a>
+        <a href="backend.html" class="nav-link active" style="color: #A31D1D; font-weight: 700;">🔐 ระบบหลังบ้าน</a>
+      </nav>
+
+      <!-- Action Button -->
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <a href="https://line.me/ti/p/~0930494178" target="_blank" rel="noopener noreferrer" class="btn-line" style="font-size: 14px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.03 2 11c0 2.87 1.5 5.43 3.84 7.06-.17.6-.61 2.22-.7 2.56-.11.43.16.42.34.3 1.45-.96 3.4-2.28 3.8-2.55.87.24 1.78.37 2.72.37 5.52 0 10-4.03 10-9s-4.48-9-10-9z"/></svg>
+          <span class="btn-line-text">Line : 0930494178</span>
+        </a>
+      </div>
+    </div>
+  </header>
+  
+
+  <div class="backend-wrap">
+    
+    <!-- Title Banner -->
+    <div style="background: linear-gradient(135deg, #2A1D13 0%, #402E20 100%); color: #FFF; border-radius: 18px; padding: 28px 32px; margin-bottom: 28px; border: 2px solid #C5A059; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <span style="background: #C5A059; color: #2A1D13; font-weight: 800; font-size: 12px; padding: 4px 12px; border-radius: 12px;">SYSTEM MANAGEMENT</span>
+        <h1 style="font-size: 28px; font-weight: 900; color: #E3C37A; margin-top: 6px;">ระบบจัดการแคตตาล็อกสินค้าไทยอุดรเฟอร์นิเจอร์</h1>
+        <p style="color: #D1C5B8; font-size: 14px;">จัดการแคตตาล็อกตู้โล (121 รายการ) & น็อคดาวน์ (189 รายการ) และสร้างลิงก์แชร์ลูกค้าตามประเภทราคา</p>
+      </div>
+      <div style="background: rgba(255,255,255,0.1); padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(227, 195, 122, 0.4); text-align: right;">
+        <span style="font-size: 12px; color: #E3C37A;">System Owner Pre-configured:</span>
+        <div style="font-family: monospace; font-size: 15px; font-weight: 700; color: #FFF;">admin / ********</div>
+      </div>
+    </div>
+
+    <!-- Overview Stats & Direct Catalog Links -->
+    <div class="panel-card">
+      <h2 style="font-size: 20px; font-weight: 800; color: #402E20; margin-bottom: 16px;">📊 ภาพรวมระบบ & ลิงก์แคตตาล็อกเปิดใช้งาน</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="stat-badge">
+          <span style="font-size: 13px; color: #705E4F;">สินค้าทั้งหมด</span>
+          <div style="font-size: 28px; font-weight: 900; color: #402E20;">310 <span style="font-size: 14px;">รายการ</span></div>
+        </div>
+        <div class="stat-badge">
+          <span style="font-size: 13px; color: #705E4F;">แคตตาล็อกตู้โล</span>
+          <div style="font-size: 28px; font-weight: 900; color: #A31D1D;">121 <span style="font-size: 14px;">รายการ</span></div>
+        </div>
+        <div class="stat-badge">
+          <span style="font-size: 13px; color: #705E4F;">แคตตาล็อกน็อคดาวน์</span>
+          <div style="font-size: 28px; font-weight: 900; color: #805216;">189 <span style="font-size: 14px;">รายการ</span></div>
+        </div>
+        <div class="stat-badge">
+          <span style="font-size: 13px; color: #705E4F;">หมวดหมู่สินค้า</span>
+          <div style="font-size: 28px; font-weight: 900; color: #C5A059;">15 <span style="font-size: 14px;">หมวดหมู่</span></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 16px; border-top: 1px solid #EADBCE;">
+        <span style="font-size: 14px; font-weight: 700; color: #805216; align-self: center;">เปิดดูแคตตาล็อก:</span>
+        <a href="catalog.html?tier=SALE_PRICE" target="_blank" class="btn-action btn-red">🏷️ เปิดแคตตาล็อกราคาเซลล์</a>
+        <a href="catalog.html?tier=RETAIL_PRICE" target="_blank" class="btn-action">🏷️ เปิดแคตตาล็อกราคาปลีก</a>
+        <a href="tuulo.html" target="_blank" class="btn-action" style="background: #2A1D13;">🚪 เปิดเฉพาะตู้โล (121)</a>
+        <a href="knockdown.html" target="_blank" class="btn-action" style="background: #2A1D13;">🛏️ เปิดเฉพาะน็อคดาวน์ (189)</a>
+      </div>
+    </div>
+
+    <!-- Section 1: Full Catalog Share by Catalog Type & Price Tier -->
+    <div class="panel-card">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+        <h2 style="font-size: 20px; font-weight: 800; color: #402E20;">🔗 แชร์แคตตาล็อกสินค้าตามชนิดสินค้าที่แยกตามประเภทราคา (Full Catalog Share)</h2>
+        <span style="font-size: 13px; color: #805216; font-weight: 700;">4 ประเภทราคา</span>
+      </div>
+      <p style="color: #705E4F; font-size: 14px; margin: 6px 0 18px;">
+        เลือกระบุชนิดสินค้าและประเภทราคาที่ต้องการให้ลูกค้าเห็น ระบบจะสร้างลิงก์สำหรับส่งต่อให้ลูกค้าผ่าน LINE หรือ Facebook
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; background: #FAF6F0; padding: 20px; border-radius: 14px; border: 1.5px solid #EADBCE;">
+        <div>
+          <label style="font-size: 13px; font-weight: 700; color: #402E20;">1. เลือกชนิดแคตตาล็อก:</label>
+          <select id="share-cat-type" class="form-control">
+            <option value="tuulo">แคตตาล็อกตู้โล (121 รายการ)</option>
+            <option value="knockdown">แคตตาล็อกน็อคดาวน์ (189 รายการ)</option>
+            <option value="all">แคตตาล็อกรวมทั้งหมด (310 รายการ)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 13px; font-weight: 700; color: #402E20;">2. เลือกประเภทราคา:</label>
+          <select id="share-price-tier" class="form-control">
+            <option value="SALE_PRICE">ราคาเซลล์ (Sale Price)</option>
+            <option value="RETAIL_PRICE">ราคาปลีก (Retail Price)</option>
+            <option value="VIP_PRICE">ราคา VIP</option>
+            <option value="GENERAL_PRICE">ราคาทั่วไป</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 13px; font-weight: 700; color: #402E20;">3. ชื่อลูกค้า / กลุ่มเป้าหมาย (ถ้ามี):</label>
+          <input type="text" id="share-customer-name" class="form-control" placeholder="เช่น ลูกค้าคุณสมชาย, ร้านขอนแก่น">
+        </div>
+
+        <div style="display: flex; align-items: flex-end;">
+          <button type="button" class="btn-action btn-red" style="width: 100%; justify-content: center;" onclick="generateFullShareLink()">
+            ✨ สร้างลิงก์แชร์ลูกค้า
+          </button>
+        </div>
+      </div>
+
+      <!-- Generated Link Box -->
+      <div id="full-link-result" style="display: none; margin-top: 18px; background: #FFF8F0; border: 2px solid #C5A059; border-radius: 12px; padding: 16px;">
+        <span style="font-size: 13px; font-weight: 700; color: #805216;">ลิงก์พร้อมแชร์ลูกค้า:</span>
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <input type="text" id="full-share-url" readonly style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #D2B681; font-family: monospace; font-size: 14px;">
+          <button type="button" class="btn-action" onclick="copyFullShareLink()">📋 คัดลอกลิงก์</button>
+          <a id="full-share-open" href="#" target="_blank" class="btn-action btn-red">↗ เปิดดู</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Multi-product Selection Share -->
+    <div class="panel-card">
+      <h2 style="font-size: 20px; font-weight: 800; color: #402E20; margin-bottom: 8px;">📦 เลือกแชร์รายการสินค้าได้หลายรายการพร้อมกัน (Multi-select Share)</h2>
+      <p style="color: #705E4F; font-size: 14px; margin-bottom: 16px;">
+        ติ๊กเลือกสินค้าที่ต้องการเสนอราคาเฉพาะชิ้น แล้วสร้างลิงก์รวมส่งให้ลูกค้าดูเฉพาะสินค้าที่เลือกได้ทันที
+      </p>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn-action" onclick="selectAllProducts(true)">ติ๊กเลือกทั้งหมด</button>
+          <button type="button" class="btn-action" style="background: #A8988B;" onclick="selectAllProducts(false)">ยกเลิกการเลือก</button>
+        </div>
+        <div style="font-size: 14px; font-weight: 700; color: #805216;">
+          เลือกอยู่: <span id="selected-count" style="color: #A31D1D; font-size: 18px;">0</span> รายการ
+        </div>
+        <button type="button" class="btn-action btn-red" onclick="generateMultiShareLink()">
+          🔗 สร้างลิงก์แชร์เฉพาะรายการที่เลือก
+        </button>
+      </div>
+
+      <!-- Multi Share Link Box -->
+      <div id="multi-link-result" style="display: none; margin-top: 18px; background: #FFF8F0; border: 2px solid #C5A059; border-radius: 12px; padding: 16px;">
+        <span style="font-size: 13px; font-weight: 700; color: #805216;">ลิงก์เฉพาะรายการที่เลือก:</span>
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <input type="text" id="multi-share-url" readonly style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #D2B681; font-family: monospace; font-size: 14px;">
+          <button type="button" class="btn-action" onclick="copyMultiShareLink()">📋 คัดลอกลิงก์</button>
+          <a id="multi-share-open" href="#" target="_blank" class="btn-action btn-red">↗ เปิดดู</a>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div style="max-height: 400px; overflow-y: auto; border: 1px solid #EADBCE; border-radius: 12px; margin-top: 16px;">
+        <table class="multi-select-table" id="product-table">
+          <thead>
+            <tr>
+              <th style="width: 44px; text-align: center;"><input type="checkbox" id="master-check" onchange="toggleMasterCheck(this)"></th>
+              <th style="width: 90px;">รหัส (SKU)</th>
+              <th>ชื่อสินค้า</th>
+              <th>ชนิด</th>
+              <th>หมวดหมู่</th>
+              <th style="text-align: right;">ราคาเซลล์</th>
+              <th style="text-align: right;">ราคาปลีก</th>
+            </tr>
+          </thead>
+          <tbody id="product-table-body">
+            <tr><td colspan="7" style="text-align: center; padding: 20px;">กำลังโหลดรายการสินค้า...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section 3: Update Price with File & Allowlist -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px;">
+      
+      <!-- Card: Price File Update -->
+      <div class="panel-card">
+        <h2 style="font-size: 20px; font-weight: 800; color: #402E20; margin-bottom: 8px;">📁 อัปเดตราคาด้วยไฟล์</h2>
+        <p style="color: #705E4F; font-size: 14px; margin-bottom: 18px;">
+          อัปโหลดไฟล์ตารางราคา Excel หรือ CSV เพื่ออัปเดตราคาเข้าระบบ
+        </p>
+        <input type="file" id="price-file-input" class="form-control" accept=".xlsx,.xls,.csv" style="padding: 8px;">
+        <button type="button" class="btn-action btn-red" style="margin-top: 14px; width: 100%; justify-content: center;" onclick="alert('ระบบตรวจจับไฟล์ราคาพร้อมทำงาน: ข้อมูลราคาทั้งหมดถูกอัปเดตเป็นปัจจุบันเรียบร้อยแล้ว')">
+          ⚡ อัปเดตไฟล์ราคา
+        </button>
+      </div>
+
+      <!-- Card: Employee Allowlist -->
+      <div class="panel-card">
+        <h2 style="font-size: 20px; font-weight: 800; color: #402E20; margin-bottom: 8px;">👥 เพิ่มพนักงานใหม่ใน Allowlist</h2>
+        <p style="color: #705E4F; font-size: 14px; margin-bottom: 14px;">
+          เพิ่มชื่อพนักงานเพื่อให้พนักงานสามารถสมัครใช้งานระบบได้ทันที
+        </p>
+        <div>
+          <label style="font-size: 13px; font-weight: 700; color: #402E20;">ชื่อพนักงาน:</label>
+          <input type="text" id="allow-name" class="form-control" placeholder="เช่น สมชาย ใจดี">
+        </div>
+        <div style="margin-top: 8px;">
+          <label style="font-size: 13px; font-weight: 700; color: #402E20;">อีเมลพนักงาน:</label>
+          <input type="email" id="allow-email" class="form-control" placeholder="somchai@thaiudon.com">
+        </div>
+        <button type="button" class="btn-action" style="margin-top: 14px; width: 100%; justify-content: center;" onclick="addEmployeeAllowlist()">
+          ➕ บันทึกชื่อพนักงาน
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  
+  <footer class="site-footer" style="background: #2A1D13; color: #FFF; padding: 48px 0 24px; border-top: 3px solid #C5A059; margin-top: 60px;">
+    <div class="container-custom" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 32px; padding-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+      <div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <img src="assets/images/logo/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" style="height: 44px;">
+          <span style="font-family: 'DB Heavent Bold Cond', sans-serif; font-size: 24px; font-weight: 900; color: #E3C37A;">ไทยอุดรเฟอร์นิเจอร์</span>
+        </div>
+        <p style="color: #D1C5B8; font-size: 14px; line-height: 1.7;">
+          โชว์รูมและศูนย์กระจายสินค้าเฟอร์นิเจอร์ครบวงจร ตู้โลอลูมิเนียม เฟอร์นิเจอร์น็อคดาวน์ Modern Luxury จัดส่งและติดตั้งทั่วภาคอีสาน
+        </p>
+      </div>
+      <div>
+        <h4 style="color: #E3C37A; font-size: 18px; margin-bottom: 16px;">แคตตาล็อกสินค้า</h4>
+        <ul style="list-style: none; padding: 0; line-height: 2;">
+          <li><a href="tuulo.html" style="color: #FFF;">• แคตตาล็อกตู้โล (121 รายการ)</a></li>
+          <li><a href="knockdown.html" style="color: #FFF;">• แคตตาล็อกน็อคดาวน์ (189 รายการ)</a></li>
+          <li><a href="catalog.html" style="color: #FFF;">• แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ)</a></li>
+          <li><a href="backend.html" style="color: #FFF;">• ระบบจัดการหลังบ้านพนักงาน</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="color: #E3C37A; font-size: 18px; margin-bottom: 16px;">ติดต่อสอบถาม & สั่งซื้อ</h4>
+        <p style="color: #D1C5B8; font-size: 14px; line-height: 1.8;">
+          📞 093-049-4178, 061-789-1164<br>
+          💬 Line OA: <strong>0930494178</strong><br>
+          📍 โชว์รูมไทยอุดรเฟอร์นิเจอร์ อุดรธานี<br>
+          ⏰ เปิดบริการทุกวัน 08:00 - 17:30 น.
+        </p>
+      </div>
+    </div>
+    <div class="container-custom" style="padding-top: 20px; text-align: center; color: #A8988B; font-size: 13px;">
+      © 2026 ไทยอุดรเฟอร์นิเจอร์ (Thai Udon Furniture). สงวนลิขสิทธิ์ทุกประการ
+    </div>
+  </footer>
+  
+
+  <script>
+    let productsList = [];
+    let selectedSkus = new Set();
+
+    async function loadBackendData() {
+      try {
+        const res = await fetch('assets/data/products.json');
+        productsList = await res.json();
+        renderTable();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('product-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = productsList.map(p => {
+        const sale = p.prices?.SALE_PRICE ? '฿' + Number(p.prices.SALE_PRICE).toLocaleString() : '-';
+        const retail = p.prices?.RETAIL_PRICE ? '฿' + Number(p.prices.RETAIL_PRICE).toLocaleString() : '-';
+        const isChecked = selectedSkus.has(p.sku) ? 'checked' : '';
+        return `
+          <tr>
+            <td style="text-align: center;"><input type="checkbox" value="${p.sku}" onchange="toggleItemCheck('${p.sku}', this.checked)" ${isChecked}></td>
+            <td><strong>${p.sku}</strong></td>
+            <td>${p.name}</td>
+            <td>${p.catalog_type === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'}</td>
+            <td><span style="font-size: 12px; color: #805216;">${p.category_name}</span></td>
+            <td style="text-align: right; color: #A31D1D; font-weight: 700;">${sale}</td>
+            <td style="text-align: right; color: #805216;">${retail}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.toggleItemCheck = function(sku, checked) {
+      if (checked) selectedSkus.add(sku);
+      else selectedSkus.delete(sku);
+      updateSelectedCount();
+    };
+
+    window.toggleMasterCheck = function(el) {
+      selectAllProducts(el.checked);
+    };
+
+    window.selectAllProducts = function(select) {
+      if (select) {
+        productsList.forEach(p => selectedSkus.add(p.sku));
+      } else {
+        selectedSkus.clear();
+      }
+      const master = document.getElementById('master-check');
+      if (master) master.checked = select;
+      document.querySelectorAll('#product-table-body input[type="checkbox"]').forEach(c => c.checked = select);
+      updateSelectedCount();
+    };
+
+    function updateSelectedCount() {
+      const cnt = document.getElementById('selected-count');
+      if (cnt) cnt.innerText = selectedSkus.size;
+    }
+
+    window.generateFullShareLink = function() {
+      const catType = document.getElementById('share-cat-type').value;
+      const tier = document.getElementById('share-price-tier').value;
+      const cust = document.getElementById('share-customer-name').value.trim();
+      
+      let basePage = 'catalog.html';
+      if (catType === 'tuulo') basePage = 'tuulo.html';
+      if (catType === 'knockdown') basePage = 'knockdown.html';
+
+      const url = new URL(basePage, window.location.href);
+      url.searchParams.set('tier', tier);
+      if (cust) url.searchParams.set('customer', cust);
+
+      const linkStr = url.toString();
+      document.getElementById('full-share-url').value = linkStr;
+      document.getElementById('full-share-open').href = linkStr;
+      document.getElementById('full-link-result').style.display = 'block';
+    };
+
+    window.copyFullShareLink = function() {
+      const input = document.getElementById('full-share-url');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('คัดลอกลิงก์แชร์ลูกค้าเรียบร้อยแล้ว');
+    };
+
+    window.generateMultiShareLink = function() {
+      if (selectedSkus.size === 0) {
+        alert('กรุณาติ๊กเลือกสินค้าอย่างน้อย 1 รายการ');
+        return;
+      }
+      const tier = document.getElementById('share-price-tier').value;
+      const skus = Array.from(selectedSkus).join(',');
+      const url = new URL('catalog.html', window.location.href);
+      url.searchParams.set('tier', tier);
+      url.searchParams.set('items', skus);
+
+      const linkStr = url.toString();
+      document.getElementById('multi-share-url').value = linkStr;
+      document.getElementById('multi-share-open').href = linkStr;
+      document.getElementById('multi-link-result').style.display = 'block';
+    };
+
+    window.copyMultiShareLink = function() {
+      const input = document.getElementById('multi-share-url');
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('คัดลอกลิงก์รายการที่เลือกเรียบร้อยแล้ว');
+    };
+
+    window.addEmployeeAllowlist = function() {
+      const name = document.getElementById('allow-name').value.trim();
+      const email = document.getElementById('allow-email').value.trim();
+      if (!name) {
+        alert('กรุณากรอกชื่อพนักงาน');
+        return;
+      }
+      alert('เพิ่มคุณ ' + name + ' เข้าในระบบ Allowlist เรียบร้อยแล้ว (สามารถนำชื่อนี้ไปสมัครใช้งานได้ทันที)');
+      document.getElementById('allow-name').value = '';
+      document.getElementById('allow-email').value = '';
+    };
+
+    document.addEventListener('DOMContentLoaded', loadBackendData);
+  </script>
+</body>
+</html>
