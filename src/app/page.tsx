@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ShieldCheck, UserCheck, Lock, Mail, User, AlertCircle, CheckCircle2, KeyRound, Sparkles } from 'lucide-react';
 
 export default function AuthPage() {
@@ -350,6 +351,8 @@ export default function AuthPage() {
           )}
         </div>
       </div>
+
+      <Link href="/demo" className="relative z-10 mt-5 text-sm font-semibold text-[#161B40] underline underline-offset-4 hover:text-[#DE1B23]">ดูตัวอย่างระบบหลังบ้านโดยไม่ต้องเข้าสู่ระบบ</Link>
 
       {/* Forgot Username Modal */}
       {forgotUserModal && (
