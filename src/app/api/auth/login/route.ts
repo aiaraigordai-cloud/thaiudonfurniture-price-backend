@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const user = db.prepare(`
+    const user = await db.prepare(`
       SELECT id, username, email, employee_name, role, status, password_hash, salt, email_verified
       FROM profiles
       WHERE username = ?
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     const isMatch = verifyPassword(password, user.password_hash, user.salt);
     if (!isMatch) {
-      logAudit('LOGIN_FAILED', 'USER', user.id, user.id, user.username, { reason: 'Invalid password' });
+      await logAudit('LOGIN_FAILED', 'USER', user.id, user.id, user.username, { reason: 'Invalid password' });
       return NextResponse.json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
     }
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       time: Date.now(),
     });
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set('catalog_a_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
-    logAudit('LOGIN_SUCCESS', 'USER', user.id, user.id, user.username, { role: user.role });
+    await logAudit('LOGIN_SUCCESS', 'USER', user.id, user.id, user.username, { role: user.role });
 
     return NextResponse.json({
       success: true,

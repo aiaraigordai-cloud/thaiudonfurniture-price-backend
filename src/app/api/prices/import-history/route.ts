@@ -10,7 +10,7 @@ export async function GET() {
     }
 
     const db = getDb();
-    const batches = db.prepare(`
+    const batches = await db.prepare(`
       SELECT 
         b.*,
         pt.name_th as tier_name,
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const { batchId } = await request.json();
     const db = getDb();
 
-    const batch = db.prepare('SELECT * FROM price_import_batches WHERE id = ?').get(batchId) as any;
+    const batch = await db.prepare('SELECT * FROM price_import_batches WHERE id = ?').get(batchId) as any;
     if (!batch) {
       return NextResponse.json({ error: 'ไม่พบ Batch นี้' }, { status: 404 });
     }
@@ -54,13 +54,13 @@ export async function POST(request: Request) {
     }
 
     // Get price changes for this batch
-    const changes = db.prepare('SELECT * FROM price_change_history WHERE batch_id = ?').all(batchId) as any[];
+    const changes = await db.prepare('SELECT * FROM price_change_history WHERE batch_id = ?').all(batchId) as any[];
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
     try {
       for (const ch of changes) {
         if (ch.old_price !== null && ch.old_price !== undefined) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE product_prices
             SET price = ?, updated_at = datetime('now'), updated_by = ?
             WHERE product_id = ? AND price_tier_id = ?
@@ -68,15 +68,15 @@ export async function POST(request: Request) {
         }
       }
 
-      db.prepare("UPDATE price_import_batches SET status = 'ROLLED_BACK' WHERE id = ?").run(batchId);
+      await db.prepare("UPDATE price_import_batches SET status = 'ROLLED_BACK' WHERE id = ?").run(batchId);
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (e) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw e;
     }
 
-    logAudit('ROLLBACK_PRICE_BATCH', 'PRICE_BATCH', batchId, user.id, user.username, {
+    await logAudit('ROLLBACK_PRICE_BATCH', 'PRICE_BATCH', batchId, user.id, user.username, {
       restoredRows: changes.length,
     });
 

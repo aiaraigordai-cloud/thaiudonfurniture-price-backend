@@ -12,18 +12,18 @@ export async function POST(request: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
     const db = getDb();
-    const user = db.prepare('SELECT id, username FROM profiles WHERE email = ?').get(cleanEmail) as any;
+    const user = await db.prepare('SELECT id, username FROM profiles WHERE email = ?').get(cleanEmail) as any;
 
     if (user) {
       const resetToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO account_recovery_events (id, profile_id, event_type, token_hash, expires_at, is_used, created_at)
         VALUES (?, ?, 'PASSWORD_RESET', ?, datetime('now', '+1 hour'), 0, datetime('now'))
       `).run(crypto.randomUUID(), user.id, tokenHash);
 
-      logAudit('PASSWORD_RESET_REQUESTED', 'USER', user.id, null, 'ANONYMOUS', { email: cleanEmail });
+      await logAudit('PASSWORD_RESET_REQUESTED', 'USER', user.id, null, 'ANONYMOUS', { email: cleanEmail });
       console.log(`[SIMULATED EMAIL DISPATCH] Password reset link with token ${resetToken} sent to ${cleanEmail}`);
     }
 

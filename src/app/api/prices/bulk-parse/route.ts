@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // Verify price tier
-    const tier = db.prepare('SELECT id, code, name_th FROM price_tiers WHERE id = ?').get(priceTierId) as any;
+    const tier = await db.prepare('SELECT id, code, name_th FROM price_tiers WHERE id = ?').get(priceTierId) as any;
     if (!tier) {
       return NextResponse.json({ error: 'ประเภทราคาที่เลือกไม่ถูกต้อง' }, { status: 400 });
     }
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       // If document was an image or binary PDF and text is empty/binary, simulate high-precision Visual OCR
       if (rawRows.length === 0 && (ext === 'pdf' || ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'docx')) {
         // High quality simulated AI document parsing for sample products in catalog
-        const allProds = db.prepare('SELECT sku, name FROM products LIMIT 10').all() as any[];
+        const allProds = await db.prepare('SELECT sku, name FROM products LIMIT 10').all() as any[];
         allProds.forEach((p, idx) => {
           rawRows.push({
             sku: p.sku,
@@ -153,11 +153,11 @@ export async function POST(request: Request) {
     const parsedRowsToInsert: any[] = [];
 
     // Pre-fetch all products
-    const existingProducts = db.prepare('SELECT id, sku, name FROM products').all() as any[];
+    const existingProducts = await db.prepare('SELECT id, sku, name FROM products').all() as any[];
     const prodMap = new Map<string, any>();
     existingProducts.forEach((p) => prodMap.set(p.sku.toUpperCase(), p));
 
-    rawRows.forEach((item, index) => {
+    for (const [index, item] of rawRows.entries()) {
       const normalizedSku = item.sku.trim().toUpperCase();
       const product = prodMap.get(normalizedSku);
 
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
         }
       } else {
         // Get old price
-        const currentPriceRow = db.prepare(`
+        const currentPriceRow = await db.prepare(`
           SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
         `).get(product.id, priceTierId) as any;
         oldPrice = currentPriceRow ? currentPriceRow.price : null;
@@ -209,19 +209,19 @@ export async function POST(request: Request) {
         warning_reason: warning,
         is_selected: isSelected,
       });
-    });
+    }
 
     // Save batch and rows in DB
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
     try {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO price_import_batches (
           id, filename, file_type, price_tier_id, total_rows, passed_rows, review_rows, failed_rows, updated_rows, status, uploaded_by, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', ?, datetime('now'))
       `).run(batchId, filename, ext, priceTierId, rawRows.length, passedCount, reviewCount, failedCount, user.id);
 
       for (const r of parsedRowsToInsert) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO price_import_rows (
             id, batch_id, row_number, source_data, detected_sku, detected_product_name, old_price, new_price, validation_status, warning_reason, is_selected, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -231,13 +231,13 @@ export async function POST(request: Request) {
         );
       }
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (e) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw e;
     }
 
-    logAudit('BULK_PRICE_PARSE', 'PRICE_BATCH', batchId, user.id, user.username, {
+    await logAudit('BULK_PRICE_PARSE', 'PRICE_BATCH', batchId, user.id, user.username, {
       filename,
       tier: tier.name_th,
       total: rawRows.length,

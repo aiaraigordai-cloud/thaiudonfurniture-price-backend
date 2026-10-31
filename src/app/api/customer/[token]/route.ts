@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
     const db = getDb();
 
     // Find link
-    const link = db.prepare(`
+    const link = await db.prepare(`
       SELECT id, sharing_mode, catalog_filter, price_tier_id, customer_name, expires_at, is_revoked
       FROM share_links
       WHERE token_hash = ?
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
       const userAgent = request.headers.get('user-agent') || '';
       const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
       const ipHash = crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO share_events (id, share_link_id, ip_hash, user_agent, accessed_at)
         VALUES (?, ?, ?, ?, datetime('now'))
       `).run('ev_' + crypto.randomUUID(), link.id, ipHash, userAgent);
@@ -90,11 +90,11 @@ export async function GET(request: Request, { params }: { params: { token: strin
       queryParams.push(link.price_tier_id, link.id);
     }
 
-    const rawProducts = db.prepare(productsQuery).all(...queryParams) as any[];
+    const rawProducts = await db.prepare(productsQuery).all(...queryParams) as any[];
 
     // Fetch images for each product
-    const products = rawProducts.map((p) => {
-      const imgs = db.prepare(`
+    const products = await Promise.all(rawProducts.map(async (p) => {
+      const imgs = await db.prepare(`
         SELECT image_url FROM product_images
         WHERE product_id = ?
         ORDER BY display_order ASC
@@ -121,7 +121,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
         // Isolated live price: null / 0 handled cleanly
         price: p.price !== null && p.price !== undefined && p.price > 0 ? p.price : null,
       };
-    });
+    }));
 
     // Sanitize customer name to ensure VIP / tier names are NEVER revealed in the customer header
     let sanitizedCustomerName = link.customer_name ? link.customer_name.replace(/\s*\(?\bVIP\b\)?/gi, '').trim() : '';

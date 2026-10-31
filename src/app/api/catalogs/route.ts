@@ -13,13 +13,13 @@ export async function GET() {
   ];
 
   for (const c of defaultCatalogs) {
-    db.prepare(`
+    await db.prepare(`
       INSERT OR IGNORE INTO catalogs (id, name, description, is_active, created_at, updated_at)
       VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
     `).run(c.id, c.name, c.description);
   }
 
-  const catalogs = db.prepare("SELECT * FROM catalogs WHERE is_active = 1 AND id != 'cat_main' AND name NOT LIKE '%Catalog A%' ORDER BY created_at ASC").all();
+  const catalogs = await db.prepare("SELECT * FROM catalogs WHERE is_active = 1 AND id != 'cat_main' AND name NOT LIKE '%Catalog A%' ORDER BY created_at ASC").all();
   return NextResponse.json({ success: true, catalogs });
 }
 
@@ -42,12 +42,12 @@ export async function POST(request: Request) {
     const db = getDb();
     const id = 'catalog_' + crypto.randomUUID().slice(0, 8);
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO catalogs (id, name, description, is_active, created_at, updated_at)
       VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
     `).run(id, name.trim(), description ? description.trim() : '');
 
-    logAudit('CREATE_CATALOG', 'CATALOG', id, user.id, user.username, { name });
+    await logAudit('CREATE_CATALOG', 'CATALOG', id, user.id, user.username, { name });
 
     return NextResponse.json({
       success: true,

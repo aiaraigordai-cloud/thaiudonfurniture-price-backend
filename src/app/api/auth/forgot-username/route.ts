@@ -11,10 +11,10 @@ export async function POST(request: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
     const db = getDb();
-    const user = db.prepare('SELECT id, username FROM profiles WHERE email = ?').get(cleanEmail) as any;
+    const user = await db.prepare('SELECT id, username FROM profiles WHERE email = ?').get(cleanEmail) as any;
 
     if (user) {
-      logAudit('FORGOT_USERNAME_REQUEST', 'USER', user.id, null, 'ANONYMOUS', { email: cleanEmail });
+      await logAudit('FORGOT_USERNAME_REQUEST', 'USER', user.id, null, 'ANONYMOUS', { email: cleanEmail });
       // In production this sends email. On localhost we simulate safe dispatch.
       console.log(`[SIMULATED EMAIL DISPATCH] Sent username '${user.username}' to ${cleanEmail}`);
     }

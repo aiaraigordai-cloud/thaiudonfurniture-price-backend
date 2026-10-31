@@ -54,7 +54,7 @@ export function verifySessionToken(token: string): any | null {
 }
 
 export async function getCurrentUser(): Promise<UserSession | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
@@ -62,7 +62,7 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   if (!payload || !payload.id) return null;
 
   const db = getDb();
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT id, username, email, employee_name, role, status, email_verified
     FROM profiles
     WHERE id = ?
@@ -82,7 +82,7 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   };
 
   if (user.role === 'ADMIN') {
-    const perm = db.prepare(`
+    const perm = await db.prepare(`
       SELECT product_manage, price_edit, price_bulk_import, share_link_manage, reports_view
       FROM admin_permissions
       WHERE profile_id = ?
@@ -118,12 +118,12 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   };
 }
 
-export function logAudit(action: string, entityType: string, entityId: string | null, actorId: string | null, actorUsername: string | null, details: object | string) {
+export async function logAudit(action: string, entityType: string, entityId: string | null, actorId: string | null, actorUsername: string | null, details: object | string) {
   try {
     const db = getDb();
     const id = crypto.randomUUID();
     const detailsStr = typeof details === 'string' ? details : JSON.stringify(details);
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (id, action, entity_type, entity_id, actor_id, actor_username, details, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(id, action, entityType, entityId, actorId, actorUsername, detailsStr);

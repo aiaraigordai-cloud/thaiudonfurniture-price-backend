@@ -24,14 +24,14 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // Verify product exists
-    const product = db.prepare('SELECT id, sku, name FROM products WHERE id = ?').get(productId) as any;
+    const product = await db.prepare('SELECT id, sku, name FROM products WHERE id = ?').get(productId) as any;
     if (!product) {
       return NextResponse.json({ error: 'ไม่พบสินค้า' }, { status: 404 });
     }
 
-    const tiers = db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
+    const tiers = await db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
 
     try {
       for (const tier of tiers) {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
             throw new Error(`ราคาสำหรับ ${tier.name_th} ต้องเป็นตัวเลขที่ถูกต้องและไม่ติดลบ`);
           }
 
-          const currentPriceRow = db.prepare(`
+          const currentPriceRow = await db.prepare(`
             SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
           `).get(productId, tier.id) as any;
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
 
           if (oldPrice !== newPrice) {
             // Record history
-            db.prepare(`
+            await db.prepare(`
               INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
             `).run(
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
             );
 
             // Upsert price
-            db.prepare(`
+            await db.prepare(`
               INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
               VALUES (?, ?, ?, ?, datetime('now'), ?)
               ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
@@ -75,13 +75,13 @@ export async function POST(request: Request) {
         }
       }
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (err: any) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       return NextResponse.json({ error: err.message || 'บันทึกราคาไม่สำเร็จ' }, { status: 400 });
     }
 
-    logAudit('UPDATE_PRICE_SINGLE', 'PRODUCT', productId, user.id, user.username, {
+    await logAudit('UPDATE_PRICE_SINGLE', 'PRODUCT', productId, user.id, user.username, {
       sku: product.sku,
       updatedPrices: prices,
     });

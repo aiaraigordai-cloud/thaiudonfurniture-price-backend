@@ -29,19 +29,19 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // Check duplicate username
-    const existingUser = db.prepare('SELECT id FROM profiles WHERE username = ?').get(cleanUsername);
+    const existingUser = await db.prepare('SELECT id FROM profiles WHERE username = ?').get(cleanUsername);
     if (existingUser) {
       return NextResponse.json({ error: 'ชื่อผู้ใช้นี้ถูกใช้งานแล้ว' }, { status: 400 });
     }
 
     // Check duplicate email
-    const existingEmail = db.prepare('SELECT id FROM profiles WHERE email = ?').get(cleanEmail);
+    const existingEmail = await db.prepare('SELECT id FROM profiles WHERE email = ?').get(cleanEmail);
     if (existingEmail) {
       return NextResponse.json({ error: 'อีเมลนี้ถูกใช้งานแล้ว' }, { status: 400 });
     }
 
     // Verify Employee Allowlist by Name
-    const allowRecord = db.prepare(`
+    const allowRecord = await db.prepare(`
       SELECT id, employee_name, authorized_email, is_claimed, is_active
       FROM employee_allowlist
       WHERE employee_name = ?
@@ -69,34 +69,34 @@ export async function POST(request: Request) {
     const userId = 'usr_' + crypto.randomUUID();
     const { hash, salt } = hashPassword(password);
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
 
     try {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO profiles (id, username, email, employee_name, role, status, password_hash, salt, email_verified, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'ADMIN', 'Active', ?, ?, 1, datetime('now'), datetime('now'))
       `).run(userId, cleanUsername, cleanEmail, cleanEmpName, hash, salt);
 
       // Claim Allowlist record and record employee email
-      db.prepare(`
+      await db.prepare(`
         UPDATE employee_allowlist
         SET is_claimed = 1, claimed_by = ?, authorized_email = ?, updated_at = datetime('now')
         WHERE id = ?
       `).run(userId, cleanEmail, allowRecord.id);
 
       // Assign default admin permissions
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO admin_permissions (id, profile_id, product_manage, price_edit, price_bulk_import, share_link_manage, reports_view, updated_at)
         VALUES (?, ?, 1, 1, 1, 1, 1, datetime('now'))
       `).run('perm_' + crypto.randomUUID(), userId);
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (txErr) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw txErr;
     }
 
-    logAudit('SIGNUP_SUCCESS', 'USER', userId, userId, cleanUsername, {
+    await logAudit('SIGNUP_SUCCESS', 'USER', userId, userId, cleanUsername, {
       employee: cleanEmpName,
       email: cleanEmail,
       role: 'ADMIN',
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       time: Date.now(),
     });
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set('catalog_a_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

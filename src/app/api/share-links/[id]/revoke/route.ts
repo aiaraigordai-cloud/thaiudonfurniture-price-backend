@@ -14,9 +14,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     const db = getDb();
-    db.prepare('UPDATE share_links SET is_revoked = 1 WHERE id = ?').run(params.id);
+    await db.prepare('UPDATE share_links SET is_revoked = 1 WHERE id = ?').run(params.id);
 
-    logAudit('REVOKE_SHARE_LINK', 'SHARE_LINK', params.id, user.id, user.username, {});
+    await logAudit('REVOKE_SHARE_LINK', 'SHARE_LINK', params.id, user.id, user.username, {});
 
     return NextResponse.json({ success: true, message: 'ยกเลิกลิงก์แชร์เรียบร้อยแล้ว' });
   } catch (error) {

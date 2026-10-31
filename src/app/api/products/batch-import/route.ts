@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const tierRows = db.prepare('SELECT id, code FROM price_tiers').all() as any[];
+    const tierRows = await db.prepare('SELECT id, code FROM price_tiers').all() as any[];
     const tierMap: Record<string, string> = {};
     tierRows.forEach(t => { tierMap[t.code] = t.id; });
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     let updatedCount = 0;
 
     // Use transaction for consistency
-    db.exec('BEGIN TRANSACTION');
+    await db.exec('BEGIN TRANSACTION');
 
     try {
       for (const item of products) {
@@ -40,12 +40,12 @@ export async function POST(request: Request) {
         const catalogType = catalog_id === 'tuulo' ? 'tuulo' : (catalog_id === 'knockdown' ? 'knockdown' : catalog_id);
 
         // Check if product exists
-        const existing = db.prepare('SELECT id FROM products WHERE sku = ?').get(sku) as any;
+        const existing = await db.prepare('SELECT id FROM products WHERE sku = ?').get(sku) as any;
         let productId = existing ? existing.id : 'prod_' + crypto.randomUUID();
 
         if (existing) {
           // Update product
-          db.prepare(`
+          await db.prepare(`
             UPDATE products
             SET name = ?, description = ?, category_id = ?, catalog_type = ?,
                 width = ?, height = ?, depth = ?, color = ?, status = 'Published',
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
           updatedCount++;
         } else {
           // Insert product
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO products (
               id, sku, name, description, category_id, catalog_type,
               width, height, depth, color, status, ref_filename,
@@ -90,8 +90,8 @@ export async function POST(request: Request) {
 
         // Insert / Update image if provided
         if (item.image_url) {
-          db.prepare('DELETE FROM product_images WHERE product_id = ?').run(productId);
-          db.prepare(`
+          await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(productId);
+          await db.prepare(`
             INSERT INTO product_images (id, product_id, image_url, display_order, is_primary, created_at)
             VALUES (?, ?, ?, 0, 1, datetime('now'))
           `).run('img_' + crypto.randomUUID(), productId, item.image_url);
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         for (const [code, priceVal] of Object.entries(prices)) {
           const tierId = tierMap[code];
           if (tierId) {
-            db.prepare(`
+            await db.prepare(`
               INSERT OR REPLACE INTO product_prices (id, product_id, price_tier_id, price, updated_at)
               VALUES (
                 COALESCE((SELECT id FROM product_prices WHERE product_id = ? AND price_tier_id = ?), ?),
@@ -124,9 +124,9 @@ export async function POST(request: Request) {
         }
       }
 
-      db.exec('COMMIT');
+      await db.exec('COMMIT');
 
-      logAudit('BATCH_IMPORT_PRODUCTS', 'PRODUCT', catalog_id, user.id, user.username, {
+      await logAudit('BATCH_IMPORT_PRODUCTS', 'PRODUCT', catalog_id, user.id, user.username, {
         imported: importedCount,
         updated: updatedCount,
         total: products.length
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
         message: `นำเข้าสินค้าสำเร็จ: เพิ่มใหม่ ${importedCount} รายการ, อัปเดต ${updatedCount} รายการ`
       });
     } catch (txError: any) {
-      db.exec('ROLLBACK');
+      await db.exec('ROLLBACK');
       throw txError;
     }
   } catch (error: any) {

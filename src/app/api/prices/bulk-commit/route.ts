@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const batch = db.prepare(`
+    const batch = await db.prepare(`
       SELECT b.*, pt.code as tier_code, pt.name_th as tier_name
       FROM price_import_batches b
       JOIN price_tiers pt ON b.price_tier_id = pt.id
@@ -36,13 +36,13 @@ export async function POST(request: Request) {
     let rowsToCommit: any[] = [];
     if (Array.isArray(selectedRowIds) && selectedRowIds.length > 0) {
       const placeholders = selectedRowIds.map(() => '?').join(',');
-      rowsToCommit = db.prepare(`
+      rowsToCommit = await db.prepare(`
         SELECT * FROM price_import_rows
         WHERE batch_id = ? AND id IN (${placeholders}) AND validation_status != 'FAILED'
       `).all(batchId, ...selectedRowIds) as any[];
     } else {
       // Default to all PASS rows
-      rowsToCommit = db.prepare(`
+      rowsToCommit = await db.prepare(`
         SELECT * FROM price_import_rows
         WHERE batch_id = ? AND validation_status = 'PASS'
       `).all(batchId) as any[];
@@ -54,25 +54,25 @@ export async function POST(request: Request) {
 
     let updatedSuccessCount = 0;
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
 
     try {
       for (const row of rowsToCommit) {
         // Find product
-        const prod = db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
+        const prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
         if (!prod || row.new_price === null || row.new_price < 0) {
           continue;
         }
 
         // Current price
-        const currentPriceRow = db.prepare(`
+        const currentPriceRow = await db.prepare(`
           SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
         `).get(prod.id, batch.price_tier_id) as any;
 
         const oldPrice = currentPriceRow ? currentPriceRow.price : null;
 
         // Save history
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO price_change_history (
             id, product_id, price_tier_id, old_price, new_price, batch_id, changed_by, reason, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
         );
 
         // Upsert price
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
           VALUES (?, ?, ?, ?, datetime('now'), ?)
           ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
@@ -101,19 +101,19 @@ export async function POST(request: Request) {
       }
 
       // Update batch status
-      db.prepare(`
+      await db.prepare(`
         UPDATE price_import_batches
         SET status = 'COMMITTED', updated_rows = ?
         WHERE id = ?
       `).run(updatedSuccessCount, batchId);
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (err: any) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw err;
     }
 
-    logAudit('BULK_PRICE_COMMITTED', 'PRICE_BATCH', batchId, user.id, user.username, {
+    await logAudit('BULK_PRICE_COMMITTED', 'PRICE_BATCH', batchId, user.id, user.username, {
       filename: batch.filename,
       tier: batch.tier_name,
       updatedCount: updatedSuccessCount,

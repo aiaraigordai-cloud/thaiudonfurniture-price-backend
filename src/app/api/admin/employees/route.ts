@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     const db = getDb();
-    const employees = db.prepare(`
+    const employees = await db.prepare(`
       SELECT 
         e.*,
         p.username as claimed_username
@@ -46,17 +46,17 @@ export async function POST(request: Request) {
       : `${id}@thaiudon.local`;
 
     const db = getDb();
-    const existing = db.prepare('SELECT id FROM employee_allowlist WHERE employee_name = ?').get(cleanName);
+    const existing = await db.prepare('SELECT id FROM employee_allowlist WHERE employee_name = ?').get(cleanName);
     if (existing) {
       return NextResponse.json({ error: `ชื่อพนักงาน "${cleanName}" มีอยู่ในรายชื่อที่อนุญาตแล้ว` }, { status: 400 });
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO employee_allowlist (id, employee_name, authorized_email, is_claimed, is_active, created_at, updated_at)
       VALUES (?, ?, ?, 0, 1, datetime('now'), datetime('now'))
     `).run(id, cleanName, cleanEmail);
 
-    logAudit('ADD_EMPLOYEE_ALLOWLIST', 'EMPLOYEE', id, user.id, user.username, {
+    await logAudit('ADD_EMPLOYEE_ALLOWLIST', 'EMPLOYEE', id, user.id, user.username, {
       name: cleanName,
     });
 
@@ -76,13 +76,13 @@ export async function PUT(request: Request) {
     const { id, is_active } = await request.json();
     const db = getDb();
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE employee_allowlist
       SET is_active = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(is_active ? 1 : 0, id);
 
-    logAudit('UPDATE_EMPLOYEE_STATUS', 'EMPLOYEE', id, user.id, user.username, { is_active });
+    await logAudit('UPDATE_EMPLOYEE_STATUS', 'EMPLOYEE', id, user.id, user.username, { is_active });
 
     return NextResponse.json({ success: true, message: 'อัปเดตสถานะพนักงานสำเร็จ' });
   } catch (error: any) {

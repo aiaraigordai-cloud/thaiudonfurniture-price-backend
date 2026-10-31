@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     }
 
     const db = getDb();
-    const product = db.prepare(`
+    const product = await db.prepare(`
       SELECT 
         p.id, p.sku, p.name, p.description, p.category_id,
         c.name as category_name,
@@ -26,14 +26,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: 'ไม่พบสินค้ารายการนี้' }, { status: 404 });
     }
 
-    const images = db.prepare(`
+    const images = await db.prepare(`
       SELECT id, image_url, display_order, is_primary
       FROM product_images
       WHERE product_id = ?
       ORDER BY display_order ASC
     `).all(params.id) as any[];
 
-    const pricesList = db.prepare(`
+    const pricesList = await db.prepare(`
       SELECT pp.price, pt.code, pt.name_th
       FROM product_prices pp
       JOIN price_tiers pt ON pp.price_tier_id = pt.id
@@ -75,15 +75,15 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const db = getDb();
 
     // Check SKU duplicate on other products
-    const existing = db.prepare('SELECT id FROM products WHERE sku = ? AND id != ?').get(sku.trim(), params.id);
+    const existing = await db.prepare('SELECT id FROM products WHERE sku = ? AND id != ?').get(sku.trim(), params.id);
     if (existing) {
       return NextResponse.json({ error: `รหัส SKU '${sku}' ซ้ำกับสินค้าอื่นในระบบ` }, { status: 400 });
     }
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
 
     try {
-      db.prepare(`
+      await db.prepare(`
         UPDATE products
         SET sku = ?, name = ?, description = ?, category_id = ?,
             width = ?, height = ?, depth = ?, color = ?, status = ?,
@@ -103,37 +103,37 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       );
 
       if (Array.isArray(images)) {
-        db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
-        images.forEach((imgUrl: string, idx: number) => {
+        await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
+        for (const [idx, imgUrl] of images.entries()) {
           if (imgUrl && imgUrl.trim()) {
-            db.prepare(`
+            await db.prepare(`
               INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
               VALUES (?, ?, ?, ?, ?)
             `).run('img_' + crypto.randomUUID(), params.id, imgUrl.trim(), idx, idx === 0 ? 1 : 0);
           }
-        });
+        }
       }
 
       // Update prices if user has price_edit permission
       if (prices && (user.role === 'SYSTEM_OWNER' || user.permissions?.price_edit)) {
-        const tiers = db.prepare('SELECT id, code FROM price_tiers').all() as any[];
+        const tiers = await db.prepare('SELECT id, code FROM price_tiers').all() as any[];
         for (const tier of tiers) {
           if (prices[tier.code] !== undefined && prices[tier.code] !== null && prices[tier.code] !== '') {
             const priceNum = parseFloat(prices[tier.code]);
             if (priceNum >= 0) {
-              const currentPrice = db.prepare(`
+              const currentPrice = await db.prepare(`
                 SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
               `).get(params.id, tier.id) as any;
 
               if (currentPrice && currentPrice.price !== priceNum) {
                 // Record history
-                db.prepare(`
+                await db.prepare(`
                   INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
                   VALUES (?, ?, ?, ?, ?, ?, 'แก้ไขผ่านหน้ารายละเอียดสินค้า', datetime('now'))
                 `).run(crypto.randomUUID(), params.id, tier.id, currentPrice.price, priceNum, user.id);
               }
 
-              db.prepare(`
+              await db.prepare(`
                 INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
                 VALUES (?, ?, ?, ?, datetime('now'), ?)
                 ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
@@ -146,13 +146,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         }
       }
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (txErr) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw txErr;
     }
 
-    logAudit('UPDATE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, { sku, name });
+    await logAudit('UPDATE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, { sku, name });
 
     return NextResponse.json({ success: true, message: 'บันทึกข้อมูลสินค้าสำเร็จ' });
   } catch (error: any) {
@@ -173,9 +173,9 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     }
 
     const db = getDb();
-    db.prepare('DELETE FROM products WHERE id = ?').run(params.id);
+    await db.prepare('DELETE FROM products WHERE id = ?').run(params.id);
 
-    logAudit('DELETE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, {});
+    await logAudit('DELETE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, {});
 
     return NextResponse.json({ success: true, message: 'ลบสินค้าเรียบร้อยแล้ว' });
   } catch (error) {

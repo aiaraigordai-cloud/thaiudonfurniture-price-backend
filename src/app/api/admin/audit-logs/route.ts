@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     query += ' ORDER BY created_at DESC LIMIT ?';
     params.push(limit);
 
-    const logs = db.prepare(query).all(...params);
+    const logs = await db.prepare(query).all(...params);
     return NextResponse.json({ success: true, logs });
   } catch (error) {
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูล Audit Logs ได้' }, { status: 500 });

@@ -10,7 +10,7 @@ export async function GET() {
     }
 
     const db = getDb();
-    const admins = db.prepare(`
+    const admins = await db.prepare(`
       SELECT 
         p.id, p.username, p.email, p.employee_name, p.role, p.status, p.email_verified, p.created_at,
         ap.product_manage, ap.price_edit, ap.price_bulk_import, ap.share_link_manage, ap.reports_view
@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
     }
 
     const db = getDb();
-    const target = db.prepare('SELECT id, username, role FROM profiles WHERE id = ?').get(profileId) as any;
+    const target = await db.prepare('SELECT id, username, role FROM profiles WHERE id = ?').get(profileId) as any;
     if (!target) {
       return NextResponse.json({ error: 'ไม่พบบัญชีผู้ใช้' }, { status: 404 });
     }
@@ -66,14 +66,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'ไม่อนุญาตให้แก้ไขสิทธิ์ของ System Owner' }, { status: 400 });
     }
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
     try {
       if (status) {
-        db.prepare('UPDATE profiles SET status = ?, updated_at = datetime("now") WHERE id = ?').run(status, profileId);
+        await db.prepare('UPDATE profiles SET status = ?, updated_at = datetime("now") WHERE id = ?').run(status, profileId);
       }
 
       if (permissions && typeof permissions === 'object') {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO admin_permissions (profile_id, product_manage, price_edit, price_bulk_import, share_link_manage, reports_view, updated_at, updated_by)
           VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
           ON CONFLICT(profile_id) DO UPDATE SET
@@ -95,13 +95,13 @@ export async function PUT(request: Request) {
         );
       }
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (e) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw e;
     }
 
-    logAudit('UPDATE_ADMIN_PERMISSIONS', 'ADMIN_ACCOUNT', profileId, user.id, user.username, {
+    await logAudit('UPDATE_ADMIN_PERMISSIONS', 'ADMIN_ACCOUNT', profileId, user.id, user.username, {
       targetUsername: target.username,
       newStatus: status,
       permissions,

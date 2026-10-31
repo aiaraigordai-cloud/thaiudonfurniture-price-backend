@@ -54,20 +54,20 @@ export async function GET(request: Request) {
 
     query += ` ORDER BY p.page_num ASC, p.sku ASC`;
 
-    const products = db.prepare(query).all(...params) as any[];
+    const products = await db.prepare(query).all(...params) as any[];
 
     // Fetch images and prices for each product
-    const tierRows = db.prepare('SELECT id, code, name_th FROM price_tiers ORDER BY display_order').all() as any[];
+    const tierRows = await db.prepare('SELECT id, code, name_th FROM price_tiers ORDER BY display_order').all() as any[];
 
-    const enrichedProducts = products.map((prod) => {
-      const images = db.prepare(`
+    const enrichedProducts = await Promise.all(products.map(async (prod) => {
+      const images = await db.prepare(`
         SELECT id, image_url, display_order, is_primary
         FROM product_images
         WHERE product_id = ?
         ORDER BY display_order ASC
       `).all(prod.id) as any[];
 
-      const pricesList = db.prepare(`
+      const pricesList = await db.prepare(`
         SELECT pp.price, pt.code, pt.name_th
         FROM product_prices pp
         JOIN price_tiers pt ON pp.price_tier_id = pt.id
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
         images: images.map((img) => img.image_url),
         prices,
       };
-    });
+    }));
 
     return NextResponse.json({
       success: true,
@@ -118,17 +118,17 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // Check unique SKU
-    const existingSku = db.prepare('SELECT id FROM products WHERE sku = ?').get(sku.trim());
+    const existingSku = await db.prepare('SELECT id FROM products WHERE sku = ?').get(sku.trim());
     if (existingSku) {
       return NextResponse.json({ error: `รหัส SKU '${sku}' มีอยู่ในระบบแล้ว` }, { status: 400 });
     }
 
     const productId = 'prod_' + crypto.randomUUID();
 
-    db.exec('BEGIN TRANSACTION;');
+    await db.exec('BEGIN TRANSACTION;');
 
     try {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO products (id, sku, name, description, category_id, width, height, depth, color, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(
@@ -146,24 +146,24 @@ export async function POST(request: Request) {
 
       // Insert images
       if (Array.isArray(images)) {
-        images.forEach((imgUrl: string, idx: number) => {
+        for (const [idx, imgUrl] of images.entries()) {
           if (imgUrl && imgUrl.trim()) {
-            db.prepare(`
+            await db.prepare(`
               INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
               VALUES (?, ?, ?, ?, ?)
             `).run('img_' + crypto.randomUUID(), productId, imgUrl.trim(), idx, idx === 0 ? 1 : 0);
           }
-        });
+        }
       }
 
       // Insert 4-tier prices
       if (prices && typeof prices === 'object') {
-        const tiers = db.prepare('SELECT id, code FROM price_tiers').all() as any[];
+        const tiers = await db.prepare('SELECT id, code FROM price_tiers').all() as any[];
         for (const tier of tiers) {
           const val = prices[tier.code];
           const priceNum = val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
           if (priceNum >= 0) {
-            db.prepare(`
+            await db.prepare(`
               INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
               VALUES (?, ?, ?, ?, datetime('now'), ?)
             `).run('price_' + crypto.randomUUID(), productId, tier.id, priceNum, user.id);
@@ -171,13 +171,13 @@ export async function POST(request: Request) {
         }
       }
 
-      db.exec('COMMIT;');
+      await db.exec('COMMIT;');
     } catch (txErr) {
-      db.exec('ROLLBACK;');
+      await db.exec('ROLLBACK;');
       throw txErr;
     }
 
-    logAudit('CREATE_PRODUCT', 'PRODUCT', productId, user.id, user.username, { sku, name });
+    await logAudit('CREATE_PRODUCT', 'PRODUCT', productId, user.id, user.username, { sku, name });
 
     return NextResponse.json({ success: true, productId, message: 'เพิ่มสินค้าสำเร็จ' });
   } catch (error: any) {
