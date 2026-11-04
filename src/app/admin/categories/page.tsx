@@ -54,7 +54,7 @@ export default function CatalogsAndImportPage() {
   
   // Catalogs
   const [catalogs, setCatalogs] = useState<any[]>([]);
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('main');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('tuulo');
   const [newCatModal, setNewCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
@@ -94,9 +94,15 @@ export default function CatalogsAndImportPage() {
       const res = await fetch('/api/catalogs');
       const data = await res.json();
       if (data.success && data.catalogs) {
-        setCatalogs(data.catalogs);
-        if (data.catalogs.length > 0 && !selectedCatalogId) {
-          setSelectedCatalogId(data.catalogs[0].id);
+        // Exclude "แคตตาล็อกหลัก (สินค้าทั้งหมดในเว็บไซต์)" as requested
+        const availableCatalogs = data.catalogs.filter(
+          (c: any) => c.id !== 'main' && !c.name.includes('แคตตาล็อกหลัก')
+        );
+        setCatalogs(availableCatalogs);
+        if (availableCatalogs.length > 0) {
+          if (!selectedCatalogId || selectedCatalogId === 'main') {
+            setSelectedCatalogId(availableCatalogs[0].id);
+          }
         }
       }
     } catch (e) {
@@ -480,6 +486,16 @@ export default function CatalogsAndImportPage() {
         // Real-time refresh of product and category caches
         await loadExistingProducts();
         await loadCategories();
+
+        // Broadcast real-time update event across tabs and to Products Catalog
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({ type: 'PRODUCTS_UPDATED', timestamp: Date.now() });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
       } else {
         setImportStatus({
           success: false,
@@ -577,14 +593,13 @@ export default function CatalogsAndImportPage() {
               </button>
             </div>
 
-            {/* Catalog Radio Cards */}
+            {/* Catalog Radio Cards (Excluding main as requested) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {catalogs.map((cat) => {
+              {catalogs.filter((cat) => cat.id !== 'main' && !cat.name.includes('แคตตาล็อกหลัก')).map((cat) => {
                 const isSelected = selectedCatalogId === cat.id;
-                const isMain = cat.id === 'main' || cat.name.includes('หลัก');
                 const isTuulo = cat.id === 'tuulo' || cat.name.includes('ตู้โล');
                 const isKnockdown = cat.id === 'knockdown' || cat.name.includes('น็อคดาวน์');
-                const icon = isMain ? '⭐' : (isTuulo ? '🚪' : (isKnockdown ? '🛏️' : '📁'));
+                const icon = isTuulo ? '🚪' : (isKnockdown ? '🛏️' : '📁');
                 return (
                   <div
                     key={cat.id}
@@ -1063,7 +1078,7 @@ export default function CatalogsAndImportPage() {
                   </strong>{' '}
                   จากทั้งหมด {parsedProducts.length} รายการ สู่แคตตาล็อก{' '}
                   <strong className="text-[#402E20]">
-                    {catalogs.find((c) => c.id === selectedCatalogId)?.name || 'แคตตาล็อกหลัก'}
+                    {catalogs.find((c) => c.id === selectedCatalogId)?.name || 'แคตตาล็อกตู้โล'}
                   </strong>
                 </div>
 

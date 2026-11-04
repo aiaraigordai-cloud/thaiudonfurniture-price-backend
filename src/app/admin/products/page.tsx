@@ -25,6 +25,7 @@ import {
   Sparkles,
   Download,
   Camera,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function ProductsPage() {
@@ -76,8 +77,15 @@ export default function ProductsPage() {
   // 4. Catalog Type Filter (all, tuulo, knockdown)
   const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
 
-  const loadProducts = async () => {
-    setLoading(true);
+  // 5. Real-time Synchronization States
+  const [realtimeUpdatedTime, setRealtimeUpdatedTime] = useState<string>('');
+  const [showRealtimeToast, setShowRealtimeToast] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const loadProducts = async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setIsSyncing(true);
+
     try {
       const params = new URLSearchParams();
       if (search) params.append('q', search);
@@ -98,16 +106,80 @@ export default function ProductsPage() {
             setMultiShareTierId(data.priceTiers[0].id);
           }
         }
+        setRealtimeUpdatedTime(new Date().toLocaleTimeString('th-TH'));
+        if (silent) {
+          setShowRealtimeToast(true);
+          setTimeout(() => setShowRealtimeToast(false), 3500);
+        }
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      setIsSyncing(false);
     }
   };
 
   useEffect(() => {
     loadProducts();
+  }, [search, selectedCategory, selectedStatus, catalogTypeFilter]);
+
+  // Multi-layer Real-time Sync Listeners: BroadcastChannel, Storage, CustomEvent, Focus & Polling
+  useEffect(() => {
+    // 1. BroadcastChannel across open browser tabs
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('thaiudon_sync_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'PRICES_UPDATED' || event.data?.type === 'PRODUCTS_UPDATED') {
+          loadProducts(true);
+        }
+      };
+    } catch {}
+
+    // 2. Storage Event (across tabs)
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'thaiudon_last_sync') {
+        loadProducts(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // 3. Custom Window Event
+    const handleCustomSync = () => loadProducts(true);
+    window.addEventListener('thaiudon_catalog_sync', handleCustomSync);
+
+    // 4. Focus Event
+    const handleFocus = () => {
+      checkSyncToken();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // 5. Lightweight Polling (every 3.5 seconds)
+    let currentToken = '';
+    const checkSyncToken = async () => {
+      try {
+        const res = await fetch('/api/products/sync-status');
+        const data = await res.json();
+        if (data.success && data.syncToken) {
+          if (currentToken && currentToken !== data.syncToken) {
+            loadProducts(true);
+          }
+          currentToken = data.syncToken;
+        }
+      } catch {}
+    };
+
+    checkSyncToken();
+    const interval = setInterval(checkSyncToken, 3500);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('thaiudon_catalog_sync', handleCustomSync);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, [search, selectedCategory, selectedStatus, catalogTypeFilter]);
 
   useEffect(() => {
@@ -287,6 +359,10 @@ export default function ProductsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-[#402E20] tracking-tight">ระบบจัดการสินค้า (Product Catalog)</h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live Real-time {realtimeUpdatedTime ? `(${realtimeUpdatedTime})` : ''}
+            </span>
             <span className="px-2.5 py-0.5 rounded-full bg-[#C5A059]/20 text-[#805216] text-[10px] font-bold border border-[#D2B681]">
               Multi-Product Sharing
             </span>
@@ -308,6 +384,15 @@ export default function ProductsPage() {
             </button>
           )}
 
+          <button
+            onClick={() => loadProducts(false)}
+            disabled={loading || isSyncing}
+            className="p-2.5 bg-white hover:bg-[#FFFAF3] text-[#402E20] border border-[#D2B681] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+            title="รีเฟรชข้อมูลแบบ Real-time"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#805216] ${(loading || isSyncing) ? 'animate-spin' : ''}`} />
+          </button>
+
           <Link
             href="/admin/categories"
             className="px-3.5 py-2 bg-white hover:bg-[#FFFAF3] text-[#402E20] border border-[#D2B681] rounded-xl text-xs font-semibold flex items-center gap-2 transition"
@@ -324,6 +409,17 @@ export default function ProductsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Real-time sync notification toast */}
+      {showRealtimeToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 bg-emerald-950 text-white text-xs rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50 animate-in fade-in slide-in-from-bottom-5">
+          <Sparkles className="w-5 h-5 text-emerald-400 animate-spin flex-shrink-0" />
+          <div>
+            <div className="font-bold text-emerald-200">⚡ ระบบซิงค์ข้อมูลล่าสุดแบบ Real-time แล้ว</div>
+            <div className="text-[11px] text-slate-300">ตรวจพบการอัปเดตราคาหรือสินค้าชุดใหม่ในระบบ ({products.length} รายการ)</div>
+          </div>
+        </div>
+      )}
 
       {actionMsg && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
@@ -343,7 +439,7 @@ export default function ProductsPage() {
           }`}
         >
           <Package className="w-3.5 h-3.5" />
-          <span>สินค้าทั้งหมด (310 รายการ)</span>
+          <span>สินค้าทั้งหมด ({products.length} รายการ)</span>
         </button>
 
         <button

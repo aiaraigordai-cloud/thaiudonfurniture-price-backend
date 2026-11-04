@@ -197,6 +197,14 @@ export default function BulkPriceUpdatePage() {
         setError(data.error || 'เกิดข้อผิดพลาดในการบันทึกราคา');
       } else {
         setCommitResult(data);
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({ type: 'PRICES_UPDATED', timestamp: Date.now() });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
       }
     } catch {
       setError('เกิดข้อผิดพลาดในการบันทึกราคา');
