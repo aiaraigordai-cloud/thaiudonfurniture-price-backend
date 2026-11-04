@@ -86,10 +86,23 @@ export async function GET(request: Request) {
       };
     }));
 
+    // Dynamic catalog counts
+    const countsRow = await db.prepare(`
+      SELECT 
+        (SELECT COUNT(*) FROM products) as all_count,
+        (SELECT COUNT(*) FROM products WHERE catalog_type = 'tuulo') as tuulo_count,
+        (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
+    `).get() as any;
+
     return NextResponse.json({
       success: true,
       products: enrichedProducts,
       priceTiers: tierRows,
+      counts: {
+        all: countsRow?.all_count || 0,
+        tuulo: countsRow?.tuulo_count || 0,
+        knockdown: countsRow?.knockdown_count || 0,
+      },
     });
   } catch (error: any) {
     console.error('Fetch products error:', error);

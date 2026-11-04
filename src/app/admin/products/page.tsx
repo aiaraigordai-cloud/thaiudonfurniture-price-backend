@@ -76,6 +76,11 @@ export default function ProductsPage() {
 
   // 4. Catalog Type Filter (all, tuulo, knockdown)
   const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
+  const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number }>({
+    all: 310,
+    tuulo: 121,
+    knockdown: 189,
+  });
 
   // 5. Real-time Synchronization States
   const [realtimeUpdatedTime, setRealtimeUpdatedTime] = useState<string>('');
@@ -97,6 +102,9 @@ export default function ProductsPage() {
       const data = await res.json();
       if (data.success) {
         setProducts(data.products || []);
+        if (data.counts) {
+          setCatalogCounts(data.counts);
+        }
         if (data.priceTiers) {
           setPriceTiers(data.priceTiers);
           if (!shareTierId && data.priceTiers.length > 0) {
@@ -161,7 +169,10 @@ export default function ProductsPage() {
       try {
         const res = await fetch('/api/products/sync-status');
         const data = await res.json();
-        if (data.success && data.syncToken) {
+        if (data.success) {
+          if (data.counts) {
+            setCatalogCounts(data.counts);
+          }
           if (currentToken && currentToken !== data.syncToken) {
             loadProducts(true);
           }
@@ -439,7 +450,7 @@ export default function ProductsPage() {
           }`}
         >
           <Package className="w-3.5 h-3.5" />
-          <span>สินค้าทั้งหมด ({products.length} รายการ)</span>
+          <span>สินค้าทั้งหมด ({catalogCounts.all} รายการ)</span>
         </button>
 
         <button
@@ -450,7 +461,7 @@ export default function ProductsPage() {
               : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
           }`}
         >
-          <span>แคตตาล็อกตู้โล (121 รายการ)</span>
+          <span>แคตตาล็อกตู้โล ({catalogCounts.tuulo} รายการ)</span>
         </button>
 
         <button
@@ -461,7 +472,7 @@ export default function ProductsPage() {
               : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
           }`}
         >
-          <span>แคตตาล็อกน็อคดาวน์ (189 รายการ)</span>
+          <span>แคตตาล็อกน็อคดาวน์ ({catalogCounts.knockdown} รายการ)</span>
         </button>
       </div>
 

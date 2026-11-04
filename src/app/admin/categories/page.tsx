@@ -23,6 +23,7 @@ import {
   Info,
   Coins,
   Tag,
+  X,
 } from 'lucide-react';
 
 type PriceTierCode = 'SALE_PRICE' | 'RETAIL_PRICE' | 'VIP_PRICE' | 'GENERAL_PRICE';
@@ -103,6 +104,8 @@ export default function CatalogsAndImportPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatDefaultTier, setNewCatDefaultTier] = useState<PriceTierCode>('SALE_PRICE');
+  // State for image preview lightbox modal
+  const [previewImageModal, setPreviewImageModal] = useState<ParsedProduct | null>(null);
   const [creatingCatalog, setCreatingCatalog] = useState(false);
 
   // Categories
@@ -440,18 +443,35 @@ export default function CatalogsAndImportPage() {
     );
   };
 
-  // Add another item from the same image (Multi-SKU manual split)
+  // Add another item from the same image (Multi-SKU manual split adjacent insertion)
   const duplicateItemFromImage = (item: ParsedProduct) => {
+    const sameImageItems = parsedProducts.filter(
+      (p) => (p.file && item.file && p.file.name === item.file.name) || (p.thumbnailUrl && p.thumbnailUrl === item.thumbnailUrl)
+    );
+    const subIndex = sameImageItems.length + 1;
+    const cleanSku = item.sku.replace(/-[A-Z]$/, '');
+    const suffixChar = String.fromCharCode(64 + Math.min(26, subIndex));
+
     const newItem: ParsedProduct = {
       ...item,
       id: 'parsed_split_' + Date.now() + '_' + Math.random().toString(36).substring(7),
-      sku: item.sku + '-B',
-      name: item.name + ' (ชิ้นเสริม)',
+      sku: cleanSku ? `${cleanSku}-${suffixChar}` : '',
+      name: item.name ? `${item.name} (ชิ้นย่อย ${subIndex})` : '',
+      filename: `${item.filename.replace(/\s*\[ชิ้นย่อย.*?\]$/, '')} [ชิ้นย่อย ${subIndex}]`,
       isExisting: false,
       validationStatus: 'PASS',
       selected: true,
     };
-    setParsedProducts((prev) => [...prev, newItem]);
+
+    setParsedProducts((prev) => {
+      const idx = prev.findIndex((x) => x.id === item.id);
+      if (idx !== -1) {
+        const copy = [...prev];
+        copy.splice(idx + 1, 0, newItem);
+        return copy;
+      }
+      return [...prev, newItem];
+    });
   };
 
   const removeParsedProduct = (id: string) => {
@@ -1014,11 +1034,20 @@ export default function CatalogsAndImportPage() {
                           />
                         </td>
                         <td className="p-3 text-center">
-                          <img
-                            src={p.thumbnailUrl}
-                            alt={p.name}
-                            className="w-12 h-12 object-contain bg-[#FAF6F0] rounded-lg border border-[#D2B681] p-0.5 mx-auto"
-                          />
+                          <div
+                            onClick={() => setPreviewImageModal(p)}
+                            title="คลิกเพื่อพรีวิวดูรูปขนาดใหญ่"
+                            className="relative group cursor-pointer inline-block"
+                          >
+                            <img
+                              src={p.thumbnailUrl}
+                              alt={p.name}
+                              className="w-12 h-12 object-contain bg-[#FAF6F0] rounded-lg border border-[#D2B681] p-0.5 mx-auto group-hover:border-[#DE1B23] group-hover:scale-105 transition shadow-xs"
+                            />
+                            <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                              <Eye className="w-4 h-4 drop-shadow" />
+                            </div>
+                          </div>
                         </td>
                         <td className="p-3">
                           <input
@@ -1030,7 +1059,7 @@ export default function CatalogsAndImportPage() {
                             placeholder="เช่น TD-76"
                             className="w-full px-2 py-1 bg-white border border-[#D2B681] rounded text-xs font-mono font-bold text-[#402E20]"
                           />
-                          <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             {p.isExisting ? (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                 🔄 มีในระบบแล้ว (เพิ่มเฉพาะราคาที่เลือก)
@@ -1038,6 +1067,11 @@ export default function CatalogsAndImportPage() {
                             ) : (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 ✨ สินค้าใหม่ (แสดงเฉพาะราคาที่ระบุ)
+                              </span>
+                            )}
+                            {(p.filename.includes('[ชิ้น') || p.id.startsWith('parsed_split_')) && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                📸 สินค้าย่อยในรูปนี้
                               </span>
                             )}
                           </div>
@@ -1229,20 +1263,21 @@ export default function CatalogsAndImportPage() {
                           </span>
                         </td>
                         <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
                             <button
                               type="button"
-                              title="เพิ่มสินค้าอีกชิ้นจากรูปนี้ (สำหรับหน้าแคตตาล็อกที่มีหลายชิ้น)"
+                              title="แตกสินค้ารายย่อยจากรูปนี้ (เพิ่มแถวใหม่จากภาพเดียวกัน)"
                               onClick={() => duplicateItemFromImage(p)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              className="px-2 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 flex items-center gap-1 transition shadow-xs whitespace-nowrap"
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <Plus className="w-3 h-3 text-blue-600" />
+                              <span>แตกแถว</span>
                             </button>
                             <button
                               type="button"
                               title="ลบรายการนี้"
                               onClick={() => removeParsedProduct(p.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
+                              className="p-1 text-slate-400 hover:text-red-600 rounded-lg transition"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1393,6 +1428,82 @@ export default function CatalogsAndImportPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Image Preview Lightbox */}
+      {previewImageModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewImageModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-3xl w-full border border-[#D2B681] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-[#F7F0E6] bg-[#FFFAF3]">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#DE1B23]/10 text-[#DE1B23] rounded-xl">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-[#402E20] text-sm flex items-center gap-2">
+                    <span>{previewImageModal.name || 'พรีวิวภาพสินค้า'}</span>
+                    {previewImageModal.sku && (
+                      <span className="font-mono text-xs px-2 py-0.5 bg-[#DE1B23]/10 text-[#DE1B23] rounded font-bold">
+                        {previewImageModal.sku}
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-[11px] text-[#705E4F] font-mono">{previewImageModal.filename}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewImageModal(null)}
+                className="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-900 flex items-center justify-center min-h-[360px] max-h-[72vh] overflow-auto">
+              <img
+                src={previewImageModal.thumbnailUrl}
+                alt={previewImageModal.name}
+                className="max-h-[68vh] max-w-full object-contain rounded-lg shadow-lg"
+              />
+            </div>
+
+            <div className="p-4 bg-white border-t border-[#F7F0E6] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-4 text-[#705E4F]">
+                <span>หมวดหมู่: <strong className="text-[#402E20]">{previewImageModal.category_name}</strong></span>
+                {previewImageModal.detectedBasePrice ? (
+                  <span>ราคาที่ตรวจจับ: <strong className="text-emerald-700 font-mono font-bold">{Number(previewImageModal.detectedBasePrice).toLocaleString()} บาท</strong></span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    duplicateItemFromImage(previewImageModal);
+                    setPreviewImageModal(null);
+                  }}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl font-bold flex items-center gap-1.5 border border-blue-200 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  แตกสินค้ารายย่อยจากรูปนี้
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImageModal(null)}
+                  className="px-4 py-1.5 bg-[#DE1B23] hover:bg-[#DE1B23]/90 text-white rounded-xl font-bold shadow-xs transition"
+                >
+                  ปิด
+                </button>
               </div>
             </div>
           </div>
