@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   Sparkles,
+  UserPlus,
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -80,7 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const ownerLinks = [
     { href: '/admin/permissions', label: 'จัดการสิทธิ์บัญชี', icon: ShieldAlert },
-    { href: '/admin/employees', label: 'รายชื่อพนักงาน Allowlist', icon: Users },
+    { href: '/admin/employees', label: 'รายชื่อพนักงาน Allowlist (สมัครพนักงาน)', icon: Users },
     { href: '/admin/audit-logs', label: 'ประวัติและ Audit Logs', icon: ScrollText },
   ];
 
