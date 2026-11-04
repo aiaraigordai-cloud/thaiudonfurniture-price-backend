@@ -276,7 +276,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 </div>
                 <div className="flex items-center gap-2 text-[11px]">
                   <Truck className="w-3.5 h-3.5 text-[#06C755]" />
-                  <span>ส่งฟรีพร้อมทีมช่างยกติดตั้งถึงห้อง (อุดรธานี ขอนแก่น หนองคาย หนองบัวลำภู)</span>
+                  <span>จัดส่งให้ติดต่อผ่าน line</span>
                 </div>
               </div>
             </div>
@@ -336,7 +336,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     <div>รวมภาษีมูลค่าเพิ่ม</div>
                     <div className="text-[#06C755] font-semibold flex items-center gap-1 justify-end">
                       <Truck className="w-3 h-3" />
-                      <span>ส่งฟรี 4 จังหวัด</span>
+                      <span>จัดส่งให้ติดต่อผ่าน line</span>
                     </div>
                   </div>
                 </div>
@@ -722,8 +722,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                       </div>
                     </div>
                     <div className="text-right text-[11px] text-slate-500">
-                      <div>พร้อมบริการจัดส่ง</div>
-                      <div className="text-[#06C755] font-semibold">รับประกันความพึงพอใจ</div>
+                      <div className="text-[#06C755] font-semibold">จัดส่งให้ติดต่อผ่าน line</div>
+                      <div>รับประกันความพึงพอใจ</div>
                     </div>
                   </div>
 
@@ -778,18 +778,14 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
               </div>
             </div>
             <p className="text-slate-400 leading-relaxed text-[11px]">
-              ผู้ผลิตและจัดจำหน่ายเฟอร์นิเจอร์น็อคดาวน์ Modern Luxury และตู้กับข้าว ตู้ครัวอลูมิเนียมคุณภาพสูง จัดส่งฟรีพร้อมทีมช่างยกติดตั้งถึงห้อง
+              ผู้ผลิตและจัดจำหน่ายเฟอร์นิเจอร์น็อคดาวน์ Modern Luxury และตู้กับข้าว ตู้ครัวอลูมิเนียมคุณภาพสูง จัดส่งให้ติดต่อผ่าน line
             </p>
           </div>
 
           <div className="space-y-2">
-            <div className="font-bold text-white text-xs uppercase tracking-wider text-red-400">พื้นที่จัดส่งและบริการ</div>
+            <div className="font-bold text-white text-xs uppercase tracking-wider text-red-400">การจัดส่งสินค้า</div>
             <p className="text-slate-400 text-[11px] leading-relaxed">
-              📍 จัดส่งฟรีพร้อมทีมช่างยกติดตั้งถึงห้องในเขต:
-              <br />• อุดรธานี
-              <br />• ขอนแก่น
-              <br />• หนองคาย
-              <br />• หนองบัวลำภู
+              💬 จัดส่งให้ติดต่อผ่าน line
             </p>
           </div>
 

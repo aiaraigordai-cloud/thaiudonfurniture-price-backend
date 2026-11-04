@@ -2,18 +2,48 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const DB_DIR = path.join(process.cwd(), 'data');
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
-
-const DB_PATH = path.join(DB_DIR, 'catalog_a.sqlite');
-
 let dbInstance: DatabaseSync | null = null;
+
+function getDbPath(): string {
+  const isServerless = Boolean(
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT ||
+    process.env.NETLIFY ||
+    (process.platform === 'linux' && fs.existsSync('/tmp'))
+  );
+
+  const localDir = path.join(process.cwd(), 'data');
+  const localDb = path.join(localDir, 'catalog_a.sqlite');
+
+  if (isServerless) {
+    const tmpDb = '/tmp/catalog_a.sqlite';
+    try {
+      if (!fs.existsSync(tmpDb)) {
+        if (fs.existsSync(localDb)) {
+          fs.copyFileSync(localDb, tmpDb);
+        }
+      }
+      return tmpDb;
+    } catch (e) {
+      console.warn('Failed to copy DB to /tmp:', e);
+    }
+  }
+
+  if (!fs.existsSync(localDir)) {
+    try {
+      fs.mkdirSync(localDir, { recursive: true });
+    } catch (e) {
+      console.warn('Cannot mkdir data dir:', e);
+    }
+  }
+
+  return localDb;
+}
 
 export function getDb(): DatabaseSync {
   if (!dbInstance) {
-    dbInstance = new DatabaseSync(DB_PATH);
+    const dbPath = getDbPath();
+    dbInstance = new DatabaseSync(dbPath);
     dbInstance.exec('PRAGMA foreign_keys = ON;');
     initSchema(dbInstance);
   }

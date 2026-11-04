@@ -50,7 +50,7 @@ export default function CatalogsAndImportPage() {
   
   // Catalogs
   const [catalogs, setCatalogs] = useState<any[]>([]);
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('tuulo');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
   const [newCatModal, setNewCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
@@ -84,8 +84,7 @@ export default function CatalogsAndImportPage() {
       const res = await fetch('/api/catalogs');
       const data = await res.json();
       if (data.success && data.catalogs) {
-        const filtered = data.catalogs.filter((c: any) => c.id !== 'cat_main' && !c.name.includes('Catalog A'));
-        setCatalogs(filtered);
+        setCatalogs(data.catalogs);
       }
     } catch (e) {
       console.error('Failed to load catalogs:', e);
@@ -186,15 +185,15 @@ export default function CatalogsAndImportPage() {
       const filename = file.name;
       const cleanName = filename.replace(/\.[^/.]+$/, ''); // Remove extension
 
-      // 1. AI SKU Extraction
+      // 1. AI SKU Extraction (อ้างอิงตามชื่อไฟล์หรือข้อมูลในรูปภาพไฟล์นั้นๆ โดยไม่ใส่ Prefix อัตโนมัติ)
       let sku = '';
-      const skuMatch = cleanName.match(/([A-Z0-9]{2,8}[-_][A-Z0-9]{2,8}(?:[-_][A-Z0-9]+)?)/i);
+      const skuMatch = cleanName.match(/\b([A-Za-z]+[-_]?[0-9]+(?:[-_][A-Za-z0-9]+)*)\b/i) ||
+                       cleanName.match(/\b([A-Z0-9]{2,8}[-_][A-Z0-9]{2,8})\b/i);
       if (skuMatch) {
-        sku = skuMatch[1].toUpperCase();
+        sku = skuMatch[1].trim();
       } else {
-        const prefix = selectedCatalogId === 'tuulo' ? 'TL' : 'KD';
-        const randomNum = String(Math.floor(100 + Math.random() * 900));
-        sku = `${prefix}-${randomNum}`;
+        // อ้างอิงตามชื่อไฟล์นั้นๆ โดยตรง ไม่มีการสุ่มหรือใส่ Prefix อัตโนมัติ
+        sku = cleanName.trim();
       }
 
       // 2. AI Dimensions Detection (e.g. 120x60x190 or 180 ซม. or 6 ฟุต)
@@ -259,7 +258,7 @@ export default function CatalogsAndImportPage() {
         .trim();
 
       if (!productName || productName.length < 3) {
-        productName = `${matchedCatName} รุ่นโมเดิร์น ${sku}`;
+        productName = cleanName;
       }
 
       // 6. Estimated 4-tier Prices
@@ -327,6 +326,10 @@ export default function CatalogsAndImportPage() {
 
   // Commit Parsed Products to Database
   const handleCommitBatch = async () => {
+    if (!selectedCatalogId) {
+      alert('กรุณาเลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า (เช่น แคตตาล็อกหลัก, ตู้โล หรือ น็อคดาวน์) ก่อนดำเนินการ');
+      return;
+    }
     const selectedItems = parsedProducts.filter((p) => p.selected);
     if (selectedItems.length === 0) {
       alert('กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการเพื่อนำเข้า');
@@ -450,7 +453,7 @@ export default function CatalogsAndImportPage() {
                   เลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า
                 </h2>
                 <p className="text-xs text-[#705E4F] mt-0.5">
-                  ระบุว่าสินค้าที่นำเข้าชุดนี้จะถูกจัดเก็บไว้ในแคตตาล็อกตู้โล, น็อคดาวน์ หรือสร้างแคตตาล็อกใหม่
+                  ระบุว่าสินค้าที่นำเข้าชุดนี้จะถูกจัดเก็บไว้ในแคตตาล็อกหลัก (เว็บไซต์), ตู้โล, น็อคดาวน์ หรือสร้างแคตตาล็อกใหม่
                 </p>
               </div>
 
@@ -468,7 +471,10 @@ export default function CatalogsAndImportPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {catalogs.map((cat) => {
                 const isSelected = selectedCatalogId === cat.id;
+                const isMain = cat.id === 'main' || cat.name.includes('หลัก');
                 const isTuulo = cat.id === 'tuulo' || cat.name.includes('ตู้โล');
+                const isKnockdown = cat.id === 'knockdown' || cat.name.includes('น็อคดาวน์');
+                const icon = isMain ? '⭐' : (isTuulo ? '🚪' : (isKnockdown ? '🛏️' : '📁'));
                 return (
                   <div
                     key={cat.id}
@@ -484,7 +490,7 @@ export default function CatalogsAndImportPage() {
                         isSelected ? 'bg-[#DE1B23] text-white' : 'bg-white border border-[#D2B681]'
                       }`}
                     >
-                      {isTuulo ? '🚪' : '🛏️'}
+                      {icon}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -505,6 +511,12 @@ export default function CatalogsAndImportPage() {
                 );
               })}
             </div>
+
+            {!selectedCatalogId && (
+              <p className="text-xs text-[#705E4F] flex items-center gap-1.5 mt-2 bg-[#FFFAF3] p-2 rounded-lg border border-[#D2B681]">
+                <span>👉</span> <span className="font-semibold text-[#402E20]">คำแนะนำ:</span> กรุณาคลิกเลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า (เช่น แคตตาล็อกหลัก, ตู้โล หรือ น็อคดาวน์)
+              </p>
+            )}
           </div>
 
           {/* Step 2: Upload Files or Entire Folder */}

@@ -43,9 +43,10 @@ export async function POST(request: Request) {
     });
 
     const cookieStore = await cookies();
+    const isLocal = request.url.startsWith('http://localhost') || request.url.startsWith('http://127.0.0.1');
     cookieStore.set('catalog_a_session', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && !isLocal,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days

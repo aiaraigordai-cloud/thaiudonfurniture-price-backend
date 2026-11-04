@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
+  APP_SECRET = "274a72d73315ec030e462bbcb0bca3ba8e85d4f134bb561bbd5c317f2bc2fcbe"
+
+[environment]
+  NODE_VERSION = "22"
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
+  APP_SECRET = "274a72d73315ec030e462bbcb0bca3ba8e85d4f134bb561bbd5c317f2bc2fcbe"
+
+[functions]
+  included_files = ["data/**"]

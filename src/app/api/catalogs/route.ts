@@ -4,23 +4,42 @@ import { getCurrentUser, logAudit } from '@/lib/auth';
 import crypto from 'node:crypto';
 
 export async function GET() {
-  const db = getDb();
-  
-  // Ensure default catalogs exist
-  const defaultCatalogs = [
-    { id: 'tuulo', name: 'แคตตาล็อกตู้โล (ตู้โลอลูมิเนียม)', description: 'ตู้กับข้าว ตู้กับข้าวอลูมิเนียม ตู้โชว์อลูมิเนียม และตู้พระ' },
-    { id: 'knockdown', name: 'แคตตาล็อกน็อคดาวน์ (Modern Luxury)', description: 'ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะเครื่องแป้ง และชุดโชว์ทีวี' },
-  ];
+  try {
+    const db = getDb();
+    
+    // Ensure default catalogs exist
+    const defaultCatalogs = [
+      { id: 'main', name: 'แคตตาล็อกหลัก (สินค้าทั้งหมดในเว็บไซต์)', description: 'แคตตาล็อกสินค้าหลักทางการ รวบรวมทุกหมวดหมู่สินค้าในโชว์รูม' },
+      { id: 'tuulo', name: 'แคตตาล็อกตู้โล (ตู้โลอลูมิเนียม)', description: 'ตู้กับข้าว ตู้กับข้าวอลูมิเนียม ตู้โชว์อลูมิเนียม และตู้พระ' },
+      { id: 'knockdown', name: 'แคตตาล็อกน็อคดาวน์ (Modern Luxury)', description: 'ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะเครื่องแป้ง และชุดโชว์ทีวี' },
+    ];
 
-  for (const c of defaultCatalogs) {
-    await db.prepare(`
-      INSERT OR IGNORE INTO catalogs (id, name, description, is_active, created_at, updated_at)
-      VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
-    `).run(c.id, c.name, c.description);
+    for (const c of defaultCatalogs) {
+      await db.prepare(`
+        INSERT OR IGNORE INTO catalogs (id, name, description, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+      `).run(c.id, c.name, c.description);
+    }
+
+    const catalogs = await db.prepare(`
+      SELECT * FROM catalogs 
+      WHERE is_active = 1 
+      ORDER BY CASE 
+        WHEN id = 'main' THEN 1 
+        WHEN id = 'tuulo' THEN 2 
+        WHEN id = 'knockdown' THEN 3 
+        ELSE 4 
+      END, created_at ASC
+    `).all();
+    return NextResponse.json({ success: true, catalogs });
+  } catch (error: any) {
+    console.error('Error in /api/catalogs:', error);
+    return NextResponse.json({ 
+      error: error.message || 'Internal Server Error',
+      stack: error.stack,
+      nodeVersion: process.version
+    }, { status: 500 });
   }
-
-  const catalogs = await db.prepare("SELECT * FROM catalogs WHERE is_active = 1 AND id != 'cat_main' AND name NOT LIKE '%Catalog A%' ORDER BY created_at ASC").all();
-  return NextResponse.json({ success: true, catalogs });
 }
 
 export async function POST(request: Request) {
