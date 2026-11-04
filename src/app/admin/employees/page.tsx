@@ -475,7 +475,7 @@ export default function EmployeesPage() {
                       required
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="อย่างน้อย 8 ตัวอักษร"
+                      minLength={4} placeholder="อย่างน้อย 4 ตัวอักษร"
                       className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-red-600 focus:bg-white transition"
                     />
                     <button
@@ -486,7 +486,7 @@ export default function EmployeesPage() {
                       {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">ความยาวอย่างน้อย 8 ตัวอักษร</p>
+                  <p className="text-[10px] text-slate-400 mt-1">ความยาวอย่างน้อย 4 ตัวอักษร</p>
                 </div>
               </div>
 

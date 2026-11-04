@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    if (cleanPassword.length < 8) {
-      return NextResponse.json({ error: 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร' }, { status: 400 });
+    if (cleanPassword.length < 4) {
+      return NextResponse.json({ error: 'รหัสผ่านต้องมีความยาวอย่างน้อย 4 ตัวอักษร' }, { status: 400 });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

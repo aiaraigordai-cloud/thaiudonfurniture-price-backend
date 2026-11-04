@@ -380,10 +380,10 @@ export default function RegisterEmployeePage() {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
-                      minLength={8}
+                      minLength={4}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="รหัสผ่านอย่างน้อย 8 ตัวอักษร"
+                      placeholder="รหัสผ่านอย่างน้อย 4 ตัวอักษร"
                       className="w-full pl-10 pr-10 py-2.5 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs text-[#402E20] font-mono focus:outline-none focus:ring-2 focus:ring-[#C5A059]/30 focus:border-[#C5A059]"
                     />
                     <button
@@ -394,7 +394,7 @@ export default function RegisterEmployeePage() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">ขั้นต่ำ 8 ตัวอักษร</span>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">ขั้นต่ำ 4 ตัวอักษร</span>
                 </div>
               </div>
 
