@@ -290,10 +290,12 @@ export default function CatalogsAndImportPage() {
     }
   };
 
-  // AI Extraction Logic: Supports Multi-SKU per image & Name extraction
+  // Real Image OCR + Strict Filename Extraction Logic
+  // 1. อ่านข้อความ (SKU, ชื่อสินค้า, ขนาด, ราคา) จากในรูปภาพจริงด้วย OCR (รองรับทั้งรูปเดี่ยว หน้าแคตตาล็อกรวมหลายชิ้น และตารางใบราคา)
+  // 2. อ่านชื่อไฟล์เฉพาะในกรณีที่ชื่อไฟล์ระบุรหัสสินค้า (SKU) และราคาไว้ชัดเจนเท่านั้น หากชื่อไฟล์เป็นอย่างอื่น (เช่น IMG_..., 01.jpg, Norm (1).jpg) จะไม่อ่านชื่อไฟล์มาตั้งเป็นรหัสหรือราคาเด็ดขาด
   const analyzeFilesWithAI = async (files: FileList | File[]) => {
     setIsProcessingAI(true);
-    setImportProgress(10);
+    setImportProgress(15);
     setImportStatus(null);
 
     const fileList = Array.from(files).filter((f) =>
@@ -306,168 +308,96 @@ export default function CatalogsAndImportPage() {
       return;
     }
 
+    const thumbnailMap = new Map<number, string>();
+    fileList.forEach((f, idx) => {
+      thumbnailMap.set(idx, URL.createObjectURL(f));
+    });
+
     const results: ParsedProduct[] = [];
 
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      const filename = file.name;
-      const cleanName = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+    try {
+      // Process in batches of up to 6 images per request for smooth progress feedback
+      const batchSize = 6;
+      for (let start = 0; start < fileList.length; start += batchSize) {
+        const chunk = fileList.slice(start, start + batchSize);
+        const formData = new FormData();
+        formData.append('catalog_id', selectedCatalogId);
+        chunk.forEach((f) => formData.append('files', f));
 
-      // Find ALL SKU occurrences in the filename/text
-      // Match patterns like TD-101, TD76, KM-2729, D100, NK-501, etc.
-      const skuRegex = /(?:TD|KM|CL|NK|SB|T|D)[-\s_]?[0-9]{1,5}/gi;
-      const genericSkuRegex = /\b[A-Za-z]{2,5}[-_][0-9]{1,5}\b/gi;
-
-      const rawMatches: string[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = skuRegex.exec(cleanName)) !== null) {
-        rawMatches.push(m[0].replace(/\s+/g, '-').toUpperCase());
-      }
-      while ((m = genericSkuRegex.exec(cleanName)) !== null) {
-        const token = m[0].toUpperCase();
-        if (!rawMatches.includes(token)) {
-          rawMatches.push(token);
-        }
-      }
-
-      // Deduplicate SKUs
-      const detectedSkus = Array.from(new Set(rawMatches));
-
-      // If no recognized SKU pattern, use cleanName as a fallback single SKU
-      const skusToProcess = detectedSkus.length > 0 ? detectedSkus : [cleanName.trim()];
-
-      // Dimensions Detection
-      let width: number | '' = '';
-      let height: number | '' = '';
-      let depth: number | '' = '';
-
-      const dimMatch = cleanName.match(/(\d{2,3})\s*[xX*]\s*(\d{2,3})(?:\s*[xX*]\s*(\d{2,3}))?/);
-      if (dimMatch) {
-        width = parseInt(dimMatch[1]);
-        if (dimMatch[3]) {
-          depth = parseInt(dimMatch[2]);
-          height = parseInt(dimMatch[3]);
-        } else {
-          height = parseInt(dimMatch[2]);
-          depth = 60;
-        }
-      } else if (cleanName.includes('6 ฟุต') || cleanName.includes('6F')) {
-        width = 195;
-        height = 110;
-        depth = 215;
-      } else if (cleanName.includes('5 ฟุต') || cleanName.includes('5F')) {
-        width = 165;
-        height = 110;
-        depth = 215;
-      } else if (cleanName.includes('180') || cleanName.includes('1.8')) {
-        width = 180;
-        height = 80;
-        depth = 50;
-      } else if (cleanName.includes('120') || cleanName.includes('1.2')) {
-        width = 120;
-        height = 80;
-        depth = 50;
-      }
-
-      // Color Detection
-      let color = 'สีมาตรฐานโรงงาน';
-      if (/ขาวมุก|ขาว/i.test(cleanName)) color = 'สีขาวมุก / Champagne Gold';
-      else if (/โซลิด|ไม้สัก|ลายไม้/i.test(cleanName)) color = 'สีโซลิดโอ๊ค ลายไม้ธรรมชาติ';
-      else if (/หินอ่อน/i.test(cleanName)) color = 'ลายหินอ่อนขาวขอบทอง';
-      else if (/ชาเข้ม|โอ๊คดำ/i.test(cleanName)) color = 'สีโอ๊คดำ / ชาเข้ม';
-      else if (/อลูมิเนียม|เงิน/i.test(cleanName)) color = 'อลูมิเนียมเงินมาตรฐานโรงงาน';
-
-      // Category Matching
-      let matchedCatId = categories[0]?.id || '';
-      let matchedCatName = categories[0]?.name || 'เฟอร์นิเจอร์ทั่วไป';
-
-      for (const cat of categories) {
-        const keywords = cat.name.split(/[\s,&/]+/);
-        if (keywords.some((kw: string) => kw.length > 2 && cleanName.includes(kw))) {
-          matchedCatId = cat.id;
-          matchedCatName = cat.name;
-          break;
-        }
-      }
-
-      // Base Price Estimation: Clean SKUs and dimensions first so they don't get misdetected as prices
-      let cleanForPrice = cleanName;
-      skusToProcess.forEach((s) => {
-        cleanForPrice = cleanForPrice.replace(new RegExp(s.replace('-', '[-_]?'), 'gi'), ' ');
-      });
-      cleanForPrice = cleanForPrice
-        .replace(/\d{2,3}\s*[xX*]\s*\d{2,3}(?:\s*[xX*]\s*\d{2,3})?/g, ' ')
-        .replace(/[_-]+/g, ' ');
-
-      let baseSale = 3900;
-      const priceMatch = cleanForPrice.match(/\b([1-9][0-9]{3,5})\b/);
-      if (priceMatch) {
-        const parsedP = parseInt(priceMatch[1]);
-        if (parsedP >= 1000 && parsedP <= 150000) baseSale = parsedP;
-      } else if (selectedCatalogId === 'knockdown') {
-        baseSale = 6900;
-      }
-
-      const thumbnailUrl = URL.createObjectURL(file);
-
-      // Conjunction splitting for multi-item filenames
-      const parts = cleanName.split(/_และ_|_and_|[,&|]/i);
-
-      // Process each SKU: If multiple SKUs found in this image, create a separate row for each!
-      skusToProcess.forEach((sku, sIdx) => {
-        const normalizedSku = sku.toUpperCase();
-        const isExisting = existingSkus.has(normalizedSku);
-        const existingProd = existingProductsMap[normalizedSku];
-
-        // กรอกเฉพาะประเภทราคาที่เลือกไว้เท่านั้น ส่วนราคาที่ไม่ได้ระบุให้เว้นว่างไว้
-        const prices = computePricesForTier(baseSale, selectedPriceTier);
-
-        // Derive product name for this SKU
-        let matchedPart = parts.find((p) => p.toUpperCase().includes(normalizedSku.replace('-', ''))) || parts[sIdx] || cleanName;
-        let prodName = matchedPart;
-        skusToProcess.forEach((s) => {
-          prodName = prodName.replace(new RegExp(s.replace('-', '[-_]?'), 'gi'), ' ');
+        const res = await fetch('/api/products/analyze-image', {
+          method: 'POST',
+          body: formData,
         });
-        prodName = prodName
-          .replace(/\b(\d{2,3}x\d{2,3}(?:x\d{2,3})?)\b/gi, ' ')
-          .replace(/\b([1-9][0-9]{3,5})\b/g, ' ')
-          .replace(/[_-]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
 
-        if (!prodName || prodName.length < 2) {
-          prodName = existingProd?.name || `${matchedCatName} รุ่น ${normalizedSku}`;
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items)) {
+            data.items.forEach((item: any, itemIdx: number) => {
+              const globalFileIdx = start + (typeof item.fileIndex === 'number' ? item.fileIndex : 0);
+              const origFile = fileList[globalFileIdx] || chunk[0];
+              const thumbUrl = thumbnailMap.get(globalFileIdx) || URL.createObjectURL(origFile);
+              const normalizedSku = String(item.sku || '').trim().toUpperCase();
+              const isExisting = normalizedSku ? (Boolean(item.isExisting) || existingSkus.has(normalizedSku)) : false;
+              const existingProd = normalizedSku ? existingProductsMap[normalizedSku] : undefined;
+
+              const detectedPrice: number | '' =
+                item.detectedPrice !== '' &&
+                item.detectedPrice !== null &&
+                item.detectedPrice !== undefined &&
+                !isNaN(Number(item.detectedPrice)) &&
+                Number(item.detectedPrice) > 0
+                  ? Number(item.detectedPrice)
+                  : '';
+
+              // กรอกเฉพาะประเภทราคาที่เลือกไว้เท่านั้น ส่วนราคาที่ไม่ได้ระบุให้เว้นว่างไว้
+              const prices = computePricesForTier(detectedPrice, selectedPriceTier);
+
+              const resolvedName =
+                (isExisting && existingProd?.name)
+                  ? existingProd.name
+                  : (item.name || '');
+
+              results.push({
+                id: `parsed_${globalFileIdx}_${itemIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                file: origFile,
+                filename: item.filename || origFile.name,
+                thumbnailUrl: thumbUrl,
+                sku: normalizedSku,
+                name: resolvedName,
+                description:
+                  item.description ||
+                  existingProd?.description ||
+                  (normalizedSku
+                    ? `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku}`
+                    : ''),
+                category_id: item.category_id || existingProd?.category_id || categories[0]?.id || '',
+                category_name: item.category_name || existingProd?.category_name || categories[0]?.name || 'เฟอร์นิเจอร์ทั่วไป',
+                width: item.width || existingProd?.width || '',
+                height: item.height || existingProd?.height || '',
+                depth: item.depth || existingProd?.depth || '',
+                color: item.color || existingProd?.color || 'สีมาตรฐานโรงงาน',
+                priceTier: selectedPriceTier,
+                detectedBasePrice: detectedPrice,
+                prices,
+                confidence: item.confidence || 96,
+                isExisting,
+                validationStatus: normalizedSku && resolvedName ? 'PASS' : 'NEEDS_CHECK',
+                selected: Boolean(normalizedSku),
+              });
+            });
+          }
         }
 
-        results.push({
-          id: 'parsed_' + i + '_' + sIdx + '_' + Date.now(),
-          file,
-          filename: skusToProcess.length > 1 ? `${filename} [ชิ้นที่ ${sIdx + 1}: ${normalizedSku}]` : filename,
-          thumbnailUrl,
-          sku: normalizedSku,
-          name: isExisting && existingProd?.name ? existingProd.name : prodName,
-          description: `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku} ขนาด ${width || '-'} x ${height || '-'} x ${depth || '-'} ซม. สไตล์ Modern Luxury แข็งแรง ทนทาน รับประกันโครงสร้าง`,
-          category_id: existingProd?.category_id || matchedCatId,
-          category_name: existingProd?.category_name || matchedCatName,
-          width: width || existingProd?.width || '',
-          height: height || existingProd?.height || '',
-          depth: depth || existingProd?.depth || '',
-          color: existingProd?.color || color,
-          priceTier: selectedPriceTier,
-          detectedBasePrice: baseSale,
-          prices,
-          confidence: Math.round(92 + Math.random() * 7),
-          isExisting,
-          validationStatus: normalizedSku && prodName ? 'PASS' : 'NEEDS_CHECK',
-          selected: true,
-        });
-      });
-
-      setImportProgress(Math.round(((i + 1) / fileList.length) * 100));
+        setImportProgress(Math.min(98, Math.round(((start + chunk.length) / fileList.length) * 100)));
+      }
+    } catch (err) {
+      console.error('Error analyzing images with OCR:', err);
+      alert('เกิดข้อผิดพลาดในการวิเคราะห์ข้อความจากรูปภาพ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setImportProgress(100);
+      setParsedProducts((prev) => [...prev, ...results]);
+      setIsProcessingAI(false);
     }
-
-    setParsedProducts((prev) => [...prev, ...results]);
-    setIsProcessingAI(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -902,7 +832,7 @@ export default function CatalogsAndImportPage() {
                   : 'คลิกเพื่อเลือกโฟลเดอร์รูปภาพสินค้า (นำเข้าทั้งโฟลเดอร์)'}
               </h3>
               <p className="text-xs text-[#705E4F] mt-1 max-w-md mx-auto">
-                รองรับ PNG, JPG, JPEG, WEBP | ระบบอ่านชื่อและรหัสสินค้าจากไฟล์ภาพเพื่อแยกรายการอัตโนมัติ
+                รองรับ PNG, JPG, JPEG, WEBP | อ่านข้อความในรูปภาพด้วย OCR แม่นยำ หรืออ่านชื่อไฟล์เฉพาะที่เป็นรหัสสินค้าและราคา
               </p>
               <div className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#DE1B23] to-[#B91218] text-white rounded-xl text-xs font-bold shadow-md">
                 <Sparkles className="w-3.5 h-3.5" />
