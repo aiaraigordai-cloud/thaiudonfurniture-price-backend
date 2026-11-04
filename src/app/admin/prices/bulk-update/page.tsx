@@ -21,6 +21,7 @@ import {
   Download,
   Edit3,
   Check,
+  Layers,
 } from 'lucide-react';
 
 interface ParsedRow {
@@ -41,6 +42,7 @@ export default function BulkPriceUpdatePage() {
   const router = useRouter();
   const [priceTiers, setPriceTiers] = useState<any[]>([]);
   const [selectedTierId, setSelectedTierId] = useState('');
+  const [selectedCatalogType, setSelectedCatalogType] = useState<'all' | 'tuulo' | 'knockdown'>('all');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -87,6 +89,7 @@ export default function BulkPriceUpdatePage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('price_tier_id', selectedTierId);
+    formData.append('catalog_type', selectedCatalogType);
 
     const progressTimer = setInterval(() => {
       setUploadProgress((prev) => (prev < 90 ? prev + 15 : prev));
@@ -115,6 +118,15 @@ export default function BulkPriceUpdatePage() {
           }
         });
         setSelectedRowIds(autoSelected);
+
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({ type: 'PRICE_BATCH_UPDATED', batchId: data.batchId, timestamp: Date.now() });
+            localStorage.setItem('thaiudon_batch_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_batch_sync'));
+          } catch {}
+        }
       }
     } catch {
       clearInterval(progressTimer);
@@ -201,8 +213,11 @@ export default function BulkPriceUpdatePage() {
           try {
             const bc = new BroadcastChannel('thaiudon_sync_channel');
             bc.postMessage({ type: 'PRICES_UPDATED', timestamp: Date.now() });
+            bc.postMessage({ type: 'PRICE_BATCH_UPDATED', batchId: batchData?.batchId, timestamp: Date.now() });
             localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            localStorage.setItem('thaiudon_batch_sync', Date.now().toString());
             window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+            window.dispatchEvent(new CustomEvent('thaiudon_batch_sync'));
           } catch {}
         }
       }
@@ -311,14 +326,90 @@ export default function BulkPriceUpdatePage() {
         </div>
       )}
 
-      {/* Step 1 & 2: Tier Selection & File Upload */}
+      {/* Step 1, 2, 3: Catalog Selection, Tier Selection & File Upload */}
       {!batchData && (
         <form onSubmit={handleFileUploadAndParse} className="space-y-6">
+          {/* Step 1: Catalog Type Selection */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+              <Layers className="w-4 h-4 text-emerald-600" />
+              <h2 className="text-sm font-bold text-slate-800">
+                ขั้นตอนที่ 1: เลือกประเภทแคตตาล็อกสินค้า (Catalog Type)
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              ระบุประเภทแคตตาล็อกสินค้าที่ต้องการอัปเดต เช่น ตู้โล หรือ น็อคดาวน์ เพื่อให้ระบบเจาะจงค้นหารหัสสินค้า (SKU) ได้อย่างแม่นยำ หรือเลือกทั้งหมดเพื่อค้นหาครอบคลุมทั้งระบบ
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <label
+                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                  selectedCatalogType === 'all'
+                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                }`}
+              >
+                <div>
+                  <div className="font-bold text-xs text-slate-900">🌐 ทุกแคตตาล็อก (สินค้าทั้งหมด)</div>
+                  <div className="text-[11px] text-slate-500 mt-1">ค้นหาและจับคู่ทั้งตู้โลและน็อคดาวน์ (310 รายการ)</div>
+                </div>
+                <input
+                  type="radio"
+                  name="catalog_type_select"
+                  checked={selectedCatalogType === 'all'}
+                  onChange={() => setSelectedCatalogType('all')}
+                  className="text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label
+                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                  selectedCatalogType === 'tuulo'
+                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                }`}
+              >
+                <div>
+                  <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (121 รายการ)</div>
+                  <div className="text-[11px] text-slate-500 mt-1">ตู้กับข้าว ตู้โชว์อลูมิเนียม เคาน์เตอร์ครัว ตู้พระ</div>
+                </div>
+                <input
+                  type="radio"
+                  name="catalog_type_select"
+                  checked={selectedCatalogType === 'tuulo'}
+                  onChange={() => setSelectedCatalogType('tuulo')}
+                  className="text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+
+              <label
+                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                  selectedCatalogType === 'knockdown'
+                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                }`}
+              >
+                <div>
+                  <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (189 รายการ)</div>
+                  <div className="text-[11px] text-slate-500 mt-1">ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะเครื่องแป้ง ตู้คอนโซล</div>
+                </div>
+                <input
+                  type="radio"
+                  name="catalog_type_select"
+                  checked={selectedCatalogType === 'knockdown'}
+                  onChange={() => setSelectedCatalogType('knockdown')}
+                  className="text-emerald-600 focus:ring-emerald-500"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Step 2: Tier Selection */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <Coins className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 1: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Price Tier Target)
+                ขั้นตอนที่ 2: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Price Tier Target)
               </h2>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
@@ -352,11 +443,12 @@ export default function BulkPriceUpdatePage() {
             </div>
           </div>
 
+          {/* Step 3: Multi-format File Upload (Excel, Word, PDF, CSV, Text) */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <UploadCloud className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 2: อัปโหลดไฟล์ราคาสินค้า (Excel, CSV, Text)
+                ขั้นตอนที่ 3: อัปโหลดไฟล์ราคาสินค้า (Excel, Word, PDF, CSV, Text)
               </h2>
             </div>
 
@@ -368,7 +460,8 @@ export default function BulkPriceUpdatePage() {
                 {file ? file.name : 'ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
               </div>
               <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
-                รองรับ Excel (.xlsx, .xls), CSV (.csv), Text (.txt) ระบบจะค้นหารหัสสินค้า (SKU) เป็นหลัก และใช้ชื่อสินค้าช่วยยืนยัน
+                รองรับ <strong>Excel (.xlsx, .xls)</strong>, <strong>Word (.docx, .doc)</strong>, <strong>PDF (.pdf)</strong>, <strong>CSV (.csv)</strong>, <strong>Text (.txt)</strong><br />
+                ระบบจะค้นหารหัสสินค้า (SKU) เป็นหลัก และใช้ชื่อสินค้าช่วยยืนยัน
               </p>
               <input
                 type="file"
@@ -379,7 +472,7 @@ export default function BulkPriceUpdatePage() {
                   }
                 }}
                 className="hidden"
-                accept=".xlsx,.xls,.csv,.txt"
+                accept=".xlsx,.xls,.csv,.txt,.pdf,.docx,.doc"
               />
               <label
                 htmlFor="file-upload"
@@ -472,12 +565,15 @@ export default function BulkPriceUpdatePage() {
           {/* Action Confirmation Bar */}
           <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                  Target Price Tier:
+                  เป้าหมาย:
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
                   {batchData.priceTier?.name_th} ({batchData.priceTier?.code})
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700">
+                  {batchData.catalogType === 'tuulo' ? '🚪 แคตตาล็อกตู้โล' : batchData.catalogType === 'knockdown' ? '🛏️ แคตตาล็อกน็อคดาวน์' : '🌐 ทุกแคตตาล็อก'}
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">

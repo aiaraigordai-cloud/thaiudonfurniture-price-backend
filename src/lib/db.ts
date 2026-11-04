@@ -45,6 +45,12 @@ export function getDb(): DatabaseSync {
     const dbPath = getDbPath();
     dbInstance = new DatabaseSync(dbPath);
     dbInstance.exec('PRAGMA foreign_keys = ON;');
+    try {
+      dbInstance.exec('PRAGMA journal_mode = WAL;');
+      dbInstance.exec('PRAGMA busy_timeout = 5000;');
+    } catch (e) {
+      console.warn('Could not set WAL or busy_timeout:', e);
+    }
     initSchema(dbInstance);
   }
   return dbInstance;
@@ -270,6 +276,12 @@ function initSchema(db: DatabaseSync) {
     const shareColNames = shareCols.map(c => c.name);
     if (!shareColNames.includes('catalog_filter')) {
       db.exec("ALTER TABLE share_links ADD COLUMN catalog_filter TEXT DEFAULT 'all';");
+    }
+
+    const batchCols = db.prepare("PRAGMA table_info(price_import_batches)").all() as any[];
+    const batchColNames = batchCols.map((c: any) => c.name);
+    if (!batchColNames.includes('catalog_type')) {
+      db.exec("ALTER TABLE price_import_batches ADD COLUMN catalog_type TEXT DEFAULT 'all';");
     }
   } catch (e) {
     console.warn('Migration note:', e);

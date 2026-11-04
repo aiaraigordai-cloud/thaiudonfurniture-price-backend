@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import crypto from 'node:crypto';
+import { getSupabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -108,6 +109,36 @@ export async function POST(request: Request) {
       `).run(updatedSuccessCount, batchId);
 
       await db.exec('COMMIT;');
+
+      // Sync commit and history to Supabase if configured
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          await supabase.from('price_import_batches').update({
+            status: 'COMMITTED',
+            updated_rows: updatedSuccessCount
+          }).eq('id', batchId);
+
+          const historyRowsToSync = rowsToCommit.map(r => ({
+            id: crypto.randomUUID(),
+            product_id: r.detected_sku,
+            price_tier_id: batch.price_tier_id,
+            old_price: r.old_price,
+            new_price: r.new_price,
+            batch_id: batchId,
+            changed_by: user.id,
+            reason: `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
+          }));
+
+          if (historyRowsToSync.length > 0) {
+            for (let i = 0; i < historyRowsToSync.length; i += 100) {
+              await supabase.from('price_change_history').insert(historyRowsToSync.slice(i, i + 100));
+            }
+          }
+        } catch (supaErr) {
+          console.warn('Supabase sync error (bulk-commit):', supaErr);
+        }
+      }
     } catch (err: any) {
       await db.exec('ROLLBACK;');
       throw err;

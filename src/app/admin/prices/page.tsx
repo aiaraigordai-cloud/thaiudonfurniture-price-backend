@@ -21,13 +21,31 @@ export default function PricesPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Catalog and category filters
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
+  const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number }>({
+    all: 310,
+    tuulo: 121,
+    knockdown: 189,
+  });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products?q=${encodeURIComponent(search)}`);
+      const params = new URLSearchParams();
+      if (search) params.append('q', search);
+      if (catalogTypeFilter !== 'all') params.append('catalog_type', catalogTypeFilter);
+      if (selectedCategory) params.append('category', selectedCategory);
+
+      const res = await fetch(`/api/products?${params.toString()}`);
       const data = await res.json();
       if (data.success) {
         setProducts(data.products || []);
+        if (data.counts) {
+          setCatalogCounts(data.counts);
+        }
         // Initialize editing state
         const initialPrices: Record<string, any> = {};
         data.products.forEach((p: any) => {
@@ -49,7 +67,15 @@ export default function PricesPage() {
 
   useEffect(() => {
     loadProducts();
-  }, [search]);
+  }, [search, catalogTypeFilter, selectedCategory]);
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) setCategories(d.categories || []);
+      });
+  }, []);
 
   const handlePriceChange = (prodId: string, tier: string, val: string) => {
     setEditingPrices((prev) => ({
@@ -141,9 +167,46 @@ export default function PricesPage() {
         </div>
       )}
 
-      {/* Search Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3">
-        <div className="flex-1 relative">
+      {/* Catalog Switcher Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          onClick={() => { setCatalogTypeFilter('all'); setSelectedCategory(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
+            catalogTypeFilter === 'all'
+              ? 'bg-[#161B40] text-white shadow-sm'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Package className="w-3.5 h-3.5" />
+          <span>สินค้าทั้งหมด ({catalogCounts.all} รายการ)</span>
+        </button>
+
+        <button
+          onClick={() => { setCatalogTypeFilter('tuulo'); setSelectedCategory(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
+            catalogTypeFilter === 'tuulo'
+              ? 'bg-[#DE1B23] text-white shadow-sm'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <span>🚪 แคตตาล็อกตู้โล ({catalogCounts.tuulo} รายการ)</span>
+        </button>
+
+        <button
+          onClick={() => { setCatalogTypeFilter('knockdown'); setSelectedCategory(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
+            catalogTypeFilter === 'knockdown'
+              ? 'bg-[#DE1B23] text-white shadow-sm'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <span>🛏️ แคตตาล็อกน็อคดาวน์ ({catalogCounts.knockdown} รายการ)</span>
+        </button>
+      </div>
+
+      {/* Search & Category Filter Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center gap-3">
+        <div className="flex-1 relative w-full">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
           <input
             type="text"
@@ -152,6 +215,20 @@ export default function PricesPage() {
             placeholder="ค้นหา SKU หรือชื่อสินค้าเพื่อปรับราคา..."
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
           />
+        </div>
+        <div className="w-full md:w-64">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-semibold"
+          >
+            <option value="">ทุกหมวดหมู่ ({categories.length})</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -203,8 +280,22 @@ export default function PricesPage() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-mono font-bold text-slate-900">{prod.sku}</div>
-                            <div className="text-[11px] text-slate-500 truncate">{prod.name}</div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-slate-900">{prod.sku}</span>
+                              {prod.catalog_type === 'tuulo' ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  ตู้โล
+                                </span>
+                              ) : prod.catalog_type === 'knockdown' ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                  น็อคดาวน์
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-[11px] text-slate-600 truncate font-medium">{prod.name}</div>
+                            {prod.category_name && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">{prod.category_name}</div>
+                            )}
                           </div>
                         </div>
                       </td>

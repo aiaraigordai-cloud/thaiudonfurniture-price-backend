@@ -1,8 +1,135 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
 import crypto from 'node:crypto';
+
+
+// Universal helper to parse text lines (from PDF, Word, or Text) into structured price rows
+function parseTextLinesToRawRows(
+  textContent: string,
+  prodMap: Map<string, any>,
+  relaxedProdMap: Map<string, any>
+): Array<{ sku: string; name?: string; price: number; raw: string }> {
+  const rows: Array<{ sku: string; name?: string; price: number; raw: string }> = [];
+  const lines = textContent.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  const skuRegex = /(?:TD|KM|KS|CL|NK|SB)[-\s_.]?\d{1,5}(?:-(?:cream|white|gray|wood|fabric|black|gold|oak|solid)(?:-[a-z]+)*)?|\bD\.?(?:80|100|120|150)(?:[-_]\d{2})?(?:[-_\s](?:white|option))*|\b[A-Za-z0-9]{2,8}[-_][A-Za-z0-9]+/i;
+  const priceRegex = /(?:(?:ราคา|price|฿|ขาย|ส่ง|ปลีก|vip|เซลล์)\s*)?([1-9]\d{0,2}(?:,\d{3})+|\d{3,6})\s*(?:\.-|บาท|thb)?(?!\d)/i;
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+
+    // 1. Check if line has tab or multi-space table columns
+    const columns = line.split(/\t|\s{2,}/).map((c) => c.trim()).filter(Boolean);
+    if (columns.length >= 2) {
+      let skuCand = '';
+      let priceCand: number | null = null;
+      let nameCand = '';
+
+      columns.forEach((col) => {
+        const cleanCol = col.replace(/[,฿THBบาท\s]/g, '');
+        const num = parseFloat(cleanCol);
+        if (!isNaN(num) && num >= 100 && num <= 2000000 && !priceCand) {
+          priceCand = num;
+        } else if (
+          !skuCand &&
+          (prodMap.has(col.toUpperCase()) ||
+            relaxedProdMap.has(col.toUpperCase().replace(/[-_\s]/g, '')) ||
+            /^[A-Za-z0-9]{2,8}[-_][A-Za-z0-9]+/i.test(col))
+        ) {
+          skuCand = col;
+        } else if (!nameCand && col.length >= 2 && isNaN(Number(col))) {
+          nameCand = col;
+        }
+      });
+
+      if (skuCand && priceCand) {
+        rows.push({
+          sku: skuCand,
+          name: nameCand,
+          price: priceCand,
+          raw: line,
+        });
+        continue;
+      }
+    }
+
+    // 2. Regex SKU & Price extraction with masking
+    const sm = line.match(skuRegex);
+    if (sm) {
+      const remaining = line.replace(sm[0], ' ');
+      const pm = remaining.match(priceRegex);
+      if (pm) {
+        const rawP = pm[1].replace(/,/g, '');
+        const priceVal = parseFloat(rawP);
+        if (!isNaN(priceVal) && priceVal >= 100 && priceVal <= 2000000) {
+          let name = remaining.replace(pm[0], ' ');
+          name = name.replace(/[\t,;:|]/g, ' ').replace(/\s+/g, ' ').trim();
+          rows.push({
+            sku: sm[0].trim(),
+            name,
+            price: priceVal,
+            raw: line,
+          });
+        }
+      }
+    }
+  }
+
+  return rows;
+}
+
+// Helper to extract rows from HTML tables (from Word convertToHtml)
+function parseHtmlTableToRawRows(
+  htmlContent: string,
+  prodMap: Map<string, any>,
+  relaxedProdMap: Map<string, any>
+): Array<{ sku: string; name?: string; price: number; raw: string }> {
+  const rows: Array<{ sku: string; name?: string; price: number; raw: string }> = [];
+  const trMatches = htmlContent.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
+  if (!trMatches) return rows;
+
+  for (const tr of trMatches) {
+    const tdMatches = Array.from(tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((m) =>
+      m[1].replace(/<[^>]+>/g, '').trim()
+    );
+    if (tdMatches.length >= 2) {
+      let skuCand = '';
+      let priceCand: number | null = null;
+      let nameCand = '';
+
+      tdMatches.forEach((td) => {
+        const cleanVal = td.replace(/[,฿THBบาท\s]/g, '');
+        const num = parseFloat(cleanVal);
+        if (!isNaN(num) && num >= 100 && num <= 2000000 && !priceCand) {
+          priceCand = num;
+        } else if (
+          !skuCand &&
+          (prodMap.has(td.toUpperCase()) ||
+            relaxedProdMap.has(td.toUpperCase().replace(/[-_\s]/g, '')) ||
+            /^[A-Za-z0-9]{2,8}[-_][A-Za-z0-9]+/i.test(td))
+        ) {
+          skuCand = td;
+        } else if (!nameCand && td.length >= 2 && isNaN(Number(td))) {
+          nameCand = td;
+        }
+      });
+
+      if (skuCand && priceCand) {
+        rows.push({
+          sku: skuCand,
+          name: nameCand,
+          price: priceCand,
+          raw: tdMatches.join(' | '),
+        });
+      }
+    }
+  }
+
+  return rows;
+}
 
 export async function POST(request: Request) {
   try {
@@ -18,6 +145,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const priceTierId = formData.get('price_tier_id') as string;
+    const catalogType = (formData.get('catalog_type') as string) || 'all';
 
     if (!priceTierId) {
       return NextResponse.json({ error: 'กรุณาเลือกประเภทราคาเป้าหมายก่อนอัปโหลด' }, { status: 400 });
@@ -44,8 +172,14 @@ export async function POST(request: Request) {
 
     let rawRows: Array<{ sku: string; name?: string; price: number; raw: string }> = [];
 
-    // Pre-fetch all products for matching
-    const existingProducts = await db.prepare('SELECT id, sku, name FROM products').all() as any[];
+    // Pre-fetch products for matching, scoped by selected catalog_type if specified
+    let prodQuery = 'SELECT id, sku, name, catalog_type FROM products WHERE 1=1';
+    const prodParams: any[] = [];
+    if (catalogType && catalogType !== 'all') {
+      prodQuery += ' AND catalog_type = ?';
+      prodParams.push(catalogType);
+    }
+    const existingProducts = await db.prepare(prodQuery).all(...prodParams) as any[];
     const prodMap = new Map<string, any>();
     const relaxedProdMap = new Map<string, any>();
     const nameMap = new Map<string, any>();
@@ -174,6 +308,46 @@ export async function POST(request: Request) {
             });
           }
         }
+      }
+    } else if (ext === 'pdf') {
+      // PDF document parser using pdf-parse
+      try {
+        const { PDFParse } = await import('pdf-parse');
+        const parser = new PDFParse({ data: buffer });
+        const pdfResult = await parser.getText();
+        const textContent = typeof pdfResult === 'string' ? pdfResult : (pdfResult?.text || '');
+        await parser.destroy().catch(() => {});
+
+        rawRows = parseTextLinesToRawRows(textContent, prodMap, relaxedProdMap);
+      } catch (pdfError: any) {
+        console.error('PDF parsing error:', pdfError);
+        return NextResponse.json({ error: `ไม่สามารถอ่านไฟล์ PDF ได้: ${pdfError.message || 'ไฟล์อาจมีการป้องกันหรือเป็นสแกนรูปภาพ'}` }, { status: 400 });
+      }
+    } else if (ext === 'docx' || ext === 'doc') {
+      // Word document parser using mammoth
+      try {
+        const mammoth = await import('mammoth');
+        let textContent = '';
+        try {
+          const rawTextRes = await mammoth.extractRawText({ buffer });
+          textContent = rawTextRes?.value || '';
+        } catch {}
+
+        try {
+          const htmlRes = await mammoth.convertToHtml({ buffer });
+          const htmlContent = htmlRes?.value || '';
+          const tableRows = parseHtmlTableToRawRows(htmlContent, prodMap, relaxedProdMap);
+          if (tableRows.length > 0) {
+            rawRows.push(...tableRows);
+          }
+        } catch {}
+
+        if (rawRows.length === 0 && textContent) {
+          rawRows = parseTextLinesToRawRows(textContent, prodMap, relaxedProdMap);
+        }
+      } catch (wordError: any) {
+        console.error('Word parsing error:', wordError);
+        return NextResponse.json({ error: `ไม่สามารถอ่านไฟล์ Word ได้: ${wordError.message || 'รูปแบบไฟล์ไม่รองรับ'}` }, { status: 400 });
       }
     } else {
       // CSV, TSV, Text, or OCR output
@@ -364,9 +538,9 @@ export async function POST(request: Request) {
     try {
       await db.prepare(`
         INSERT INTO price_import_batches (
-          id, filename, file_type, price_tier_id, total_rows, passed_rows, review_rows, failed_rows, updated_rows, status, uploaded_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', ?, datetime('now'))
-      `).run(batchId, filename, ext, priceTierId, rawRows.length, passedCount, reviewCount, failedCount, user.id);
+          id, filename, file_type, price_tier_id, catalog_type, total_rows, passed_rows, review_rows, failed_rows, updated_rows, status, uploaded_by, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', ?, datetime('now'))
+      `).run(batchId, filename, ext, priceTierId, catalogType, rawRows.length, passedCount, reviewCount, failedCount, user.id);
 
       for (const r of parsedRowsToInsert) {
         await db.prepare(`
@@ -380,6 +554,36 @@ export async function POST(request: Request) {
       }
 
       await db.exec('COMMIT;');
+
+      // Sync batch and rows to Supabase if configured
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          await supabase.from('price_import_batches').insert({
+            id: batchId,
+            filename,
+            file_type: ext,
+            price_tier_id: priceTierId,
+            catalog_type: catalogType,
+            total_rows: rawRows.length,
+            passed_rows: passedCount,
+            review_rows: reviewCount,
+            failed_rows: failedCount,
+            updated_rows: 0,
+            status: 'PENDING',
+            uploaded_by: user.id,
+          });
+
+          if (parsedRowsToInsert.length > 0) {
+            for (let i = 0; i < parsedRowsToInsert.length; i += 100) {
+              const chunk = parsedRowsToInsert.slice(i, i + 100);
+              await supabase.from('price_import_rows').insert(chunk);
+            }
+          }
+        } catch (supaErr) {
+          console.warn('Supabase sync error (bulk-parse):', supaErr);
+        }
+      }
     } catch (e) {
       await db.exec('ROLLBACK;');
       throw e;
@@ -399,6 +603,7 @@ export async function POST(request: Request) {
       batchId,
       filename,
       priceTier: tier,
+      catalogType,
       totalRows: rawRows.length,
       passedRows: passedCount,
       reviewRows: reviewCount,

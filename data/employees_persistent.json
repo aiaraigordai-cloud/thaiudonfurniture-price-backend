@@ -27,5 +27,63 @@
       "share_link_manage": true,
       "reports_view": true
     }
+  },
+  {
+    "allowlistId": "emp_740d39e7",
+    "employeeName": "พนักงาน01",
+    "authorizedEmail": "ai.araigordai@gmail.com",
+    "isClaimed": true,
+    "isActive": true,
+    "claimedBy": "usr_81796702",
+    "createdAt": "2026-11-04 10:20:44",
+    "updatedAt": "2026-11-04 10:20:44",
+    "profile": {
+      "id": "usr_81796702",
+      "username": "admin01",
+      "email": "ai.araigordai@gmail.com",
+      "employeeName": "พนักงาน01",
+      "role": "ADMIN",
+      "status": "Active",
+      "passwordHash": "7407035cbcd5590dfab918c8f59147cf7aa537481198f4ecb7c504dd47a9baefbefa38b7699840a2a71da55b8ac0a6d762666473f765a82c01304ab939e0ea38",
+      "salt": "d28768df2c835c635d595116669fc57d",
+      "createdAt": "2026-11-04 10:20:44",
+      "updatedAt": "2026-11-04 10:20:44"
+    },
+    "permissions": {
+      "product_manage": true,
+      "price_edit": true,
+      "price_bulk_import": true,
+      "share_link_manage": true,
+      "reports_view": true
+    }
+  },
+  {
+    "allowlistId": "emp_68d6974e",
+    "employeeName": "เสาวลักษณ์ ทองสิทธิ์",
+    "authorizedEmail": "saowaluk9861@gmail.com",
+    "isClaimed": true,
+    "isActive": true,
+    "claimedBy": "usr_fdaebc2f",
+    "createdAt": "2026-11-04 10:21:34",
+    "updatedAt": "2026-11-04 10:21:34",
+    "profile": {
+      "id": "usr_fdaebc2f",
+      "username": "admin02",
+      "email": "saowaluk9861@gmail.com",
+      "employeeName": "เสาวลักษณ์ ทองสิทธิ์",
+      "role": "ADMIN",
+      "status": "Active",
+      "passwordHash": "6fc9a1c7b2f78fe9bc74902b24b901b4dccf955bc89e6a653cc517ebc463be68509d0d6584907cae9841d61c810451ddf02607679977671bbb7b113b952a8d08",
+      "salt": "9016ec3ec757341bd5ff5bb265f39a05",
+      "createdAt": "2026-11-04 10:21:34",
+      "updatedAt": "2026-11-04 10:21:34"
+    },
+    "permissions": {
+      "product_manage": true,
+      "price_edit": true,
+      "price_bulk_import": true,
+      "share_link_manage": true,
+      "reports_view": true
+    }
   }
 ]
