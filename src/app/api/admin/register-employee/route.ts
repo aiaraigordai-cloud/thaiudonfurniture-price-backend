@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, hashPassword, logAudit } from '@/lib/auth';
 import crypto from 'node:crypto';
+import {
+  loadPersistentEmployees,
+  savePersistentEmployees,
+  syncEmployeesToDb,
+  type PersistentEmployee,
+} from '@/lib/employee-store';
 
 export async function POST(request: Request) {
   try {
@@ -19,7 +25,7 @@ export async function POST(request: Request) {
 
     const cleanEmpName = employee_name.trim();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanUsername = username.trim();
+    const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
 
     if (cleanPassword.length < 8) {
@@ -32,6 +38,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
+    await syncEmployeesToDb(db);
 
     // Check duplicate username
     const existingUser = await db.prepare('SELECT id FROM profiles WHERE username = ?').get(cleanUsername);
@@ -47,6 +54,9 @@ export async function POST(request: Request) {
 
     const userId = 'usr_' + crypto.randomUUID().slice(0, 8);
     const { hash, salt } = hashPassword(cleanPassword);
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    let allowId = '';
 
     await db.exec('BEGIN TRANSACTION;');
 
@@ -54,23 +64,24 @@ export async function POST(request: Request) {
       // 1. Create profile
       await db.prepare(`
         INSERT INTO profiles (id, username, email, employee_name, role, status, password_hash, salt, email_verified, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'ADMIN', 'Active', ?, ?, 1, datetime('now'), datetime('now'))
-      `).run(userId, cleanUsername, cleanEmail, cleanEmpName, hash, salt);
+        VALUES (?, ?, ?, ?, 'ADMIN', 'Active', ?, ?, 1, ?, ?)
+      `).run(userId, cleanUsername, cleanEmail, cleanEmpName, hash, salt, now, now);
 
       // 2. Insert or update employee_allowlist record
       const existingAllow = await db.prepare('SELECT id FROM employee_allowlist WHERE employee_name = ?').get(cleanEmpName) as any;
       if (existingAllow) {
+        allowId = existingAllow.id;
         await db.prepare(`
           UPDATE employee_allowlist 
-          SET is_claimed = 1, claimed_by = ?, authorized_email = ?, is_active = 1, updated_at = datetime('now')
+          SET is_claimed = 1, claimed_by = ?, authorized_email = ?, is_active = 1, updated_at = ?
           WHERE id = ?
-        `).run(userId, cleanEmail, existingAllow.id);
+        `).run(userId, cleanEmail, now, existingAllow.id);
       } else {
-        const allowId = 'emp_' + crypto.randomUUID().slice(0, 8);
+        allowId = 'emp_' + crypto.randomUUID().slice(0, 8);
         await db.prepare(`
           INSERT INTO employee_allowlist (id, employee_name, authorized_email, is_claimed, is_active, claimed_by, created_at, updated_at)
-          VALUES (?, ?, ?, 1, 1, ?, datetime('now'), datetime('now'))
-        `).run(allowId, cleanEmpName, cleanEmail, userId);
+          VALUES (?, ?, ?, 1, 1, ?, ?, ?)
+        `).run(allowId, cleanEmpName, cleanEmail, userId, now, now);
       }
 
       // 3. Set custom permissions
@@ -78,7 +89,7 @@ export async function POST(request: Request) {
       const permId = 'perm_' + crypto.randomUUID().slice(0, 8);
       await db.prepare(`
         INSERT INTO admin_permissions (id, profile_id, product_manage, price_edit, price_bulk_import, share_link_manage, reports_view, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         permId,
         userId,
@@ -86,7 +97,8 @@ export async function POST(request: Request) {
         perms.price_edit !== false ? 1 : 0,
         perms.price_bulk_import !== false ? 1 : 0,
         perms.share_link_manage !== false ? 1 : 0,
-        perms.reports_view !== false ? 1 : 0
+        perms.reports_view !== false ? 1 : 0,
+        now
       );
 
       await db.exec('COMMIT;');
@@ -94,6 +106,48 @@ export async function POST(request: Request) {
       await db.exec('ROLLBACK;');
       throw txErr;
     }
+
+    // 4. Save to Persistent Store (File + Netlify Blobs)
+    const currentList = await loadPersistentEmployees();
+    const existingIndex = currentList.findIndex(e => e.employeeName === cleanEmpName || e.allowlistId === allowId);
+
+    const persistentRecord: PersistentEmployee = {
+      allowlistId: allowId,
+      employeeName: cleanEmpName,
+      authorizedEmail: cleanEmail,
+      isClaimed: true,
+      isActive: true,
+      claimedBy: userId,
+      createdAt: now,
+      updatedAt: now,
+      profile: {
+        id: userId,
+        username: cleanUsername,
+        email: cleanEmail,
+        employeeName: cleanEmpName,
+        role: 'ADMIN',
+        status: 'Active',
+        passwordHash: hash,
+        salt,
+        createdAt: now,
+        updatedAt: now,
+      },
+      permissions: {
+        product_manage: permissions?.product_manage !== false,
+        price_edit: permissions?.price_edit !== false,
+        price_bulk_import: permissions?.price_bulk_import !== false,
+        share_link_manage: permissions?.share_link_manage !== false,
+        reports_view: permissions?.reports_view !== false,
+      },
+    };
+
+    if (existingIndex >= 0) {
+      currentList[existingIndex] = persistentRecord;
+    } else {
+      currentList.push(persistentRecord);
+    }
+
+    await savePersistentEmployees(currentList);
 
     await logAudit('REGISTER_EMPLOYEE_BY_OWNER', 'USER', userId, currentUser.id, currentUser.username, {
       employee: cleanEmpName,
@@ -103,19 +157,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `สร้างบัญชีพนักงาน "${cleanEmpName}" (@${cleanUsername}) สำเร็จเรียบร้อย`,
-      employee: {
+      message: `สร้างบัญชีสำหรับ "${cleanEmpName}" สำเร็จเรียบร้อยแล้ว`,
+      user: {
         id: userId,
-        employee_name: cleanEmpName,
         username: cleanUsername,
+        employee_name: cleanEmpName,
         email: cleanEmail,
-        password: cleanPassword, // Returned once so owner can copy and provide to employee
         role: 'ADMIN',
-        status: 'Active',
-      }
+      },
     });
   } catch (error: any) {
-    console.error('Error registering employee:', error);
     return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการสร้างบัญชีพนักงาน' }, { status: 500 });
   }
 }

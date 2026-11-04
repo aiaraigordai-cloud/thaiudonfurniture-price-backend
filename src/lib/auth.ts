@@ -62,11 +62,23 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   if (!payload || !payload.id) return null;
 
   const db = getDb();
-  const user = await db.prepare(`
+  let user = await db.prepare(`
     SELECT id, username, email, employee_name, role, status, email_verified
     FROM profiles
     WHERE id = ?
   `).get(payload.id) as any;
+
+  if (!user) {
+    try {
+      const { syncEmployeesToDb } = await import('./employee-store');
+      await syncEmployeesToDb(db);
+      user = await db.prepare(`
+        SELECT id, username, email, employee_name, role, status, email_verified
+        FROM profiles
+        WHERE id = ?
+      `).get(payload.id) as any;
+    } catch {}
+  }
 
   if (!user || user.status !== 'Active') {
     return null;
@@ -96,14 +108,6 @@ export async function getCurrentUser(): Promise<UserSession | null> {
         share_link_manage: Boolean(perm.share_link_manage),
         reports_view: Boolean(perm.reports_view),
       };
-    } else {
-      permissions = {
-        product_manage: false,
-        price_edit: false,
-        price_bulk_import: false,
-        share_link_manage: false,
-        reports_view: false,
-      };
     }
   }
 
@@ -118,16 +122,30 @@ export async function getCurrentUser(): Promise<UserSession | null> {
   };
 }
 
-export async function logAudit(action: string, entityType: string, entityId: string | null, actorId: string | null, actorUsername: string | null, details: object | string) {
+export async function logAudit(
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  actorId: string | null,
+  actorUsername: string,
+  details: object = {}
+) {
   try {
     const db = getDb();
     const id = crypto.randomUUID();
-    const detailsStr = typeof details === 'string' ? details : JSON.stringify(details);
-    await db.prepare(`
+    db.prepare(`
       INSERT INTO audit_logs (id, action, entity_type, entity_id, actor_id, actor_username, details, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(id, action, entityType, entityId, actorId, actorUsername, detailsStr);
-  } catch (err) {
-    console.error('Audit log error:', err);
+    `).run(
+      id,
+      action,
+      entityType,
+      entityId,
+      actorId,
+      actorUsername,
+      JSON.stringify(details)
+    );
+  } catch (error) {
+    console.error('Failed to log audit event:', error);
   }
 }

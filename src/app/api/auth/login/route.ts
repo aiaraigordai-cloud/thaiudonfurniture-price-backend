@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { verifyPassword, createSessionToken, logAudit } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { syncEmployeesToDb } from '@/lib/employee-store';
 
 export async function POST(request: Request) {
   try {
@@ -11,12 +12,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' }, { status: 400 });
     }
 
+    const cleanUsername = username.trim().toLowerCase();
     const db = getDb();
-    const user = await db.prepare(`
+
+    let user = await db.prepare(`
       SELECT id, username, email, employee_name, role, status, password_hash, salt, email_verified
       FROM profiles
-      WHERE username = ?
-    `).get(username.trim()) as any;
+      WHERE lower(username) = ?
+    `).get(cleanUsername) as any;
+
+    // If not found in SQLite, attempt sync from persistent store
+    if (!user) {
+      await syncEmployeesToDb(db);
+      user = await db.prepare(`
+        SELECT id, username, email, employee_name, role, status, password_hash, salt, email_verified
+        FROM profiles
+        WHERE lower(username) = ?
+      `).get(cleanUsername) as any;
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' }, { status: 401 });
@@ -59,13 +72,12 @@ export async function POST(request: Request) {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         employee_name: user.employee_name,
+        email: user.email,
         role: user.role,
       },
     });
   } catch (error: any) {
-    console.error('Login error:', error);
-    return NextResponse.json({ error: 'เกิดข้อผิดพลาดภายในระบบ' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ' }, { status: 500 });
   }
 }

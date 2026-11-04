@@ -1,0 +1,31 @@
+[
+  {
+    "allowlistId": "emp_david_001",
+    "employeeName": "ดาวิด สุขสมบริบูรณ์",
+    "authorizedEmail": "davidsuksomboriboon@gmail.com",
+    "isClaimed": true,
+    "isActive": true,
+    "claimedBy": "usr_owner_david_001",
+    "createdAt": "2026-10-30 03:11:10",
+    "updatedAt": "2026-10-30 03:11:10",
+    "profile": {
+      "id": "usr_owner_david_001",
+      "username": "davidsuksomboriboon",
+      "email": "davidsuksomboriboon@gmail.com",
+      "employeeName": "ดาวิด สุขสมบริบูรณ์",
+      "role": "SYSTEM_OWNER",
+      "status": "Active",
+      "passwordHash": "8cb3d6232ee5db0160a28fba100c8f5d0f622f6463945c26b5e523f269a84d413340f6b3b5fc91adbf3d132adcd7e0a4ad687ef0f66a2f4ddb92b6be008c2c1a",
+      "salt": "942fa753b89b4f9dfc757474a5840d42",
+      "createdAt": "2026-10-30 03:11:10",
+      "updatedAt": "2026-10-30 03:11:10"
+    },
+    "permissions": {
+      "product_manage": true,
+      "price_edit": true,
+      "price_bulk_import": true,
+      "share_link_manage": true,
+      "reports_view": true
+    }
+  }
+]
