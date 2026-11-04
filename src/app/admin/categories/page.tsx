@@ -21,7 +21,55 @@ import {
   SlidersHorizontal,
   Copy,
   Info,
+  Coins,
+  Tag,
 } from 'lucide-react';
+
+type PriceTierCode = 'SALE_PRICE' | 'RETAIL_PRICE' | 'VIP_PRICE' | 'GENERAL_PRICE' | 'ALL';
+
+const PRICE_TIER_OPTIONS: {
+  code: PriceTierCode;
+  label: string;
+  shortLabel: string;
+  desc: string;
+  icon: string;
+}[] = [
+  {
+    code: 'SALE_PRICE',
+    label: 'ราคาเซลล์ (Sale)',
+    shortLabel: 'เซลล์',
+    desc: 'ราคาโปรโมชั่นพิเศษหรือลดราคาหน้าร้าน/ออนไลน์',
+    icon: '🏷️',
+  },
+  {
+    code: 'RETAIL_PRICE',
+    label: 'ราคาปลีก (Retail)',
+    shortLabel: 'ปลีก',
+    desc: 'ราคาจำหน่ายปลีกมาตรฐานหน้าร้าน',
+    icon: '🏪',
+  },
+  {
+    code: 'VIP_PRICE',
+    label: 'ราคา VIP',
+    shortLabel: 'VIP',
+    desc: 'ราคาพิเศษสำหรับลูกค้า VIP และสมาชิกองค์กร',
+    icon: '👑',
+  },
+  {
+    code: 'GENERAL_PRICE',
+    label: 'ราคาทั่วไป (General)',
+    shortLabel: 'ทั่วไป',
+    desc: 'ราคามาตรฐานโครงการและตัวแทนจำหน่าย',
+    icon: '🌐',
+  },
+  {
+    code: 'ALL',
+    label: 'ครบทุกประเภทราคา (ทั้ง 4 ระดับ)',
+    shortLabel: 'ครบ 4 ราคา',
+    desc: 'กำหนดและอัปเดตทั้ง เซลล์, ปลีก, VIP, และทั่วไป พร้อมกัน',
+    icon: '💎',
+  },
+];
 
 interface ParsedProduct {
   id: string;
@@ -37,6 +85,8 @@ interface ParsedProduct {
   height: number | '';
   depth: number | '';
   color: string;
+  priceTier: PriceTierCode;
+  detectedBasePrice: number;
   prices: {
     SALE_PRICE: number;
     RETAIL_PRICE: number;
@@ -52,12 +102,14 @@ interface ParsedProduct {
 export default function CatalogsAndImportPage() {
   const [activeView, setActiveView] = useState<'import' | 'categories'>('import');
   
-  // Catalogs
+  // Catalogs & Price Tier Selection
   const [catalogs, setCatalogs] = useState<any[]>([]);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>('tuulo');
+  const [selectedPriceTier, setSelectedPriceTier] = useState<PriceTierCode>('SALE_PRICE');
   const [newCatModal, setNewCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatDefaultTier, setNewCatDefaultTier] = useState<PriceTierCode>('SALE_PRICE');
   const [creatingCatalog, setCreatingCatalog] = useState(false);
 
   // Categories
@@ -70,6 +122,7 @@ export default function CatalogsAndImportPage() {
 
   // Existing Products in DB for real-time comparison
   const [existingSkus, setExistingSkus] = useState<Set<string>>(new Set());
+  const [existingProductsMap, setExistingProductsMap] = useState<Record<string, any>>({});
 
   // Import State
   const [uploadMode, setUploadMode] = useState<'files' | 'folder'>('files');
@@ -128,14 +181,82 @@ export default function CatalogsAndImportPage() {
       const data = await res.json();
       if (data.success && Array.isArray(data.products)) {
         const set = new Set<string>();
+        const map: Record<string, any> = {};
         data.products.forEach((p: any) => {
-          if (p.sku) set.add(p.sku.toUpperCase());
+          if (p.sku) {
+            const upper = p.sku.toUpperCase();
+            set.add(upper);
+            map[upper] = p;
+          }
         });
         setExistingSkus(set);
+        setExistingProductsMap(map);
       }
     } catch (e) {
       console.error('Failed to load products:', e);
     }
+  };
+
+  const computePricesForTier = (
+    basePrice: number,
+    tier: PriceTierCode,
+    existingProd?: any
+  ) => {
+    const existingPrices = existingProd?.prices || {};
+    const defaults = {
+      SALE_PRICE: existingPrices.SALE_PRICE || basePrice,
+      RETAIL_PRICE: existingPrices.RETAIL_PRICE || Math.round(basePrice * 1.35),
+      VIP_PRICE: existingPrices.VIP_PRICE || Math.round(basePrice * 1.15),
+      GENERAL_PRICE: existingPrices.GENERAL_PRICE || Math.round(basePrice * 1.4),
+    };
+
+    if (tier === 'SALE_PRICE') {
+      return {
+        ...defaults,
+        SALE_PRICE: basePrice,
+        RETAIL_PRICE: existingPrices.RETAIL_PRICE || Math.round(basePrice * 1.35),
+        VIP_PRICE: existingPrices.VIP_PRICE || Math.round(basePrice * 1.15),
+        GENERAL_PRICE: existingPrices.GENERAL_PRICE || Math.round(basePrice * 1.4),
+      };
+    }
+    if (tier === 'RETAIL_PRICE') {
+      return {
+        ...defaults,
+        RETAIL_PRICE: basePrice,
+      };
+    }
+    if (tier === 'VIP_PRICE') {
+      return {
+        ...defaults,
+        VIP_PRICE: basePrice,
+      };
+    }
+    if (tier === 'GENERAL_PRICE') {
+      return {
+        ...defaults,
+        GENERAL_PRICE: basePrice,
+      };
+    }
+    return {
+      SALE_PRICE: basePrice,
+      RETAIL_PRICE: Math.round(basePrice * 1.35),
+      VIP_PRICE: Math.round(basePrice * 1.15),
+      GENERAL_PRICE: Math.round(basePrice * 1.4),
+    };
+  };
+
+  const handleGlobalPriceTierChange = (newTier: PriceTierCode) => {
+    setSelectedPriceTier(newTier);
+    setParsedProducts((prev) =>
+      prev.map((item) => {
+        const existingProd = existingProductsMap[item.sku];
+        return {
+          ...item,
+          priceTier: newTier,
+          prices: computePricesForTier(item.detectedBasePrice, newTier, existingProd),
+        };
+      })
+    );
   };
 
   const handleCreateCatalog = async (e: React.FormEvent) => {
@@ -143,10 +264,15 @@ export default function CatalogsAndImportPage() {
     if (!newCatName.trim()) return;
     setCreatingCatalog(true);
     try {
+      const tierInfo = PRICE_TIER_OPTIONS.find((t) => t.code === newCatDefaultTier);
+      const descWithTier = newCatDesc
+        ? `${newCatDesc} (ประเภทราคา: ${tierInfo?.shortLabel || 'เซลล์'})`
+        : `แคตตาล็อกสินค้า • ประเภทราคาเริ่มต้น: ${tierInfo?.label || 'ราคาเซลล์'}`;
+
       const res = await fetch('/api/catalogs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCatName, description: newCatDesc }),
+        body: JSON.stringify({ name: newCatName, description: descWithTier }),
       });
       const data = await res.json();
       if (data.success) {
@@ -157,6 +283,7 @@ export default function CatalogsAndImportPage() {
         if (data.catalog?.id) {
           setSelectedCatalogId(data.catalog.id);
         }
+        handleGlobalPriceTierChange(newCatDefaultTier);
       } else {
         alert(data.error || 'ไม่สามารถสร้างแคตตาล็อกได้');
       }
@@ -316,13 +443,6 @@ export default function CatalogsAndImportPage() {
         baseSale = 6900;
       }
 
-      const prices = {
-        SALE_PRICE: baseSale,
-        RETAIL_PRICE: Math.round(baseSale * 1.35),
-        VIP_PRICE: Math.round(baseSale * 1.15),
-        GENERAL_PRICE: Math.round(baseSale * 1.4),
-      };
-
       const thumbnailUrl = URL.createObjectURL(file);
 
       // Conjunction splitting for multi-item filenames
@@ -332,6 +452,9 @@ export default function CatalogsAndImportPage() {
       skusToProcess.forEach((sku, sIdx) => {
         const normalizedSku = sku.toUpperCase();
         const isExisting = existingSkus.has(normalizedSku);
+        const existingProd = existingProductsMap[normalizedSku];
+
+        const prices = computePricesForTier(baseSale, selectedPriceTier, existingProd);
 
         // Derive product name for this SKU
         let matchedPart = parts.find((p) => p.toUpperCase().includes(normalizedSku.replace('-', ''))) || parts[sIdx] || cleanName;
@@ -347,7 +470,7 @@ export default function CatalogsAndImportPage() {
           .trim();
 
         if (!prodName || prodName.length < 2) {
-          prodName = `${matchedCatName} รุ่น ${normalizedSku}`;
+          prodName = existingProd?.name || `${matchedCatName} รุ่น ${normalizedSku}`;
         }
 
         results.push({
@@ -358,12 +481,14 @@ export default function CatalogsAndImportPage() {
           sku: normalizedSku,
           name: prodName,
           description: `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku} ขนาด ${width || '-'} x ${height || '-'} x ${depth || '-'} ซม. สไตล์ Modern Luxury แข็งแรง ทนทาน รับประกันโครงสร้าง`,
-          category_id: matchedCatId,
-          category_name: matchedCatName,
-          width,
-          height,
-          depth,
-          color,
+          category_id: existingProd?.category_id || matchedCatId,
+          category_name: existingProd?.category_name || matchedCatName,
+          width: width || existingProd?.width || '',
+          height: height || existingProd?.height || '',
+          depth: depth || existingProd?.depth || '',
+          color: existingProd?.color || color,
+          priceTier: selectedPriceTier,
+          detectedBasePrice: baseSale,
           prices,
           confidence: Math.round(92 + Math.random() * 7),
           isExisting,
@@ -401,6 +526,10 @@ export default function CatalogsAndImportPage() {
           updated.validationStatus = upperSku && updated.name ? 'PASS' : 'NEEDS_CHECK';
         } else if (field === 'name') {
           updated.validationStatus = updated.sku && value ? 'PASS' : 'NEEDS_CHECK';
+        } else if (field === 'priceTier') {
+          const newTier = value as PriceTierCode;
+          const existingProd = existingProductsMap[updated.sku];
+          updated.prices = computePricesForTier(updated.detectedBasePrice, newTier, existingProd);
         }
         return updated;
       })
@@ -448,6 +577,7 @@ export default function CatalogsAndImportPage() {
     try {
       const payload = {
         catalog_id: selectedCatalogId,
+        price_tier: selectedPriceTier,
         products: selectedItems.map((p) => ({
           sku: p.sku.toUpperCase(),
           name: p.name,
@@ -459,6 +589,7 @@ export default function CatalogsAndImportPage() {
           color: p.color,
           filename: p.filename,
           image_url: p.thumbnailUrl,
+          price_tier: p.priceTier,
           prices: p.prices,
         })),
       };
@@ -568,18 +699,18 @@ export default function CatalogsAndImportPage() {
 
       {activeView === 'import' ? (
         <div className="space-y-6">
-          {/* Step 1: Select Target Catalog */}
-          <div className="p-5 bg-white rounded-2xl border border-[#D2B681] shadow-xs space-y-4">
+          {/* Step 1: Select Target Catalog & Price Tier */}
+          <div className="p-5 bg-white rounded-2xl border border-[#D2B681] shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F7F0E6]">
               <div>
                 <h2 className="text-sm font-bold text-[#402E20] flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-[#DE1B23] text-white text-xs flex items-center justify-center font-mono">
                     1
                   </span>
-                  เลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า
+                  เลือกแคตตาล็อกปลายทาง และ ประเภทราคาที่ต้องการนำเข้า
                 </h2>
                 <p className="text-xs text-[#705E4F] mt-0.5">
-                  ระบุแคตตาล็อกปลายทางที่จะบันทึกสินค้าชุดนี้ลงระบบ
+                  ระบุแคตตาล็อกปลายทางและประเภทราคา (เซลล์ / ปลีก / VIP / ทั่วไป) ที่จะบันทึกสินค้าชุดนี้ลงระบบ
                 </p>
               </div>
 
@@ -593,48 +724,119 @@ export default function CatalogsAndImportPage() {
               </button>
             </div>
 
-            {/* Catalog Radio Cards (Excluding main as requested) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {catalogs.filter((cat) => cat.id !== 'main' && !cat.name.includes('แคตตาล็อกหลัก')).map((cat) => {
-                const isSelected = selectedCatalogId === cat.id;
-                const isTuulo = cat.id === 'tuulo' || cat.name.includes('ตู้โล');
-                const isKnockdown = cat.id === 'knockdown' || cat.name.includes('น็อคดาวน์');
-                const icon = isTuulo ? '🚪' : (isKnockdown ? '🛏️' : '📁');
-                return (
-                  <div
-                    key={cat.id}
-                    onClick={() => setSelectedCatalogId(cat.id)}
-                    className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex items-start gap-3 ${
-                      isSelected
-                        ? 'border-[#DE1B23] bg-[#DE1B23]/5 shadow-xs'
-                        : 'border-[#EADBCE] bg-[#FFFAF3] hover:border-[#D2B681]'
-                    }`}
-                  >
+            {/* 1.1 Catalog Radio Cards (Excluding main as requested) */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#402E20]">
+                1.1 เลือกแคตตาล็อกสินค้าปลายทาง:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {catalogs.filter((cat) => cat.id !== 'main' && !cat.name.includes('แคตตาล็อกหลัก')).map((cat) => {
+                  const isSelected = selectedCatalogId === cat.id;
+                  const isTuulo = cat.id === 'tuulo' || cat.name.includes('ตู้โล');
+                  const isKnockdown = cat.id === 'knockdown' || cat.name.includes('น็อคดาวน์');
+                  const icon = isTuulo ? '🚪' : (isKnockdown ? '🛏️' : '📁');
+                  return (
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 ${
-                        isSelected ? 'bg-[#DE1B23] text-white' : 'bg-white border border-[#D2B681]'
+                      key={cat.id}
+                      onClick={() => setSelectedCatalogId(cat.id)}
+                      className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex items-start gap-3 ${
+                        isSelected
+                          ? 'border-[#DE1B23] bg-[#DE1B23]/5 shadow-xs'
+                          : 'border-[#EADBCE] bg-[#FFFAF3] hover:border-[#D2B681]'
                       }`}
                     >
-                      {icon}
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 ${
+                          isSelected ? 'bg-[#DE1B23] text-white' : 'bg-white border border-[#D2B681]'
+                        }`}
+                      >
+                        {icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-[#402E20] truncate">
+                            {cat.name}
+                          </span>
+                          {isSelected && (
+                            <span className="w-4 h-4 rounded-full bg-[#DE1B23] text-white flex items-center justify-center text-[10px]">
+                              ✓
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#705E4F] line-clamp-1 mt-0.5">
+                          {cat.description || 'แคตตาล็อกสินค้าทางการ'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-[#402E20] truncate">
-                          {cat.name}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 1.2 Price Tier Selector (เซลล์, ปลีก, VIP, ทั่วไป) */}
+            <div className="pt-3 border-t border-[#F7F0E6] space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="text-xs font-bold text-[#402E20] flex items-center gap-1.5">
+                    <Coins className="w-4 h-4 text-[#DE1B23]" />
+                    1.2 เลือกประเภทราคา (Price Tier) สำหรับการนำเข้า:
+                  </label>
+                  <p className="text-[11px] text-[#705E4F] mt-0.5">
+                    เลือกประเภทราคาที่อ้างอิงจากไฟล์แคตตาล็อกชุดนี้ เช่น เซลล์, ปลีก, VIP หรือ ทั่วไป
+                  </p>
+                </div>
+
+                {/* Dropdown Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[#705E4F] whitespace-nowrap">
+                    ประเภทราคา:
+                  </span>
+                  <select
+                    value={selectedPriceTier}
+                    onChange={(e) => handleGlobalPriceTierChange(e.target.value as PriceTierCode)}
+                    className="px-3 py-1.5 bg-[#FFFAF3] border-2 border-[#C5A059] focus:border-[#DE1B23] rounded-xl text-xs font-bold text-[#402E20] focus:outline-none cursor-pointer shadow-xs"
+                  >
+                    {PRICE_TIER_OPTIONS.map((tier) => (
+                      <option key={tier.code} value={tier.code}>
+                        {tier.icon} {tier.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Price Tier Interactive Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {PRICE_TIER_OPTIONS.map((tier) => {
+                  const isSelected = selectedPriceTier === tier.code;
+                  return (
+                    <div
+                      key={tier.code}
+                      onClick={() => handleGlobalPriceTierChange(tier.code)}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-[#DE1B23] bg-[#DE1B23]/5 shadow-xs'
+                          : 'border-[#EADBCE] bg-[#FFFAF3] hover:border-[#D2B681]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="font-bold text-xs text-[#402E20] flex items-center gap-1">
+                          <span>{tier.icon}</span>
+                          <span>{tier.label}</span>
                         </span>
                         {isSelected && (
-                          <span className="w-4 h-4 rounded-full bg-[#DE1B23] text-white flex items-center justify-center text-[10px]">
+                          <span className="w-4 h-4 rounded-full bg-[#DE1B23] text-white flex items-center justify-center text-[10px] flex-shrink-0">
                             ✓
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#705E4F] line-clamp-1 mt-0.5">
-                        {cat.description || 'แคตตาล็อกสินค้าทางการ'}
+                      <p className="text-[10px] text-[#705E4F] mt-1 line-clamp-2">
+                        {tier.desc}
                       </p>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -765,11 +967,26 @@ export default function CatalogsAndImportPage() {
                     ตรวจสอบความถูกต้องก่อนอัปเดตลงเว็บจริง ({parsedProducts.length} ชิ้น)
                   </h2>
                   <p className="text-xs text-[#705E4F] mt-0.5">
-                    ตรวจสอบรหัสสินค้า (SKU) เป็นหลัก สามารถแก้ไขข้อมูลหรือกด "+ เพิ่มสินค้าจากรูปนี้" หากภาพหนึ่งมีสินค้าหลายชิ้น
+                    ตรวจสอบรหัสสินค้า (SKU) ประเภทราคา และราคาครบทั้ง 4 ระดับ (เซลล์ / ปลีก / VIP / ทั่วไป) ก่อนกดยืนยัน
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FFFAF3] border border-[#C5A059] rounded-lg">
+                    <Coins className="w-3.5 h-3.5 text-[#DE1B23]" />
+                    <span className="text-[11px] font-bold text-[#402E20]">เปลี่ยนประเภทราคาทั้งหมด:</span>
+                    <select
+                      value={selectedPriceTier}
+                      onChange={(e) => handleGlobalPriceTierChange(e.target.value as PriceTierCode)}
+                      className="bg-transparent text-xs font-bold text-[#DE1B23] focus:outline-none cursor-pointer"
+                    >
+                      {PRICE_TIER_OPTIONS.map((t) => (
+                        <option key={t.code} value={t.code}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button
                     type="button"
                     onClick={() => toggleSelectAll(true)}
@@ -862,14 +1079,16 @@ export default function CatalogsAndImportPage() {
                         />
                       </th>
                       <th className="p-3 w-16 text-center">รูปภาพ</th>
-                      <th className="p-3 min-w-[150px]">รหัสสินค้า (SKU)</th>
-                      <th className="p-3 min-w-[200px]">ชื่อสินค้า</th>
-                      <th className="p-3 w-36">หมวดหมู่</th>
-                      <th className="p-3 w-32">ขนาด (กxสxล)</th>
-                      <th className="p-3 w-28 text-right">ราคาเซลล์</th>
-                      <th className="p-3 w-28 text-right">ราคาปลีก</th>
-                      <th className="p-3 w-28 text-center">สถานะ</th>
-                      <th className="p-3 w-24 text-center">การจัดการ</th>
+                      <th className="p-3 min-w-[140px]">รหัสสินค้า (SKU)</th>
+                      <th className="p-3 min-w-[190px]">ชื่อสินค้า</th>
+                      <th className="p-3 w-36">หมวดหมู่ / ขนาด</th>
+                      <th className="p-3 w-36">ประเภทราคา</th>
+                      <th className="p-3 w-24 text-right">ราคาเซลล์</th>
+                      <th className="p-3 w-24 text-right">ราคาปลีก</th>
+                      <th className="p-3 w-24 text-right">ราคา VIP</th>
+                      <th className="p-3 w-24 text-right">ราคาทั่วไป</th>
+                      <th className="p-3 w-24 text-center">สถานะ</th>
+                      <th className="p-3 w-20 text-center">การจัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F7F0E6] bg-white">
@@ -939,7 +1158,7 @@ export default function CatalogsAndImportPage() {
                             className="w-full px-2 py-0.5 mt-1 bg-[#FFFAF3] border border-[#EADBCE] rounded text-[11px] text-[#705E4F]"
                           />
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 space-y-1.5">
                           <select
                             value={p.category_id}
                             onChange={(e) => {
@@ -955,9 +1174,7 @@ export default function CatalogsAndImportPage() {
                               </option>
                             ))}
                           </select>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5">
                             <input
                               type="number"
                               placeholder="ก"
@@ -969,7 +1186,7 @@ export default function CatalogsAndImportPage() {
                                   e.target.value ? Number(e.target.value) : ''
                                 )
                               }
-                              className="w-10 px-1 py-1 text-center bg-white border border-[#D2B681] rounded text-xs"
+                              className="w-10 px-1 py-0.5 text-center bg-white border border-[#D2B681] rounded text-[11px]"
                             />
                             <span>x</span>
                             <input
@@ -983,7 +1200,7 @@ export default function CatalogsAndImportPage() {
                                   e.target.value ? Number(e.target.value) : ''
                                 )
                               }
-                              className="w-10 px-1 py-1 text-center bg-white border border-[#D2B681] rounded text-xs"
+                              className="w-10 px-1 py-0.5 text-center bg-white border border-[#D2B681] rounded text-[11px]"
                             />
                             <span>x</span>
                             <input
@@ -997,9 +1214,24 @@ export default function CatalogsAndImportPage() {
                                   e.target.value ? Number(e.target.value) : ''
                                 )
                               }
-                              className="w-10 px-1 py-1 text-center bg-white border border-[#D2B681] rounded text-xs"
+                              className="w-10 px-1 py-0.5 text-center bg-white border border-[#D2B681] rounded text-[11px]"
                             />
                           </div>
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={p.priceTier}
+                            onChange={(e) =>
+                              updateProductField(p.id, 'priceTier', e.target.value as PriceTierCode)
+                            }
+                            className="w-full px-2 py-1 bg-[#FFFAF3] border border-[#C5A059] rounded-lg text-xs font-bold text-[#402E20] focus:outline-none focus:border-[#DE1B23]"
+                          >
+                            {PRICE_TIER_OPTIONS.map((t) => (
+                              <option key={t.code} value={t.code}>
+                                {t.icon} {t.shortLabel}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-3 text-right">
                           <input
@@ -1010,12 +1242,13 @@ export default function CatalogsAndImportPage() {
                               updateProductField(p.id, 'prices', {
                                 ...p.prices,
                                 SALE_PRICE: v,
-                                RETAIL_PRICE: Math.round(v * 1.35),
-                                VIP_PRICE: Math.round(v * 1.15),
-                                GENERAL_PRICE: Math.round(v * 1.4),
                               });
                             }}
-                            className="w-20 px-1.5 py-1 text-right font-mono font-bold text-[#DE1B23] bg-white border border-[#D2B681] rounded text-xs"
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
+                              p.priceTier === 'SALE_PRICE' || p.priceTier === 'ALL'
+                                ? 'text-[#DE1B23] bg-[#DE1B23]/5 border-2 border-[#DE1B23]'
+                                : 'text-[#402E20] bg-white border border-[#D2B681]'
+                            }`}
                           />
                         </td>
                         <td className="p-3 text-right">
@@ -1029,7 +1262,47 @@ export default function CatalogsAndImportPage() {
                                 RETAIL_PRICE: v,
                               });
                             }}
-                            className="w-20 px-1.5 py-1 text-right font-mono text-[#805216] bg-white border border-[#D2B681] rounded text-xs"
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
+                              p.priceTier === 'RETAIL_PRICE' || p.priceTier === 'ALL'
+                                ? 'text-amber-700 bg-amber-50 border-2 border-amber-500'
+                                : 'text-[#805216] bg-white border border-[#D2B681]'
+                            }`}
+                          />
+                        </td>
+                        <td className="p-3 text-right">
+                          <input
+                            type="number"
+                            value={p.prices.VIP_PRICE}
+                            onChange={(e) => {
+                              const v = Number(e.target.value) || 0;
+                              updateProductField(p.id, 'prices', {
+                                ...p.prices,
+                                VIP_PRICE: v,
+                              });
+                            }}
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
+                              p.priceTier === 'VIP_PRICE' || p.priceTier === 'ALL'
+                                ? 'text-purple-700 bg-purple-50 border-2 border-purple-500'
+                                : 'text-[#805216] bg-white border border-[#D2B681]'
+                            }`}
+                          />
+                        </td>
+                        <td className="p-3 text-right">
+                          <input
+                            type="number"
+                            value={p.prices.GENERAL_PRICE}
+                            onChange={(e) => {
+                              const v = Number(e.target.value) || 0;
+                              updateProductField(p.id, 'prices', {
+                                ...p.prices,
+                                GENERAL_PRICE: v,
+                              });
+                            }}
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
+                              p.priceTier === 'GENERAL_PRICE' || p.priceTier === 'ALL'
+                                ? 'text-emerald-700 bg-emerald-50 border-2 border-emerald-500'
+                                : 'text-[#805216] bg-white border border-[#D2B681]'
+                            }`}
                           />
                         </td>
                         <td className="p-3 text-center">
@@ -1071,15 +1344,19 @@ export default function CatalogsAndImportPage() {
 
               {/* Action Confirmation Bar */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-xs text-[#705E4F]">
-                  เลือกนำเข้า{' '}
+                <div className="text-xs text-[#705E4F] flex flex-wrap items-center gap-1.5">
+                  <span>เลือกนำเข้า</span>
                   <strong className="text-[#DE1B23] font-bold">
                     {parsedProducts.filter((p) => p.selected).length}
-                  </strong>{' '}
-                  จากทั้งหมด {parsedProducts.length} รายการ สู่แคตตาล็อก{' '}
+                  </strong>
+                  <span>จากทั้งหมด {parsedProducts.length} รายการ สู่แคตตาล็อก</span>
                   <strong className="text-[#402E20]">
                     {catalogs.find((c) => c.id === selectedCatalogId)?.name || 'แคตตาล็อกตู้โล'}
                   </strong>
+                  <span>• ประเภทราคา:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-[#DE1B23]/10 text-[#DE1B23] font-bold border border-[#DE1B23]/20">
+                    {PRICE_TIER_OPTIONS.find((t) => t.code === selectedPriceTier)?.label || 'ราคาเซลล์'}
+                  </span>
                 </div>
 
                 <button
@@ -1241,6 +1518,23 @@ export default function CatalogsAndImportPage() {
                   className="w-full px-3 py-2 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs text-[#402E20] focus:outline-none focus:border-[#DE1B23]"
                   placeholder="เช่น แคตตาล็อกเฟอร์นิเจอร์ไม้สัก, แคตตาล็อกโซฟา"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#402E20] mb-1">
+                  ประเภทราคาเริ่มต้นของแคตตาล็อก (เช่น เซลล์, ปลีก, VIP, ทั่วไป)
+                </label>
+                <select
+                  value={newCatDefaultTier}
+                  onChange={(e) => setNewCatDefaultTier(e.target.value as PriceTierCode)}
+                  className="w-full px-3 py-2 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs font-bold text-[#402E20] focus:outline-none focus:border-[#DE1B23]"
+                >
+                  {PRICE_TIER_OPTIONS.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.icon} {t.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

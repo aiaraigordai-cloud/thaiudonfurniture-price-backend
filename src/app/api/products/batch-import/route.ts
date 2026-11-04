@@ -14,16 +14,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'คุณไม่มีสิทธิ์จัดการสินค้า (product_manage)' }, { status: 403 });
     }
 
-    const { catalog_id, products } = await request.json();
+    const { catalog_id, price_tier, products } = await request.json();
 
     if (!Array.isArray(products) || products.length === 0) {
       return NextResponse.json({ error: 'ไม่พบรายการสินค้าที่จะนำเข้า' }, { status: 400 });
     }
 
     const db = getDb();
-    const tierRows = await db.prepare('SELECT id, code FROM price_tiers').all() as any[];
+    const tierRows = await db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
     const tierMap: Record<string, string> = {};
-    tierRows.forEach(t => { tierMap[t.code] = t.id; });
+    const tierNameMap: Record<string, string> = {};
+    tierRows.forEach(t => {
+      tierMap[t.code] = t.id;
+      tierNameMap[t.code] = t.name_th;
+    });
 
     let importedCount = 0;
     let updatedCount = 0;
@@ -117,22 +121,27 @@ export async function POST(request: Request) {
           const tierId = tierMap[code];
           if (tierId) {
             await db.prepare(`
-              INSERT OR REPLACE INTO product_prices (id, product_id, price_tier_id, price, updated_at)
+              INSERT OR REPLACE INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
               VALUES (
                 COALESCE((SELECT id FROM product_prices WHERE product_id = ? AND price_tier_id = ?), ?),
-                ?, ?, ?, datetime('now')
+                ?, ?, ?, datetime('now'), ?
               )
-            `).run(productId, tierId, 'pr_' + crypto.randomUUID(), productId, tierId, priceVal);
+            `).run(productId, tierId, 'pr_' + crypto.randomUUID(), productId, tierId, priceVal, user.id);
           }
         }
       }
 
       await db.exec('COMMIT');
 
+      const tierLabel = price_tier && price_tier !== 'ALL'
+        ? (tierNameMap[price_tier] || price_tier)
+        : 'ครบทุกประเภทราคา (เซลล์/ปลีก/VIP/ทั่วไป)';
+
       await logAudit('BATCH_IMPORT_PRODUCTS', 'PRODUCT', catalog_id, user.id, user.username, {
         imported: importedCount,
         updated: updatedCount,
-        total: products.length
+        total: products.length,
+        price_tier: price_tier || 'ALL',
       });
 
       return NextResponse.json({
@@ -140,7 +149,8 @@ export async function POST(request: Request) {
         importedCount,
         updatedCount,
         totalCount: products.length,
-        message: `นำเข้าสินค้าสำเร็จ: เพิ่มใหม่ ${importedCount} รายการ, อัปเดตข้อมูล ${updatedCount} รายการ (Real-time Updated)`
+        priceTierLabel: tierLabel,
+        message: `นำเข้าสินค้าสำเร็จ (${tierLabel}): เพิ่มใหม่ ${importedCount} รายการ, อัปเดตข้อมูล ${updatedCount} รายการ (Real-time Updated)`
       });
     } catch (txError: any) {
       await db.exec('ROLLBACK');
