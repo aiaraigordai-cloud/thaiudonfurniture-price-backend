@@ -25,7 +25,7 @@ import {
   Tag,
 } from 'lucide-react';
 
-type PriceTierCode = 'SALE_PRICE' | 'RETAIL_PRICE' | 'VIP_PRICE' | 'GENERAL_PRICE' | 'ALL';
+type PriceTierCode = 'SALE_PRICE' | 'RETAIL_PRICE' | 'VIP_PRICE' | 'GENERAL_PRICE';
 
 const PRICE_TIER_OPTIONS: {
   code: PriceTierCode;
@@ -62,13 +62,6 @@ const PRICE_TIER_OPTIONS: {
     desc: 'ราคามาตรฐานโครงการและตัวแทนจำหน่าย',
     icon: '🌐',
   },
-  {
-    code: 'ALL',
-    label: 'ครบทุกประเภทราคา (ทั้ง 4 ระดับ)',
-    shortLabel: 'ครบ 4 ราคา',
-    desc: 'กำหนดและอัปเดตทั้ง เซลล์, ปลีก, VIP, และทั่วไป พร้อมกัน',
-    icon: '💎',
-  },
 ];
 
 interface ParsedProduct {
@@ -86,12 +79,12 @@ interface ParsedProduct {
   depth: number | '';
   color: string;
   priceTier: PriceTierCode;
-  detectedBasePrice: number;
+  detectedBasePrice: number | '';
   prices: {
-    SALE_PRICE: number;
-    RETAIL_PRICE: number;
-    VIP_PRICE: number;
-    GENERAL_PRICE: number;
+    SALE_PRICE: number | '';
+    RETAIL_PRICE: number | '';
+    VIP_PRICE: number | '';
+    GENERAL_PRICE: number | '';
   };
   confidence: number;
   isExisting: boolean;
@@ -198,50 +191,19 @@ export default function CatalogsAndImportPage() {
   };
 
   const computePricesForTier = (
-    basePrice: number,
-    tier: PriceTierCode,
-    existingProd?: any
-  ) => {
-    const existingPrices = existingProd?.prices || {};
-    const defaults = {
-      SALE_PRICE: existingPrices.SALE_PRICE || basePrice,
-      RETAIL_PRICE: existingPrices.RETAIL_PRICE || Math.round(basePrice * 1.35),
-      VIP_PRICE: existingPrices.VIP_PRICE || Math.round(basePrice * 1.15),
-      GENERAL_PRICE: existingPrices.GENERAL_PRICE || Math.round(basePrice * 1.4),
-    };
-
-    if (tier === 'SALE_PRICE') {
-      return {
-        ...defaults,
-        SALE_PRICE: basePrice,
-        RETAIL_PRICE: existingPrices.RETAIL_PRICE || Math.round(basePrice * 1.35),
-        VIP_PRICE: existingPrices.VIP_PRICE || Math.round(basePrice * 1.15),
-        GENERAL_PRICE: existingPrices.GENERAL_PRICE || Math.round(basePrice * 1.4),
-      };
-    }
-    if (tier === 'RETAIL_PRICE') {
-      return {
-        ...defaults,
-        RETAIL_PRICE: basePrice,
-      };
-    }
-    if (tier === 'VIP_PRICE') {
-      return {
-        ...defaults,
-        VIP_PRICE: basePrice,
-      };
-    }
-    if (tier === 'GENERAL_PRICE') {
-      return {
-        ...defaults,
-        GENERAL_PRICE: basePrice,
-      };
-    }
+    basePrice: number | '',
+    tier: PriceTierCode
+  ): {
+    SALE_PRICE: number | '';
+    RETAIL_PRICE: number | '';
+    VIP_PRICE: number | '';
+    GENERAL_PRICE: number | '';
+  } => {
     return {
-      SALE_PRICE: basePrice,
-      RETAIL_PRICE: Math.round(basePrice * 1.35),
-      VIP_PRICE: Math.round(basePrice * 1.15),
-      GENERAL_PRICE: Math.round(basePrice * 1.4),
+      SALE_PRICE: tier === 'SALE_PRICE' ? basePrice : '',
+      RETAIL_PRICE: tier === 'RETAIL_PRICE' ? basePrice : '',
+      VIP_PRICE: tier === 'VIP_PRICE' ? basePrice : '',
+      GENERAL_PRICE: tier === 'GENERAL_PRICE' ? basePrice : '',
     };
   };
 
@@ -249,11 +211,14 @@ export default function CatalogsAndImportPage() {
     setSelectedPriceTier(newTier);
     setParsedProducts((prev) =>
       prev.map((item) => {
-        const existingProd = existingProductsMap[item.sku];
+        const currentActiveVal = item.prices[item.priceTier] !== ''
+          ? item.prices[item.priceTier]
+          : item.detectedBasePrice;
         return {
           ...item,
           priceTier: newTier,
-          prices: computePricesForTier(item.detectedBasePrice, newTier, existingProd),
+          detectedBasePrice: currentActiveVal,
+          prices: computePricesForTier(currentActiveVal, newTier),
         };
       })
     );
@@ -454,7 +419,8 @@ export default function CatalogsAndImportPage() {
         const isExisting = existingSkus.has(normalizedSku);
         const existingProd = existingProductsMap[normalizedSku];
 
-        const prices = computePricesForTier(baseSale, selectedPriceTier, existingProd);
+        // กรอกเฉพาะประเภทราคาที่เลือกไว้เท่านั้น ส่วนราคาที่ไม่ได้ระบุให้เว้นว่างไว้
+        const prices = computePricesForTier(baseSale, selectedPriceTier);
 
         // Derive product name for this SKU
         let matchedPart = parts.find((p) => p.toUpperCase().includes(normalizedSku.replace('-', ''))) || parts[sIdx] || cleanName;
@@ -479,7 +445,7 @@ export default function CatalogsAndImportPage() {
           filename: skusToProcess.length > 1 ? `${filename} [ชิ้นที่ ${sIdx + 1}: ${normalizedSku}]` : filename,
           thumbnailUrl,
           sku: normalizedSku,
-          name: prodName,
+          name: isExisting && existingProd?.name ? existingProd.name : prodName,
           description: `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku} ขนาด ${width || '-'} x ${height || '-'} x ${depth || '-'} ซม. สไตล์ Modern Luxury แข็งแรง ทนทาน รับประกันโครงสร้าง`,
           category_id: existingProd?.category_id || matchedCatId,
           category_name: existingProd?.category_name || matchedCatName,
@@ -522,14 +488,22 @@ export default function CatalogsAndImportPage() {
         if (field === 'sku') {
           const upperSku = String(value).trim().toUpperCase();
           updated.sku = upperSku;
-          updated.isExisting = existingSkus.has(upperSku);
+          const matchesExisting = existingSkus.has(upperSku);
+          updated.isExisting = matchesExisting;
+          if (matchesExisting && existingProductsMap[upperSku]) {
+            updated.name = existingProductsMap[upperSku].name || updated.name;
+            updated.category_id = existingProductsMap[upperSku].category_id || updated.category_id;
+          }
           updated.validationStatus = upperSku && updated.name ? 'PASS' : 'NEEDS_CHECK';
         } else if (field === 'name') {
           updated.validationStatus = updated.sku && value ? 'PASS' : 'NEEDS_CHECK';
         } else if (field === 'priceTier') {
           const newTier = value as PriceTierCode;
-          const existingProd = existingProductsMap[updated.sku];
-          updated.prices = computePricesForTier(updated.detectedBasePrice, newTier, existingProd);
+          const currentActiveVal = p.prices[p.priceTier] !== ''
+            ? p.prices[p.priceTier]
+            : p.detectedBasePrice;
+          updated.detectedBasePrice = currentActiveVal;
+          updated.prices = computePricesForTier(currentActiveVal, newTier);
         }
         return updated;
       })
@@ -805,8 +779,8 @@ export default function CatalogsAndImportPage() {
                 </div>
               </div>
 
-              {/* Price Tier Interactive Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              {/* Price Tier Interactive Cards (4 Tiers: เซลล์, ปลีก, VIP, ทั่วไป) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {PRICE_TIER_OPTIONS.map((tier) => {
                   const isSelected = selectedPriceTier === tier.code;
                   return (
@@ -1129,11 +1103,11 @@ export default function CatalogsAndImportPage() {
                           <div className="flex items-center gap-1.5 mt-1">
                             {p.isExisting ? (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                🔄 อัปเดตสินค้าเดิม
+                                🔄 มีในระบบแล้ว (เพิ่มเฉพาะราคาที่เลือก)
                               </span>
                             ) : (
                               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                ✨ สินค้าใหม่
+                                ✨ สินค้าใหม่ (แสดงเฉพาะราคาที่ระบุ)
                               </span>
                             )}
                           </div>
@@ -1236,16 +1210,18 @@ export default function CatalogsAndImportPage() {
                         <td className="p-3 text-right">
                           <input
                             type="number"
+                            placeholder="-"
+                            disabled={p.isExisting && p.priceTier !== 'SALE_PRICE'}
                             value={p.prices.SALE_PRICE}
                             onChange={(e) => {
-                              const v = Number(e.target.value) || 0;
+                              const v = e.target.value !== '' ? Number(e.target.value) : '';
                               updateProductField(p.id, 'prices', {
                                 ...p.prices,
                                 SALE_PRICE: v,
                               });
                             }}
-                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
-                              p.priceTier === 'SALE_PRICE' || p.priceTier === 'ALL'
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs disabled:bg-slate-100 disabled:text-slate-400 ${
+                              p.priceTier === 'SALE_PRICE'
                                 ? 'text-[#DE1B23] bg-[#DE1B23]/5 border-2 border-[#DE1B23]'
                                 : 'text-[#402E20] bg-white border border-[#D2B681]'
                             }`}
@@ -1254,16 +1230,18 @@ export default function CatalogsAndImportPage() {
                         <td className="p-3 text-right">
                           <input
                             type="number"
+                            placeholder="-"
+                            disabled={p.isExisting && p.priceTier !== 'RETAIL_PRICE'}
                             value={p.prices.RETAIL_PRICE}
                             onChange={(e) => {
-                              const v = Number(e.target.value) || 0;
+                              const v = e.target.value !== '' ? Number(e.target.value) : '';
                               updateProductField(p.id, 'prices', {
                                 ...p.prices,
                                 RETAIL_PRICE: v,
                               });
                             }}
-                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
-                              p.priceTier === 'RETAIL_PRICE' || p.priceTier === 'ALL'
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs disabled:bg-slate-100 disabled:text-slate-400 ${
+                              p.priceTier === 'RETAIL_PRICE'
                                 ? 'text-amber-700 bg-amber-50 border-2 border-amber-500'
                                 : 'text-[#805216] bg-white border border-[#D2B681]'
                             }`}
@@ -1272,16 +1250,18 @@ export default function CatalogsAndImportPage() {
                         <td className="p-3 text-right">
                           <input
                             type="number"
+                            placeholder="-"
+                            disabled={p.isExisting && p.priceTier !== 'VIP_PRICE'}
                             value={p.prices.VIP_PRICE}
                             onChange={(e) => {
-                              const v = Number(e.target.value) || 0;
+                              const v = e.target.value !== '' ? Number(e.target.value) : '';
                               updateProductField(p.id, 'prices', {
                                 ...p.prices,
                                 VIP_PRICE: v,
                               });
                             }}
-                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
-                              p.priceTier === 'VIP_PRICE' || p.priceTier === 'ALL'
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs disabled:bg-slate-100 disabled:text-slate-400 ${
+                              p.priceTier === 'VIP_PRICE'
                                 ? 'text-purple-700 bg-purple-50 border-2 border-purple-500'
                                 : 'text-[#805216] bg-white border border-[#D2B681]'
                             }`}
@@ -1290,16 +1270,18 @@ export default function CatalogsAndImportPage() {
                         <td className="p-3 text-right">
                           <input
                             type="number"
+                            placeholder="-"
+                            disabled={p.isExisting && p.priceTier !== 'GENERAL_PRICE'}
                             value={p.prices.GENERAL_PRICE}
                             onChange={(e) => {
-                              const v = Number(e.target.value) || 0;
+                              const v = e.target.value !== '' ? Number(e.target.value) : '';
                               updateProductField(p.id, 'prices', {
                                 ...p.prices,
                                 GENERAL_PRICE: v,
                               });
                             }}
-                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs ${
-                              p.priceTier === 'GENERAL_PRICE' || p.priceTier === 'ALL'
+                            className={`w-20 px-1.5 py-1 text-right font-mono font-bold rounded text-xs disabled:bg-slate-100 disabled:text-slate-400 ${
+                              p.priceTier === 'GENERAL_PRICE'
                                 ? 'text-emerald-700 bg-emerald-50 border-2 border-emerald-500'
                                 : 'text-[#805216] bg-white border border-[#D2B681]'
                             }`}
