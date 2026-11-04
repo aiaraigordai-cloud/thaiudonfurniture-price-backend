@@ -35,12 +35,13 @@ export async function POST(request: Request) {
       for (const item of products) {
         if (!item.sku || !item.name) continue;
 
-        const sku = String(item.sku).trim();
+        const sku = String(item.sku).trim().toUpperCase();
         const name = String(item.name).trim();
         const catalogType = catalog_id === 'tuulo' ? 'tuulo' : (catalog_id === 'knockdown' ? 'knockdown' : catalog_id);
+        const imageUrl = item.image_url || null;
 
-        // Check if product exists
-        const existing = await db.prepare('SELECT id FROM products WHERE sku = ?').get(sku) as any;
+        // Check if product exists by SKU
+        const existing = await db.prepare('SELECT id FROM products WHERE UPPER(sku) = ?').get(sku) as any;
         let productId = existing ? existing.id : 'prod_' + crypto.randomUUID();
 
         if (existing) {
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
             UPDATE products
             SET name = ?, description = ?, category_id = ?, catalog_type = ?,
                 width = ?, height = ?, depth = ?, color = ?, status = 'Published',
-                ref_filename = ?, updated_at = datetime('now')
+                ref_filename = ?, ref_image_url = COALESCE(?, ref_image_url), updated_at = datetime('now')
             WHERE id = ?
           `).run(
             name,
@@ -61,17 +62,18 @@ export async function POST(request: Request) {
             item.depth ? Number(item.depth) : null,
             item.color || '',
             item.filename || '',
+            imageUrl,
             productId
           );
           updatedCount++;
         } else {
-          // Insert product
+          // Insert new product
           await db.prepare(`
             INSERT INTO products (
               id, sku, name, description, category_id, catalog_type,
-              width, height, depth, color, status, ref_filename,
+              width, height, depth, color, status, ref_filename, ref_image_url,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Published', ?, datetime('now'), datetime('now'))
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Published', ?, ?, datetime('now'), datetime('now'))
           `).run(
             productId,
             sku,
@@ -83,18 +85,19 @@ export async function POST(request: Request) {
             item.height ? Number(item.height) : null,
             item.depth ? Number(item.depth) : null,
             item.color || '',
-            item.filename || ''
+            item.filename || '',
+            imageUrl
           );
           importedCount++;
         }
 
-        // Insert / Update image if provided
-        if (item.image_url) {
+        // Insert / Update image in product_images table
+        if (imageUrl) {
           await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(productId);
           await db.prepare(`
             INSERT INTO product_images (id, product_id, image_url, display_order, is_primary, created_at)
             VALUES (?, ?, ?, 0, 1, datetime('now'))
-          `).run('img_' + crypto.randomUUID(), productId, item.image_url);
+          `).run('img_' + crypto.randomUUID(), productId, imageUrl);
         }
 
         // Set / Update 4 Price Tiers
@@ -137,7 +140,7 @@ export async function POST(request: Request) {
         importedCount,
         updatedCount,
         totalCount: products.length,
-        message: `นำเข้าสินค้าสำเร็จ: เพิ่มใหม่ ${importedCount} รายการ, อัปเดต ${updatedCount} รายการ`
+        message: `นำเข้าสินค้าสำเร็จ: เพิ่มใหม่ ${importedCount} รายการ, อัปเดตข้อมูล ${updatedCount} รายการ (Real-time Updated)`
       });
     } catch (txError: any) {
       await db.exec('ROLLBACK');

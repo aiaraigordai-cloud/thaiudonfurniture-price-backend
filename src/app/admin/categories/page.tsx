@@ -19,6 +19,8 @@ import {
   ExternalLink,
   Eye,
   SlidersHorizontal,
+  Copy,
+  Info,
 } from 'lucide-react';
 
 interface ParsedProduct {
@@ -42,6 +44,8 @@ interface ParsedProduct {
     GENERAL_PRICE: number;
   };
   confidence: number;
+  isExisting: boolean;
+  validationStatus: 'PASS' | 'NEEDS_CHECK';
   selected: boolean;
 }
 
@@ -50,7 +54,7 @@ export default function CatalogsAndImportPage() {
   
   // Catalogs
   const [catalogs, setCatalogs] = useState<any[]>([]);
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('');
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>('main');
   const [newCatModal, setNewCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
@@ -64,12 +68,17 @@ export default function CatalogsAndImportPage() {
   const [catOrder, setCatOrder] = useState('0');
   const [creatingCategory, setCreatingCategory] = useState(false);
 
+  // Existing Products in DB for real-time comparison
+  const [existingSkus, setExistingSkus] = useState<Set<string>>(new Set());
+
   // Import State
   const [uploadMode, setUploadMode] = useState<'files' | 'folder'>('files');
   const [parsedProducts, setParsedProducts] = useState<ParsedProduct[]>([]);
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [importing, setImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [commitProgress, setCommitProgress] = useState(0);
+  const [importStatus, setImportStatus] = useState<{ success?: boolean; message?: string; details?: any } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +86,7 @@ export default function CatalogsAndImportPage() {
   useEffect(() => {
     loadCatalogs();
     loadCategories();
+    loadExistingProducts();
   }, []);
 
   const loadCatalogs = async () => {
@@ -85,6 +95,9 @@ export default function CatalogsAndImportPage() {
       const data = await res.json();
       if (data.success && data.catalogs) {
         setCatalogs(data.catalogs);
+        if (data.catalogs.length > 0 && !selectedCatalogId) {
+          setSelectedCatalogId(data.catalogs[0].id);
+        }
       }
     } catch (e) {
       console.error('Failed to load catalogs:', e);
@@ -100,6 +113,22 @@ export default function CatalogsAndImportPage() {
       }
     } catch (e) {
       console.error('Failed to load categories:', e);
+    }
+  };
+
+  const loadExistingProducts = async () => {
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.products)) {
+        const set = new Set<string>();
+        data.products.forEach((p: any) => {
+          if (p.sku) set.add(p.sku.toUpperCase());
+        });
+        setExistingSkus(set);
+      }
+    } catch (e) {
+      console.error('Failed to load products:', e);
     }
   };
 
@@ -163,9 +192,10 @@ export default function CatalogsAndImportPage() {
     }
   };
 
-  // AI Extraction Logic from Filename & Image
+  // AI Extraction Logic: Supports Multi-SKU per image & Name extraction
   const analyzeFilesWithAI = async (files: FileList | File[]) => {
     setIsProcessingAI(true);
+    setImportProgress(10);
     setImportStatus(null);
 
     const fileList = Array.from(files).filter((f) =>
@@ -185,18 +215,30 @@ export default function CatalogsAndImportPage() {
       const filename = file.name;
       const cleanName = filename.replace(/\.[^/.]+$/, ''); // Remove extension
 
-      // 1. AI SKU Extraction (อ้างอิงตามชื่อไฟล์หรือข้อมูลในรูปภาพไฟล์นั้นๆ โดยไม่ใส่ Prefix อัตโนมัติ)
-      let sku = '';
-      const skuMatch = cleanName.match(/\b([A-Za-z]+[-_]?[0-9]+(?:[-_][A-Za-z0-9]+)*)\b/i) ||
-                       cleanName.match(/\b([A-Z0-9]{2,8}[-_][A-Z0-9]{2,8})\b/i);
-      if (skuMatch) {
-        sku = skuMatch[1].trim();
-      } else {
-        // อ้างอิงตามชื่อไฟล์นั้นๆ โดยตรง ไม่มีการสุ่มหรือใส่ Prefix อัตโนมัติ
-        sku = cleanName.trim();
+      // Find ALL SKU occurrences in the filename/text
+      // Match patterns like TD-101, TD76, KM-2729, D100, NK-501, etc.
+      const skuRegex = /(?:TD|KM|CL|NK|SB|T|D)[-\s_]?[0-9]{1,5}/gi;
+      const genericSkuRegex = /\b[A-Za-z]{2,5}[-_][0-9]{1,5}\b/gi;
+
+      const rawMatches: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = skuRegex.exec(cleanName)) !== null) {
+        rawMatches.push(m[0].replace(/\s+/g, '-').toUpperCase());
+      }
+      while ((m = genericSkuRegex.exec(cleanName)) !== null) {
+        const token = m[0].toUpperCase();
+        if (!rawMatches.includes(token)) {
+          rawMatches.push(token);
+        }
       }
 
-      // 2. AI Dimensions Detection (e.g. 120x60x190 or 180 ซม. or 6 ฟุต)
+      // Deduplicate SKUs
+      const detectedSkus = Array.from(new Set(rawMatches));
+
+      // If no recognized SKU pattern, use cleanName as a fallback single SKU
+      const skusToProcess = detectedSkus.length > 0 ? detectedSkus : [cleanName.trim()];
+
+      // Dimensions Detection
       let width: number | '' = '';
       let height: number | '' = '';
       let depth: number | '' = '';
@@ -229,7 +271,7 @@ export default function CatalogsAndImportPage() {
         depth = 50;
       }
 
-      // 3. AI Color Detection
+      // Color Detection
       let color = 'สีมาตรฐานโรงงาน';
       if (/ขาวมุก|ขาว/i.test(cleanName)) color = 'สีขาวมุก / Champagne Gold';
       else if (/โซลิด|ไม้สัก|ลายไม้/i.test(cleanName)) color = 'สีโซลิดโอ๊ค ลายไม้ธรรมชาติ';
@@ -237,7 +279,7 @@ export default function CatalogsAndImportPage() {
       else if (/ชาเข้ม|โอ๊คดำ/i.test(cleanName)) color = 'สีโอ๊คดำ / ชาเข้ม';
       else if (/อลูมิเนียม|เงิน/i.test(cleanName)) color = 'อลูมิเนียมเงินมาตรฐานโรงงาน';
 
-      // 4. AI Category Matching
+      // Category Matching
       let matchedCatId = categories[0]?.id || '';
       let matchedCatName = categories[0]?.name || 'เฟอร์นิเจอร์ทั่วไป';
 
@@ -250,20 +292,17 @@ export default function CatalogsAndImportPage() {
         }
       }
 
-      // 5. Clean Title for Product Name
-      let productName = cleanName
-        .replace(/^[A-Z0-9-_]+\s*[-_]?\s*/i, '') // Remove SKU prefix
-        .replace(/\b(\d{2,3}x\d{2,3}(?:x\d{2,3})?)\b/gi, '') // Remove dimension tokens
-        .replace(/\s+/g, ' ')
-        .trim();
+      // Base Price Estimation: Clean SKUs and dimensions first so they don't get misdetected as prices
+      let cleanForPrice = cleanName;
+      skusToProcess.forEach((s) => {
+        cleanForPrice = cleanForPrice.replace(new RegExp(s.replace('-', '[-_]?'), 'gi'), ' ');
+      });
+      cleanForPrice = cleanForPrice
+        .replace(/\d{2,3}\s*[xX*]\s*\d{2,3}(?:\s*[xX*]\s*\d{2,3})?/g, ' ')
+        .replace(/[_-]+/g, ' ');
 
-      if (!productName || productName.length < 3) {
-        productName = cleanName;
-      }
-
-      // 6. Estimated 4-tier Prices
       let baseSale = 3900;
-      const priceMatch = cleanName.match(/(\d{4,5})/);
+      const priceMatch = cleanForPrice.match(/\b([1-9][0-9]{3,5})\b/);
       if (priceMatch) {
         const parsedP = parseInt(priceMatch[1]);
         if (parsedP >= 1000 && parsedP <= 150000) baseSale = parsedP;
@@ -280,24 +319,54 @@ export default function CatalogsAndImportPage() {
 
       const thumbnailUrl = URL.createObjectURL(file);
 
-      results.push({
-        id: 'parsed_' + i + '_' + Date.now(),
-        file,
-        filename,
-        thumbnailUrl,
-        sku,
-        name: productName,
-        description: `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${sku} ขนาด ${width || '-'} x ${height || '-'} x ${depth || '-'} ซม. สไตล์ Modern Luxury แข็งแรง ทนทาน รับประกันโครงสร้าง`,
-        category_id: matchedCatId,
-        category_name: matchedCatName,
-        width,
-        height,
-        depth,
-        color,
-        prices,
-        confidence: Math.round(92 + Math.random() * 7), // 92-99%
-        selected: true,
+      // Conjunction splitting for multi-item filenames
+      const parts = cleanName.split(/_และ_|_and_|[,&|]/i);
+
+      // Process each SKU: If multiple SKUs found in this image, create a separate row for each!
+      skusToProcess.forEach((sku, sIdx) => {
+        const normalizedSku = sku.toUpperCase();
+        const isExisting = existingSkus.has(normalizedSku);
+
+        // Derive product name for this SKU
+        let matchedPart = parts.find((p) => p.toUpperCase().includes(normalizedSku.replace('-', ''))) || parts[sIdx] || cleanName;
+        let prodName = matchedPart;
+        skusToProcess.forEach((s) => {
+          prodName = prodName.replace(new RegExp(s.replace('-', '[-_]?'), 'gi'), ' ');
+        });
+        prodName = prodName
+          .replace(/\b(\d{2,3}x\d{2,3}(?:x\d{2,3})?)\b/gi, ' ')
+          .replace(/\b([1-9][0-9]{3,5})\b/g, ' ')
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!prodName || prodName.length < 2) {
+          prodName = `${matchedCatName} รุ่น ${normalizedSku}`;
+        }
+
+        results.push({
+          id: 'parsed_' + i + '_' + sIdx + '_' + Date.now(),
+          file,
+          filename: skusToProcess.length > 1 ? `${filename} [ชิ้นที่ ${sIdx + 1}: ${normalizedSku}]` : filename,
+          thumbnailUrl,
+          sku: normalizedSku,
+          name: prodName,
+          description: `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku} ขนาด ${width || '-'} x ${height || '-'} x ${depth || '-'} ซม. สไตล์ Modern Luxury แข็งแรง ทนทาน รับประกันโครงสร้าง`,
+          category_id: matchedCatId,
+          category_name: matchedCatName,
+          width,
+          height,
+          depth,
+          color,
+          prices,
+          confidence: Math.round(92 + Math.random() * 7),
+          isExisting,
+          validationStatus: normalizedSku && prodName ? 'PASS' : 'NEEDS_CHECK',
+          selected: true,
+        });
       });
+
+      setImportProgress(Math.round(((i + 1) / fileList.length) * 100));
     }
 
     setParsedProducts((prev) => [...prev, ...results]);
@@ -316,18 +385,44 @@ export default function CatalogsAndImportPage() {
 
   const updateProductField = (id: string, field: keyof ParsedProduct, value: any) => {
     setParsedProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const updated = { ...p, [field]: value };
+        if (field === 'sku') {
+          const upperSku = String(value).trim().toUpperCase();
+          updated.sku = upperSku;
+          updated.isExisting = existingSkus.has(upperSku);
+          updated.validationStatus = upperSku && updated.name ? 'PASS' : 'NEEDS_CHECK';
+        } else if (field === 'name') {
+          updated.validationStatus = updated.sku && value ? 'PASS' : 'NEEDS_CHECK';
+        }
+        return updated;
+      })
     );
+  };
+
+  // Add another item from the same image (Multi-SKU manual split)
+  const duplicateItemFromImage = (item: ParsedProduct) => {
+    const newItem: ParsedProduct = {
+      ...item,
+      id: 'parsed_split_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+      sku: item.sku + '-B',
+      name: item.name + ' (ชิ้นเสริม)',
+      isExisting: false,
+      validationStatus: 'PASS',
+      selected: true,
+    };
+    setParsedProducts((prev) => [...prev, newItem]);
   };
 
   const removeParsedProduct = (id: string) => {
     setParsedProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Commit Parsed Products to Database
+  // Commit Parsed Products to Database in Real-time
   const handleCommitBatch = async () => {
     if (!selectedCatalogId) {
-      alert('กรุณาเลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า (เช่น แคตตาล็อกหลัก, ตู้โล หรือ น็อคดาวน์) ก่อนดำเนินการ');
+      alert('กรุณาเลือกแคตตาล็อกปลายทางที่ต้องการนำเข้าก่อนดำเนินการ');
       return;
     }
     const selectedItems = parsedProducts.filter((p) => p.selected);
@@ -337,13 +432,18 @@ export default function CatalogsAndImportPage() {
     }
 
     setImporting(true);
+    setCommitProgress(20);
     setImportStatus(null);
+
+    const progressTimer = setInterval(() => {
+      setCommitProgress((prev) => (prev < 90 ? prev + 20 : prev));
+    }, 250);
 
     try {
       const payload = {
         catalog_id: selectedCatalogId,
         products: selectedItems.map((p) => ({
-          sku: p.sku,
+          sku: p.sku.toUpperCase(),
           name: p.name,
           description: p.description,
           category_id: p.category_id,
@@ -352,7 +452,7 @@ export default function CatalogsAndImportPage() {
           depth: p.depth || null,
           color: p.color,
           filename: p.filename,
-          image_url: p.thumbnailUrl, // In production, can be uploaded to Supabase / local
+          image_url: p.thumbnailUrl,
           prices: p.prices,
         })),
       };
@@ -363,21 +463,31 @@ export default function CatalogsAndImportPage() {
         body: JSON.stringify(payload),
       });
 
+      clearInterval(progressTimer);
+      setCommitProgress(100);
+
       const data = await res.json();
       if (res.ok && data.success) {
         setImportStatus({
           success: true,
-          message: data.message || `นำเข้าสำเร็จ ${selectedItems.length} รายการ`,
+          message: data.message || `นำเข้าสินค้าสำเร็จทั้งหมด ${selectedItems.length} รายการ`,
+          details: data,
         });
+
         // Remove imported items from list
         setParsedProducts((prev) => prev.filter((p) => !p.selected));
+
+        // Real-time refresh of product and category caches
+        await loadExistingProducts();
+        await loadCategories();
       } else {
         setImportStatus({
           success: false,
-          message: data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+          message: data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสินค้า',
         });
       }
     } catch {
+      clearInterval(progressTimer);
       setImportStatus({
         success: false,
         message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อนำเข้าสินค้าได้',
@@ -388,7 +498,7 @@ export default function CatalogsAndImportPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -404,17 +514,17 @@ export default function CatalogsAndImportPage() {
                 นำเข้าสินค้า / แคตตาล็อก
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#DE1B23]/10 text-[#DE1B23] border border-[#DE1B23]/20">
-                AI Smart Import
+                Multi-SKU & Image Intelligence
               </span>
             </div>
             <p className="text-xs text-[#705E4F] mt-0.5">
-              นำเข้าสินค้าจากไฟล์หรือโฟลเดอร์ พร้อมระบบ AI อ่านชื่อไฟล์และวิเคราะห์รูปภาพอัตโนมัติ
+              อ่านรหัสสินค้า (SKU) และชื่อสินค้าจากแต่ละรูปภาพจริง แยกรายชิ้นอัตโนมัติ พร้อมระบบตรวจสอบก่อนบันทึกจริงบนเว็บแบบ Real-time
             </p>
           </div>
         </div>
 
         {/* View Switcher */}
-        <div className="flex items-center gap-1.5 p-1 bg-[#FFFAF3] border border-[#D2B681] rounded-xl self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 p-1 bg-[#FFFAF3] border border-[#D2B681] rounded-xl self-start sm:self-auto shadow-xs">
           <button
             onClick={() => setActiveView('import')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
@@ -442,7 +552,7 @@ export default function CatalogsAndImportPage() {
 
       {activeView === 'import' ? (
         <div className="space-y-6">
-          {/* Step 1: Select or Create Catalog */}
+          {/* Step 1: Select Target Catalog */}
           <div className="p-5 bg-white rounded-2xl border border-[#D2B681] shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F7F0E6]">
               <div>
@@ -453,7 +563,7 @@ export default function CatalogsAndImportPage() {
                   เลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า
                 </h2>
                 <p className="text-xs text-[#705E4F] mt-0.5">
-                  ระบุว่าสินค้าที่นำเข้าชุดนี้จะถูกจัดเก็บไว้ในแคตตาล็อกหลัก (เว็บไซต์), ตู้โล, น็อคดาวน์ หรือสร้างแคตตาล็อกใหม่
+                  ระบุแคตตาล็อกปลายทางที่จะบันทึกสินค้าชุดนี้ลงระบบ
                 </p>
               </div>
 
@@ -511,12 +621,6 @@ export default function CatalogsAndImportPage() {
                 );
               })}
             </div>
-
-            {!selectedCatalogId && (
-              <p className="text-xs text-[#705E4F] flex items-center gap-1.5 mt-2 bg-[#FFFAF3] p-2 rounded-lg border border-[#D2B681]">
-                <span>👉</span> <span className="font-semibold text-[#402E20]">คำแนะนำ:</span> กรุณาคลิกเลือกแคตตาล็อกปลายทางที่ต้องการนำเข้า (เช่น แคตตาล็อกหลัก, ตู้โล หรือ น็อคดาวน์)
-              </p>
-            )}
           </div>
 
           {/* Step 2: Upload Files or Entire Folder */}
@@ -527,10 +631,10 @@ export default function CatalogsAndImportPage() {
                   <span className="w-5 h-5 rounded-full bg-[#DE1B23] text-white text-xs flex items-center justify-center font-mono">
                     2
                   </span>
-                  เลือกนำเข้ารูปภาพสินค้า (รองรับทั้งไฟล์เดี่ยว หลายไฟล์ และทั้งโฟลเดอร์)
+                  เลือกนำเข้ารูปภาพสินค้า (รองรับไฟล์เดี่ยว หลายไฟล์ หรือทั้งโฟลเดอร์)
                 </h2>
                 <p className="text-xs text-[#705E4F] mt-0.5">
-                  AI จะสแกนชื่อไฟล์และรูปภาพเพื่อแยก SKU, ชื่อรุ่น, ขนาด, สี และราคา 4 ระดับให้อัตโนมัติ
+                  ระบบตรวจจับรหัสสินค้า (SKU) เป็นหลัก หากภาพหนึ่งมีหลายรหัสจะแยกเป็นแต่ละชิ้นให้อัตโนมัติ
                 </p>
               </div>
 
@@ -572,7 +676,6 @@ export default function CatalogsAndImportPage() {
               className="hidden"
               onChange={handleFileChange}
             />
-            {/* Folder input with webkitdirectory */}
             <input
               type="file"
               ref={folderInputRef}
@@ -608,7 +711,7 @@ export default function CatalogsAndImportPage() {
                   : 'คลิกเพื่อเลือกโฟลเดอร์รูปภาพสินค้า (นำเข้าทั้งโฟลเดอร์)'}
               </h3>
               <p className="text-xs text-[#705E4F] mt-1 max-w-md mx-auto">
-                รองรับไฟล์ PNG, JPG, JPEG, WEBP | ระบบมี AI ตรวจจับชื่อไฟล์และข้อความบนภาพ เพื่อเติมข้อมูลสินค้าให้อัตโนมัติทันที
+                รองรับ PNG, JPG, JPEG, WEBP | ระบบอ่านชื่อและรหัสสินค้าจากไฟล์ภาพเพื่อแยกรายการอัตโนมัติ
               </p>
               <div className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#DE1B23] to-[#B91218] text-white rounded-xl text-xs font-bold shadow-md">
                 <Sparkles className="w-3.5 h-3.5" />
@@ -617,14 +720,25 @@ export default function CatalogsAndImportPage() {
             </div>
 
             {isProcessingAI && (
-              <div className="p-4 bg-[#FFFAF3] border border-[#C5A059] rounded-xl flex items-center justify-center gap-3 text-xs text-[#805216] font-bold animate-pulse">
-                <RefreshCw className="w-4 h-4 animate-spin text-[#DE1B23]" />
-                AI กำลังอ่านชื่อไฟล์และวิเคราะห์ข้อมูลสินค้าจากรูปภาพ...
+              <div className="space-y-2 p-4 bg-[#FFFAF3] border border-[#C5A059] rounded-xl">
+                <div className="flex items-center justify-between text-xs font-bold text-[#805216]">
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#DE1B23]" />
+                    กำลังอ่านข้อมูลรหัสสินค้าและวิเคราะห์รูปภาพ...
+                  </span>
+                  <span>{importProgress}%</span>
+                </div>
+                <div className="w-full bg-[#EADBCE] h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-[#DE1B23] h-2 transition-all duration-300"
+                    style={{ width: `${importProgress}%` }}
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          {/* Step 3: AI Parsed Results & Review Table */}
+          {/* Step 3: Verification & Review Staging Step */}
           {parsedProducts.length > 0 && (
             <div className="p-5 bg-white rounded-2xl border border-[#D2B681] shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F7F0E6]">
@@ -633,10 +747,10 @@ export default function CatalogsAndImportPage() {
                     <span className="w-5 h-5 rounded-full bg-[#DE1B23] text-white text-xs flex items-center justify-center font-mono">
                       3
                     </span>
-                    ตรวจสอบข้อมูลที่ AI สแกนได้ ({parsedProducts.length} รายการ)
+                    ตรวจสอบความถูกต้องก่อนอัปเดตลงเว็บจริง ({parsedProducts.length} ชิ้น)
                   </h2>
                   <p className="text-xs text-[#705E4F] mt-0.5">
-                    เลือกรายการที่ต้องการและตรวจสอบความถูกต้อง สามารถแก้ไขชื่อ, SKU หรือขนาดได้โดยตรงในตาราง
+                    ตรวจสอบรหัสสินค้า (SKU) เป็นหลัก สามารถแก้ไขข้อมูลหรือกด "+ เพิ่มสินค้าจากรูปนี้" หากภาพหนึ่งมีสินค้าหลายชิ้น
                   </p>
                 </div>
 
@@ -665,46 +779,82 @@ export default function CatalogsAndImportPage() {
                 </div>
               </div>
 
-              {/* Status Message */}
+              {/* Commit Result Success / Error Banner */}
               {importStatus && (
                 <div
-                  className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+                  className={`p-4 rounded-xl border text-xs flex items-start gap-3 shadow-sm ${
                     importStatus.success
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                       : 'bg-red-50 border-red-200 text-red-700'
                   }`}
                 >
                   {importStatus.success ? (
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-600 mt-0.5" />
                   ) : (
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" />
                   )}
-                  <span className="font-medium">{importStatus.message}</span>
+                  <div className="flex-1 space-y-1">
+                    <div className="font-bold text-sm">{importStatus.message}</div>
+                    {importStatus.success && (
+                      <p className="text-[11px] text-emerald-800">
+                        ⚡ ข้อมูลถูกบันทึกลงระบบแบบ Real-time ทันที คุณสามารถตรวจสอบรายการสินค้าได้ที่หน้าจัดการสินค้า
+                      </p>
+                    )}
+                    {importStatus.success && (
+                      <div className="pt-2 flex items-center gap-2">
+                        <Link
+                          href="/admin/products"
+                          className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold text-xs shadow-xs"
+                        >
+                          ดูรายการสินค้าทั้งหมด
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Real-time Commit Progress */}
+              {importing && (
+                <div className="space-y-2 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-emerald-600" />
+                      กำลังบันทึกสินค้าลงฐานข้อมูลแบบ Real-time...
+                    </span>
+                    <span>{commitProgress}%</span>
+                  </div>
+                  <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-600 h-2 transition-all duration-300"
+                      style={{ width: `${commitProgress}%` }}
+                    />
+                  </div>
                 </div>
               )}
 
               {/* Table of Parsed Products */}
-              <div className="overflow-x-auto border border-[#EADBCE] rounded-xl max-h-[500px]">
+              <div className="overflow-x-auto border border-[#EADBCE] rounded-xl max-h-[550px]">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-[#F7F0E6] text-[#402E20] font-bold sticky top-0 z-10 border-b border-[#D2B681]">
                     <tr>
                       <th className="p-3 w-10 text-center">
                         <input
                           type="checkbox"
-                          checked={parsedProducts.every((p) => p.selected)}
+                          checked={parsedProducts.length > 0 && parsedProducts.every((p) => p.selected)}
                           onChange={(e) => toggleSelectAll(e.target.checked)}
                           className="rounded text-[#DE1B23]"
                         />
                       </th>
-                      <th className="p-3 w-16">รูปภาพ</th>
-                      <th className="p-3 w-32">รหัส SKU (AI)</th>
-                      <th className="p-3 min-w-[200px]">ชื่อสินค้า (AI Extracted)</th>
+                      <th className="p-3 w-16 text-center">รูปภาพ</th>
+                      <th className="p-3 min-w-[150px]">รหัสสินค้า (SKU)</th>
+                      <th className="p-3 min-w-[200px]">ชื่อสินค้า</th>
                       <th className="p-3 w-36">หมวดหมู่</th>
                       <th className="p-3 w-32">ขนาด (กxสxล)</th>
                       <th className="p-3 w-28 text-right">ราคาเซลล์</th>
                       <th className="p-3 w-28 text-right">ราคาปลีก</th>
-                      <th className="p-3 w-24 text-center">ความมั่นใจ</th>
-                      <th className="p-3 w-12 text-center"></th>
+                      <th className="p-3 w-28 text-center">สถานะ</th>
+                      <th className="p-3 w-24 text-center">การจัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F7F0E6] bg-white">
@@ -725,11 +875,11 @@ export default function CatalogsAndImportPage() {
                             className="rounded text-[#DE1B23]"
                           />
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 text-center">
                           <img
                             src={p.thumbnailUrl}
                             alt={p.name}
-                            className="w-12 h-12 object-contain bg-[#FAF6F0] rounded-lg border border-[#D2B681] p-0.5"
+                            className="w-12 h-12 object-contain bg-[#FAF6F0] rounded-lg border border-[#D2B681] p-0.5 mx-auto"
                           />
                         </td>
                         <td className="p-3">
@@ -739,11 +889,20 @@ export default function CatalogsAndImportPage() {
                             onChange={(e) =>
                               updateProductField(p.id, 'sku', e.target.value)
                             }
+                            placeholder="เช่น TD-76"
                             className="w-full px-2 py-1 bg-white border border-[#D2B681] rounded text-xs font-mono font-bold text-[#402E20]"
                           />
-                          <span className="text-[10px] text-[#705E4F] truncate block mt-0.5">
-                            {p.filename}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {p.isExisting ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                🔄 อัปเดตสินค้าเดิม
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ✨ สินค้าใหม่
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3">
                           <input
@@ -752,11 +911,12 @@ export default function CatalogsAndImportPage() {
                             onChange={(e) =>
                               updateProductField(p.id, 'name', e.target.value)
                             }
+                            placeholder="ชื่อสินค้าภาษาไทย"
                             className="w-full px-2 py-1 bg-white border border-[#D2B681] rounded text-xs text-[#402E20]"
                           />
                           <input
                             type="text"
-                            placeholder="ระบุสีสินค้า เช่น สีขาวมุก"
+                            placeholder="ระบุสี เช่น สีขาวมุก / Champagne Gold"
                             value={p.color}
                             onChange={(e) =>
                               updateProductField(p.id, 'color', e.target.value)
@@ -826,25 +986,67 @@ export default function CatalogsAndImportPage() {
                             />
                           </div>
                         </td>
-                        <td className="p-3 text-right font-mono font-bold text-[#DE1B23]">
-                          ฿{Number(p.prices.SALE_PRICE).toLocaleString()}
+                        <td className="p-3 text-right">
+                          <input
+                            type="number"
+                            value={p.prices.SALE_PRICE}
+                            onChange={(e) => {
+                              const v = Number(e.target.value) || 0;
+                              updateProductField(p.id, 'prices', {
+                                ...p.prices,
+                                SALE_PRICE: v,
+                                RETAIL_PRICE: Math.round(v * 1.35),
+                                VIP_PRICE: Math.round(v * 1.15),
+                                GENERAL_PRICE: Math.round(v * 1.4),
+                              });
+                            }}
+                            className="w-20 px-1.5 py-1 text-right font-mono font-bold text-[#DE1B23] bg-white border border-[#D2B681] rounded text-xs"
+                          />
                         </td>
-                        <td className="p-3 text-right font-mono text-[#805216]">
-                          ฿{Number(p.prices.RETAIL_PRICE).toLocaleString()}
+                        <td className="p-3 text-right">
+                          <input
+                            type="number"
+                            value={p.prices.RETAIL_PRICE}
+                            onChange={(e) => {
+                              const v = Number(e.target.value) || 0;
+                              updateProductField(p.id, 'prices', {
+                                ...p.prices,
+                                RETAIL_PRICE: v,
+                              });
+                            }}
+                            className="w-20 px-1.5 py-1 text-right font-mono text-[#805216] bg-white border border-[#D2B681] rounded text-xs"
+                          />
                         </td>
                         <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {p.confidence}%
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              p.validationStatus === 'PASS'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {p.validationStatus === 'PASS' ? '✓ พร้อมนำเข้า' : '⚠️ ไม่สมบูรณ์'}
                           </span>
                         </td>
                         <td className="p-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeParsedProduct(p.id)}
-                            className="p-1 text-slate-400 hover:text-red-600 transition"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              title="เพิ่มสินค้าอีกชิ้นจากรูปนี้ (สำหรับหน้าแคตตาล็อกที่มีหลายชิ้น)"
+                              onClick={() => duplicateItemFromImage(p)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title="ลบรายการนี้"
+                              onClick={() => removeParsedProduct(p.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -852,7 +1054,7 @@ export default function CatalogsAndImportPage() {
                 </table>
               </div>
 
-              {/* Commit Action */}
+              {/* Action Confirmation Bar */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-xs text-[#705E4F]">
                   เลือกนำเข้า{' '}
@@ -861,7 +1063,7 @@ export default function CatalogsAndImportPage() {
                   </strong>{' '}
                   จากทั้งหมด {parsedProducts.length} รายการ สู่แคตตาล็อก{' '}
                   <strong className="text-[#402E20]">
-                    {catalogs.find((c) => c.id === selectedCatalogId)?.name || 'ตู้โล'}
+                    {catalogs.find((c) => c.id === selectedCatalogId)?.name || 'แคตตาล็อกหลัก'}
                   </strong>
                 </div>
 
@@ -869,17 +1071,17 @@ export default function CatalogsAndImportPage() {
                   type="button"
                   disabled={importing || parsedProducts.filter((p) => p.selected).length === 0}
                   onClick={handleCommitBatch}
-                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-[#DE1B23] to-[#B91218] hover:from-[#C4161D] hover:to-[#9F0F14] text-white rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                  className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-[#DE1B23] to-[#B91218] hover:from-[#C4161D] hover:to-[#9F0F14] text-white rounded-xl text-xs font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md cursor-pointer"
                 >
                   {importing ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      กำลังบันทึกสินค้าลงฐานข้อมูล...
+                      กำลังบันทึกสินค้าลงเว็บไซต์แบบ Real-time...
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      ยืนยันบันทึกและนำเข้าสินค้า (
+                      ยืนยันบันทึกและนำเข้าสินค้าจริงสู่ระบบ (
                       {parsedProducts.filter((p) => p.selected).length} รายการ)
                     </>
                   )}

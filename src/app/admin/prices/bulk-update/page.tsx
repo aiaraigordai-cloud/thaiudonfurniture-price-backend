@@ -18,7 +18,24 @@ import {
   Sparkles,
   RefreshCw,
   FileText,
+  Download,
+  Edit3,
+  Check,
 } from 'lucide-react';
+
+interface ParsedRow {
+  id: string;
+  batch_id: string;
+  row_number: number;
+  source_data: string;
+  detected_sku: string;
+  detected_product_name: string;
+  old_price: number | null;
+  new_price: number | null;
+  validation_status: 'PASS' | 'NEEDS_REVIEW' | 'FAILED';
+  warning_reason: string | null;
+  is_selected: number;
+}
 
 export default function BulkPriceUpdatePage() {
   const router = useRouter();
@@ -26,13 +43,14 @@ export default function BulkPriceUpdatePage() {
   const [selectedTierId, setSelectedTierId] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState('');
   const [commitResult, setCommitResult] = useState<any | null>(null);
 
   // Parsed Batch State
   const [batchData, setBatchData] = useState<any | null>(null);
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<ParsedRow[]>([]);
   const [filterTab, setFilterTab] = useState<'ALL' | 'PASS' | 'NEEDS_REVIEW' | 'FAILED' | 'SELECTED'>('ALL');
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 
@@ -61,6 +79,7 @@ export default function BulkPriceUpdatePage() {
     }
 
     setUploading(true);
+    setUploadProgress(20);
     setError('');
     setBatchData(null);
     setCommitResult(null);
@@ -69,11 +88,18 @@ export default function BulkPriceUpdatePage() {
     formData.append('file', file);
     formData.append('price_tier_id', selectedTierId);
 
+    const progressTimer = setInterval(() => {
+      setUploadProgress((prev) => (prev < 90 ? prev + 15 : prev));
+    }, 200);
+
     try {
       const res = await fetch('/api/prices/bulk-parse', {
         method: 'POST',
         body: formData,
       });
+      clearInterval(progressTimer);
+      setUploadProgress(100);
+
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'เกิดข้อผิดพลาดในการประมวลผลไฟล์');
@@ -81,10 +107,9 @@ export default function BulkPriceUpdatePage() {
         setBatchData(data);
         setRows(data.rows || []);
 
-        // MANDATORY REQUIREMENT Part 8:
-        // System automatically checks (selects) PASS rows ONLY!
+        // Auto-select PASS rows
         const autoSelected = new Set<string>();
-        data.rows.forEach((r: any) => {
+        data.rows.forEach((r: ParsedRow) => {
           if (r.validation_status === 'PASS') {
             autoSelected.add(r.id);
           }
@@ -92,6 +117,7 @@ export default function BulkPriceUpdatePage() {
         setSelectedRowIds(autoSelected);
       }
     } catch {
+      clearInterval(progressTimer);
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
     } finally {
       setUploading(false);
@@ -126,6 +152,27 @@ export default function BulkPriceUpdatePage() {
     setSelectedRowIds(new Set());
   };
 
+  // Inline Row Editor in Verification Step
+  const handleUpdateRowField = (id: string, field: 'detected_sku' | 'new_price', value: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const updated = { ...r };
+        if (field === 'detected_sku') {
+          updated.detected_sku = value.trim().toUpperCase();
+        } else if (field === 'new_price') {
+          const num = parseFloat(value.replace(/,/g, ''));
+          updated.new_price = isNaN(num) ? null : num;
+          if (updated.new_price && updated.new_price > 0 && updated.validation_status === 'FAILED') {
+            updated.validation_status = 'PASS';
+            updated.warning_reason = 'แก้ไขราคาแล้ว พร้อมอัปเดต';
+          }
+        }
+        return updated;
+      })
+    );
+  };
+
   const handleSingleConfirm = async () => {
     if (selectedRowIds.size === 0) {
       alert('กรุณาเลือกอย่างน้อย 1 รายการเพื่ออัปเดตราคา');
@@ -158,7 +205,6 @@ export default function BulkPriceUpdatePage() {
     }
   };
 
-  // Filtered rows for UI
   const filteredRows = rows.filter((r) => {
     if (filterTab === 'ALL') return true;
     if (filterTab === 'PASS') return r.validation_status === 'PASS';
@@ -167,8 +213,6 @@ export default function BulkPriceUpdatePage() {
     if (filterTab === 'SELECTED') return selectedRowIds.has(r.id);
     return true;
   });
-
-  const selectedTier = priceTiers.find((t) => t.id === selectedTierId);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -179,23 +223,33 @@ export default function BulkPriceUpdatePage() {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
               อัปเดตราคาด้วยไฟล์
             </h1>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
-              <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
-              ระบบนำเข้าไฟล์
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center gap-1 border border-emerald-200">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              SKU-First & Real-time Update
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            รองรับไฟล์ Excel, PDF, Word, รูปภาพแคตตาล็อก JPG/PNG และไฟล์ Text พร้อมระบบ Auto-select และ Single Confirmation
+          <p className="text-xs text-slate-500 mt-1">
+            อ่านรหัสสินค้า (SKU) เป็นหลัก พร้อมชื่อประกอบในกรณีข้อมูลไม่ชัดเจน มีระบบตรวจสอบความถูกต้องก่อนอัปเดตจริงบนเว็บแบบ Real-time
           </p>
         </div>
 
-        <Link
-          href="/admin/prices/import-history"
-          className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
-        >
-          <History className="w-4 h-4 text-slate-500" />
-          ดูประวัติการนำเข้าและ Rollback
-        </Link>
+        <div className="flex items-center gap-2">
+          <a
+            href="/api/prices/sample-template"
+            download
+            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)
+          </a>
+          <Link
+            href="/admin/prices/import-history"
+            className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
+          >
+            <History className="w-4 h-4 text-slate-500" />
+            ประวัติการนำเข้า
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -213,12 +267,17 @@ export default function BulkPriceUpdatePage() {
               <CheckCircle2 className="w-7 h-7" />
             </div>
             <div className="space-y-2 flex-1">
-              <h2 className="text-base font-bold text-emerald-950">
-                {commitResult.message}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-emerald-950">
+                  {commitResult.message}
+                </h2>
+                <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded-full text-[10px] font-bold">
+                  ⚡ Real-time Active
+                </span>
+              </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
                 ระบบได้บันทึกการเปลี่ยนแปลงราคาลงฐานข้อมูลกลางเรียบร้อยแล้วผ่าน Database Transaction ที่ปลอดภัย
-                พร้อมบันทึกประวัติ Price History และ Audit Log ครบถ้วน ลิงก์ลูกค้าที่เกี่ยวข้องจะแสดงราคาล่าสุดทันที (Live Pricing)
+                พร้อมบันทึกประวัติ Price History และ Audit Log ครบถ้วน ลิงก์ลูกค้าและหน้าเว็บจะแสดงราคาล่าสุดทันทีโดยไม่ต้องรีโหลด
               </p>
               <div className="flex items-center gap-3 pt-2">
                 <Link
@@ -227,13 +286,17 @@ export default function BulkPriceUpdatePage() {
                 >
                   ตรวจสอบหน้ารวมราคา
                 </Link>
-                <Link
-                  href="/s/vip-showcase-2026"
-                  target="_blank"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCommitResult(null);
+                    setBatchData(null);
+                    setFile(null);
+                  }}
                   className="px-4 py-2 bg-white border border-emerald-300 text-emerald-900 rounded-xl text-xs font-semibold hover:bg-emerald-100/50 transition"
                 >
-                  ดูผลลัพธ์ในหน้าลูกค้า
-                </Link>
+                  + นำเข้าไฟล์ชุดใหม่
+                </button>
               </div>
             </div>
           </div>
@@ -247,7 +310,7 @@ export default function BulkPriceUpdatePage() {
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <Coins className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 1: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Mandatory Selection)
+                ขั้นตอนที่ 1: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Price Tier Target)
               </h2>
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">
@@ -285,7 +348,7 @@ export default function BulkPriceUpdatePage() {
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
               <UploadCloud className="w-4 h-4 text-emerald-600" />
               <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 2: อัปโหลดไฟล์เอกสารหรือแคตตาล็อกภาพ
+                ขั้นตอนที่ 2: อัปโหลดไฟล์ราคาสินค้า (Excel, CSV, Text)
               </h2>
             </div>
 
@@ -297,7 +360,7 @@ export default function BulkPriceUpdatePage() {
                 {file ? file.name : 'ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
               </div>
               <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
-                รองรับ Excel (.xlsx, .xls), PDF (.pdf), Word (.docx), รูปภาพแคตตาล็อก (.jpg, .png) หรือไฟล์ Text (.txt, .csv)
+                รองรับ Excel (.xlsx, .xls), CSV (.csv), Text (.txt) ระบบจะค้นหารหัสสินค้า (SKU) เป็นหลัก และใช้ชื่อสินค้าช่วยยืนยัน
               </p>
               <input
                 type="file"
@@ -308,37 +371,48 @@ export default function BulkPriceUpdatePage() {
                   }
                 }}
                 className="hidden"
-                accept=".xlsx,.xls,.pdf,.docx,.doc,.jpg,.jpeg,.png,.txt,.csv"
+                accept=".xlsx,.xls,.csv,.txt"
               />
               <label
                 htmlFor="file-upload"
-                className="mt-4 inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition"
+                className="mt-4 inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition shadow-xs"
               >
                 {file ? 'เปลี่ยนไฟล์' : 'เลือกไฟล์จากอุปกรณ์'}
               </label>
             </div>
 
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between">
-              <span>
-                💡 <strong>ทดสอบทันที:</strong> สามารถเลือกไฟล์ Excel หรือ Text ที่มี SKU เช่น{' '}
-                <code>BED-LUX-6F, 19900</code> หรืออัปโหลดไฟล์รูปแคตตาล็อกเพื่อให้ AI ตรวจจับ
-              </span>
-            </div>
+            {uploading && (
+              <div className="space-y-2 p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
+                <div className="flex items-center justify-between text-xs font-semibold text-emerald-900">
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    กำลังอ่านไฟล์และตรวจสอบรหัสสินค้ากับฐานข้อมูล...
+                  </span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-2 transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={uploading || !file}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {uploading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  กำลังประมวลผล OCR & Visual AI Matching...
+                  กำลังประมวลผลไฟล์...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  เริ่มวิเคราะห์ไฟล์และตรวจสอบความถูกต้อง
+                  เริ่มวิเคราะห์ไฟล์และเปิดหน้าจอตรวจสอบความถูกต้อง
                 </>
               )}
             </button>
@@ -346,7 +420,7 @@ export default function BulkPriceUpdatePage() {
         </form>
       )}
 
-      {/* Step 3: Review Table & Single Confirmation Button */}
+      {/* Step 3: Review & Verification Table (Pre-commit Verification Step) */}
       {batchData && !commitResult && (
         <div className="space-y-6">
           {/* Summary Metric Cards */}
@@ -360,7 +434,7 @@ export default function BulkPriceUpdatePage() {
             <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
               <div className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                PASS (ผ่านเกณฑ์)
+                PASS (ตรงรหัส 100%)
               </div>
               <div className="text-xl font-bold text-emerald-700 mt-1">{batchData.passedRows} รายการ</div>
               <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
@@ -374,7 +448,7 @@ export default function BulkPriceUpdatePage() {
                 NEEDS_REVIEW
               </div>
               <div className="text-xl font-bold text-amber-700 mt-1">{batchData.reviewRows} รายการ</div>
-              <div className="text-[10px] text-amber-600 mt-0.5">ไม่ถูกเลือก (ต้องตรวจก่อน)</div>
+              <div className="text-[10px] text-amber-600 mt-0.5">จับคู่ด้วยชื่อ/รหัสใกล้เคียง (ต้องตรวจก่อน)</div>
             </div>
 
             <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200 shadow-xs">
@@ -383,7 +457,7 @@ export default function BulkPriceUpdatePage() {
                 FAILED (ไม่ผ่าน)
               </div>
               <div className="text-xl font-bold text-red-700 mt-1">{batchData.failedRows} รายการ</div>
-              <div className="text-[10px] text-red-600 mt-0.5">ไม่สามารถอัปเดตได้</div>
+              <div className="text-[10px] text-red-600 mt-0.5">ไม่พบรหัสหรือราคาผิดพลาด</div>
             </div>
           </div>
 
@@ -399,7 +473,7 @@ export default function BulkPriceUpdatePage() {
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
-                ระบบเลือกรายการ PASS ทั้งหมดให้อัตโนมัติ คุณสามารถตรวจสอบหรือกดยืนยันอัปเดตได้ทันที
+                โปรดตรวจสอบความถูกต้องของรหัสและราคาก่อนกดปุ่มยืนยัน ข้อมูลจะถูกอัปเดตลงเว็บไซต์แบบ Real-time ทันที
               </p>
             </div>
 
@@ -412,7 +486,6 @@ export default function BulkPriceUpdatePage() {
                 ยกเลิก / อัปโหลดใหม่
               </button>
 
-              {/* SINGLE CONFIRMATION BUTTON - MANDATORY REQUIREMENT Part 8.3 */}
               <button
                 type="button"
                 onClick={handleSingleConfirm}
@@ -420,16 +493,21 @@ export default function BulkPriceUpdatePage() {
                 className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/25 transition disabled:opacity-50 flex items-center gap-2"
               >
                 {committing ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    กำลังบันทึกและอัปเดตแบบ Real-time...
+                  </>
                 ) : (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    ยืนยันอัปเดตราคาจริง ({selectedRowIds.size} รายการ)
+                  </>
                 )}
-                ยืนยันอัปเดตราคา ({selectedRowIds.size} รายการ)
               </button>
             </div>
           </div>
 
-          {/* Review Filter Tabs & Batch Select Tools */}
+          {/* Filter Tabs & Batch Select Tools */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-1.5">
               {(['ALL', 'PASS', 'NEEDS_REVIEW', 'FAILED', 'SELECTED'] as const).map((tab) => (
@@ -477,14 +555,14 @@ export default function BulkPriceUpdatePage() {
                 <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
                   <tr>
                     <th className="px-4 py-3.5 w-12 text-center">เลือก</th>
-                    <th className="px-3 py-3.5 w-16">แถว</th>
-                    <th className="px-4 py-3.5">SKU ในเอกสาร</th>
-                    <th className="px-4 py-3.5">ชื่อสินค้าที่แมตช์ได้</th>
+                    <th className="px-3 py-3.5 w-16 text-center">แถว</th>
+                    <th className="px-4 py-3.5 min-w-[140px]">รหัสสินค้า (SKU)</th>
+                    <th className="px-4 py-3.5 min-w-[180px]">ชื่อสินค้าที่ตรงกัน</th>
                     <th className="px-4 py-3.5 text-right">ราคาเดิม</th>
-                    <th className="px-4 py-3.5 text-right font-bold text-emerald-700">ราคาใหม่</th>
+                    <th className="px-4 py-3.5 text-right font-bold text-emerald-700 min-w-[120px]">ราคาใหม่</th>
                     <th className="px-4 py-3.5 text-right">ส่วนต่าง</th>
-                    <th className="px-4 py-3.5 text-center">สถานะ AI</th>
-                    <th className="px-4 py-3.5">หมายเหตุ / Warning</th>
+                    <th className="px-4 py-3.5 text-center">สถานะ</th>
+                    <th className="px-4 py-3.5">คำอธิบายการตรวจสอบ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -508,19 +586,31 @@ export default function BulkPriceUpdatePage() {
                           />
                         </td>
                         <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
-                        <td className="px-4 py-3.5 font-mono font-bold text-slate-900">{r.detected_sku}</td>
-                        <td className="px-4 py-3.5 text-slate-700 max-w-xs truncate">
-                          {r.detected_product_name}
+                        <td className="px-4 py-3.5">
+                          <input
+                            type="text"
+                            value={r.detected_sku}
+                            onChange={(e) => handleUpdateRowField(r.id, 'detected_sku', e.target.value)}
+                            className="px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-slate-900 w-full text-xs"
+                          />
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-700 max-w-xs">
+                          <span className="line-clamp-2">{r.detected_product_name}</span>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono text-slate-500">
                           {r.old_price ? `฿${r.old_price.toLocaleString()}` : '-'}
                         </td>
-                        <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
-                          {r.new_price ? `฿${r.new_price.toLocaleString()}` : '-'}
+                        <td className="px-4 py-3.5 text-right">
+                          <input
+                            type="number"
+                            value={r.new_price !== null ? r.new_price : ''}
+                            onChange={(e) => handleUpdateRowField(r.id, 'new_price', e.target.value)}
+                            className="px-2 py-1 bg-white border border-emerald-300 rounded font-mono font-bold text-emerald-700 w-24 text-right text-xs"
+                          />
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono">
                           {diff !== null ? (
-                            <span className={diff >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                            <span className={diff >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
                               {diff >= 0 ? `+฿${diff.toLocaleString()}` : `-฿${Math.abs(diff).toLocaleString()}`}
                             </span>
                           ) : (
@@ -545,7 +635,7 @@ export default function BulkPriceUpdatePage() {
                         </td>
                         <td className="px-4 py-3.5 text-slate-500 text-[11px]">
                           {r.warning_reason || (
-                            <span className="text-slate-400">ข้อมูลสมบูรณ์ ไม่พบข้อขัดแย้ง</span>
+                            <span className="text-emerald-600 font-medium">✓ จับคู่ตรงรหัสสินค้า 100%</span>
                           )}
                         </td>
                       </tr>
