@@ -119,8 +119,8 @@ export async function loadPersistentEmployees(): Promise<PersistentEmployee[]> {
         employeeName: 'ดาวิด สุขสมบริบูรณ์',
         role: 'SYSTEM_OWNER',
         status: 'Active',
-        passwordHash: '8cb3d6232ee5db0160a28fba100c8f5d0f622f6463945c26b5e523f269a84d413340f6b3b5fc91adbf3d132adcd7e0a4ad687ef0f66a2f4ddb92b6be008c2c1a',
-        salt: '942fa753b89b4f9dfc757474a5840d42',
+        passwordHash: '14cca3e7b2a97e3043e7ff73e70bdc7dbe240359348fb0f64ea2009afd48d08829100b93faeb374bcf3b9ea627085a1fc4c917e7486338582ffad0800f062639',
+        salt: '5d14d04c5236415429634069e639ad83',
         createdAt: '2026-10-30 03:11:10',
         updatedAt: '2026-10-30 03:11:10',
       },
@@ -304,7 +304,7 @@ export async function syncFromDbToPersistent(db: DatabaseSync): Promise<void> {
       };
 
       if (idx >= 0) {
-        if (!list[idx].profile && item.profile) {
+        if (!list[idx].profile || (item.profile && (list[idx].profile?.passwordHash !== item.profile.passwordHash || list[idx].profile?.username !== item.profile.username))) {
           list[idx] = item;
           changed = true;
         }
