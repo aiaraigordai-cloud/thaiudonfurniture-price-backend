@@ -15,8 +15,8 @@
       "employeeName": "ดาวิด สุขสมบริบูรณ์",
       "role": "SYSTEM_OWNER",
       "status": "Active",
-      "passwordHash": "14cca3e7b2a97e3043e7ff73e70bdc7dbe240359348fb0f64ea2009afd48d08829100b93faeb374bcf3b9ea627085a1fc4c917e7486338582ffad0800f062639",
-      "salt": "5d14d04c5236415429634069e639ad83",
+      "passwordHash": "6c57ae20a991906383c31a31adb9f4e55278e697baed378c18a3205655ea84b7c7518a243d4fdb1b78643d25bb1566c4d16749da07ccbf8f675c13c1279a4640",
+      "salt": "43e6d2edc4fa077c511fa6958a9d3cba",
       "createdAt": "2026-10-30 03:11:10",
       "updatedAt": "2026-10-30 03:11:10"
     },
