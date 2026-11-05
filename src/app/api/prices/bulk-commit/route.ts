@@ -96,8 +96,22 @@ export async function POST(request: Request) {
 
     try {
       for (const row of rowsToCommit) {
-        // Find product
-        const prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
+        // Find product with multi-layer fallback lookup
+        let prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
+        if (!prod && row.detected_sku) {
+          const clean = row.detected_sku.toUpperCase().replace(/[-_\s.]/g, '');
+          prod = await db.prepare("SELECT id, sku FROM products WHERE REPLACE(REPLACE(REPLACE(REPLACE(UPPER(sku), '-', ''), '_', ''), ' ', ''), '.', '') = ?").get(clean) as any;
+        }
+        if (!prod && row.detected_product_name) {
+          prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_product_name) as any;
+        }
+        if (!prod && row.detected_product_name) {
+          prod = await db.prepare('SELECT id, sku FROM products WHERE LOWER(name) = LOWER(?)').get(row.detected_product_name) as any;
+        }
+        if (!prod && row.detected_sku) {
+          prod = await db.prepare('SELECT id, sku FROM products WHERE LOWER(name) = LOWER(?)').get(row.detected_sku) as any;
+        }
+
         if (!prod || row.new_price === null || row.new_price <= 0) {
           continue;
         }

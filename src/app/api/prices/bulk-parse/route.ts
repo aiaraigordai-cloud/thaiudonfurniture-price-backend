@@ -218,25 +218,6 @@ export async function POST(request: Request) {
           row.forEach((cell: any, idx: number) => {
             const str = String(cell || '').trim().toLowerCase();
             if (
-              str.includes('รหัส') ||
-              str === 'sku' ||
-              str.includes('sku') ||
-              str.includes('item code') ||
-              str.includes('code') ||
-              str.includes('barcode') ||
-              str.includes('model') ||
-              str.includes('รุ่น')
-            ) {
-              sCol = idx;
-            } else if (
-              str.includes('ชื่อ') ||
-              str.includes('name') ||
-              str.includes('รายการ') ||
-              str.includes('รายละเอียด') ||
-              str.includes('สินค้า')
-            ) {
-              nCol = idx;
-            } else if (
               str.includes('ราคา') ||
               str.includes('price') ||
               str.includes('ราคาใหม่') ||
@@ -249,16 +230,63 @@ export async function POST(request: Request) {
               str.includes('sale')
             ) {
               pCol = idx;
+            } else if (
+              str.includes('ชื่อ') ||
+              str.includes('name') ||
+              str.includes('รายการ') ||
+              str.includes('รายละเอียด') ||
+              (str.includes('สินค้า') && !str.includes('รหัส') && !str.includes('sku'))
+            ) {
+              nCol = idx;
+            } else if (
+              str.includes('รหัส') ||
+              str === 'sku' ||
+              str.includes('sku') ||
+              str.includes('item code') ||
+              str.includes('code') ||
+              str.includes('barcode') ||
+              (!str.includes('ชื่อ') && (str.includes('model') || str === 'รุ่น'))
+            ) {
+              sCol = idx;
             }
           });
 
-          // If we found both SKU or Price in this row, mark as header row
-          if ((sCol !== -1 && pCol !== -1) || (sCol !== -1 && nCol !== -1)) {
+          // If we found both SKU or Price or Name in this row, mark as header row
+          if ((sCol !== -1 && pCol !== -1) || (sCol !== -1 && nCol !== -1) || (nCol !== -1 && pCol !== -1)) {
             skuCol = sCol;
             nameCol = nCol;
             priceCol = pCol;
             headerRowIdx = r;
             break;
+          }
+        }
+
+        // Data-driven column verification pass: Verify if skuCol actually contains SKUs vs nameCol
+        const dataStart = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+        if (jsonData.length > dataStart && skuCol !== -1 && nameCol !== -1) {
+          let sScore = 0;
+          let nScore = 0;
+          const sampleLimit = Math.min(dataStart + 20, jsonData.length);
+
+          for (let r = dataStart; r < sampleLimit; r++) {
+            const row = jsonData[r];
+            if (!Array.isArray(row)) continue;
+            const valS = String(row[skuCol] || '').trim().toUpperCase();
+            const valN = String(row[nameCol] || '').trim().toUpperCase();
+
+            if (prodMap.has(valS) || relaxedProdMap.has(valS.replace(/[-_\s.]/g, '')) || /^[A-Za-z0-9]{2,6}[-_][A-Za-z0-9]+/i.test(valS)) {
+              sScore++;
+            }
+            if (prodMap.has(valN) || relaxedProdMap.has(valN.replace(/[-_\s.]/g, '')) || /^[A-Za-z0-9]{2,6}[-_][A-Za-z0-9]+/i.test(valN)) {
+              nScore++;
+            }
+          }
+
+          // If nameCol clearly holds more SKU matches than skuCol, swap them
+          if (nScore > sScore) {
+            const temp = skuCol;
+            skuCol = nameCol;
+            nameCol = temp;
           }
         }
 
@@ -437,6 +465,44 @@ export async function POST(request: Request) {
         matchMethod = 'SKU_RELAXED';
       }
 
+      // 1.1 PARENTHESES / COMPOSITE SKU EXTRACTION (e.g. "TD-4422 (D.80 ขาว)" -> "D80", "TD-4422 (D.80 OPTION 1)" -> "D80-2")
+      if (!matchedProduct && normalizedSku) {
+        const innerMatch = normalizedSku.match(/\((?:D\.?|)(80|100|120|150)\s*(?:OPTION\s*([1-4])|ขาว|ไวท์โอ๊ค|หินอ่อน|เทา|)\)/i);
+        if (innerMatch) {
+          const size = innerMatch[1];
+          const opt = innerMatch[2];
+          const cand = opt ? `D${size}-${parseInt(opt) + 1}` : `D${size}`;
+          if (prodMap.has(cand)) {
+            matchedProduct = prodMap.get(cand);
+            matchMethod = 'SKU_EXACT';
+          }
+        }
+
+        if (!matchedProduct) {
+          const dMatch = normalizedSku.match(/\bD\.?(80|100|120|150)(?:[-_](\d+))?\b/i);
+          if (dMatch) {
+            const cand = dMatch[2] ? `D${dMatch[1]}-${dMatch[2]}` : `D${dMatch[1]}`;
+            if (prodMap.has(cand)) {
+              matchedProduct = prodMap.get(cand);
+              matchMethod = 'SKU_EXACT';
+            }
+          }
+        }
+      }
+
+      // 1.2 INVERTED COLUMN FALLBACK: Check if itemName is actually a known SKU
+      if (!matchedProduct && itemName) {
+        const itemAsSku = itemName.trim().toUpperCase();
+        const itemAsRelSku = itemAsSku.replace(/[-_\s.]/g, '');
+        if (prodMap.has(itemAsSku)) {
+          matchedProduct = prodMap.get(itemAsSku);
+          matchMethod = 'SKU_EXACT';
+        } else if (relaxedProdMap.has(itemAsRelSku)) {
+          matchedProduct = relaxedProdMap.get(itemAsRelSku);
+          matchMethod = 'SKU_RELAXED';
+        }
+      }
+
       // 2. SECONDARY MATCH: Fallback to Product Name if SKU is not found or ambiguous
       if (!matchedProduct && itemName) {
         const cleanItemName = itemName.toLowerCase();
@@ -453,6 +519,17 @@ export async function POST(request: Request) {
             matchedProduct = foundByName;
             matchMethod = 'NAME_FALLBACK';
           }
+        }
+      }
+
+      // Also try matching by normalizedSku in names if normalizedSku is Thai text
+      if (!matchedProduct && normalizedSku.length >= 4) {
+        const foundBySkuAsName = existingProducts.find(p =>
+          p.name && (p.name.toLowerCase().includes(normalizedSku.toLowerCase()) || normalizedSku.toLowerCase().includes(p.name.toLowerCase()))
+        );
+        if (foundBySkuAsName) {
+          matchedProduct = foundBySkuAsName;
+          matchMethod = 'NAME_FALLBACK';
         }
       }
 
