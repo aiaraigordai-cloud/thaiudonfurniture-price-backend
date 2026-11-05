@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import crypto from 'node:crypto';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -30,6 +33,7 @@ export async function POST(request: Request) {
     }
 
     const tiers = await db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
+    const supaHistoryToSync: any[] = [];
 
     await db.exec('BEGIN TRANSACTION;');
 
@@ -48,21 +52,23 @@ export async function POST(request: Request) {
           const oldPrice = currentPriceRow ? currentPriceRow.price : null;
 
           if (oldPrice !== newPrice) {
-            // Record history
+            const historyId = crypto.randomUUID();
+
+            // Record history in local SQLite
             await db.prepare(`
               INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
             `).run(
-              crypto.randomUUID(),
+              historyId,
               productId,
               tier.id,
               oldPrice,
               newPrice,
               user.id,
-              reason || 'อัปเดตราคาแบบรายตัว'
+              reason || `อัปเดตราคา ${tier.name_th} แบบรายตัว`
             );
 
-            // Upsert price
+            // Upsert price in local SQLite
             await db.prepare(`
               INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
               VALUES (?, ?, ?, ?, datetime('now'), ?)
@@ -71,11 +77,32 @@ export async function POST(request: Request) {
                 updated_at = datetime('now'),
                 updated_by = excluded.updated_by
             `).run('price_' + crypto.randomUUID(), productId, tier.id, newPrice, user.id);
+
+            // Prepare history for Supabase
+            supaHistoryToSync.push({
+              id: historyId,
+              product_id: product.sku,
+              price_tier_id: tier.id,
+              old_price: oldPrice,
+              new_price: newPrice,
+              changed_by: user.id,
+              reason: reason || `อัปเดตราคา ${tier.name_th} (${product.sku}) แบบรายตัว`,
+            });
           }
         }
       }
 
       await db.exec('COMMIT;');
+
+      // Sync history to Supabase if configured
+      const supabase = getSupabase();
+      if (supabase && supaHistoryToSync.length > 0) {
+        try {
+          await supabase.from('price_change_history').insert(supaHistoryToSync);
+        } catch (supaErr) {
+          console.warn('Supabase sync error (update-single):', supaErr);
+        }
+      }
     } catch (err: any) {
       await db.exec('ROLLBACK;');
       return NextResponse.json({ error: err.message || 'บันทึกราคาไม่สำเร็จ' }, { status: 400 });
@@ -86,7 +113,15 @@ export async function POST(request: Request) {
       updatedPrices: prices,
     });
 
-    return NextResponse.json({ success: true, message: `อัปเดตราคาสำหรับ ${product.sku} สำเร็จ` });
+    return NextResponse.json(
+      {
+        success: true,
+        message: `อัปเดตราคาสำหรับ ${product.sku} สำเร็จ`,
+        productId,
+        updatedPrices: prices,
+      },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการบันทึกราคา' }, { status: 500 });
   }

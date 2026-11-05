@@ -4,6 +4,8 @@ import { getCurrentUser, logAudit } from '@/lib/auth';
 import crypto from 'node:crypto';
 import { getSupabase } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser();
@@ -15,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'คุณไม่มีสิทธิ์นำเข้าไฟล์ราคา (price_bulk_import)' }, { status: 403 });
     }
 
-    const { batchId, selectedRowIds } = await request.json();
+    const { batchId, selectedRowIds, overrideRows } = await request.json();
 
     if (!batchId) {
       return NextResponse.json({ error: 'ไม่พบรหัส Batch การนำเข้า' }, { status: 400 });
@@ -33,13 +35,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ไม่พบ Batch ในระบบ' }, { status: 404 });
     }
 
+    // If client provided approved/edited rows, update them in price_import_rows first
+    if (Array.isArray(overrideRows) && overrideRows.length > 0) {
+      const updateStmt = db.prepare(`
+        UPDATE price_import_rows
+        SET detected_sku = ?, new_price = ?, validation_status = 'PASS', warning_reason = 'อนุมัติโดยผู้ใช้งาน'
+        WHERE id = ? AND batch_id = ?
+      `);
+
+      for (const r of overrideRows) {
+        if (r.id && r.new_price > 0) {
+          updateStmt.run(r.detected_sku, r.new_price, r.id, batchId);
+        }
+      }
+
+      const supabase = getSupabase();
+      if (supabase) {
+        for (const r of overrideRows) {
+          if (r.id && r.new_price > 0) {
+            try {
+              await supabase.from('price_import_rows').update({
+                detected_sku: r.detected_sku,
+                new_price: r.new_price,
+                validation_status: 'PASS',
+                warning_reason: 'อนุมัติโดยผู้ใช้งาน'
+              }).eq('id', r.id);
+            } catch (err) {
+              console.warn('Supabase update row error:', err);
+            }
+          }
+        }
+      }
+    }
+
     // Get rows to update
     let rowsToCommit: any[] = [];
     if (Array.isArray(selectedRowIds) && selectedRowIds.length > 0) {
       const placeholders = selectedRowIds.map(() => '?').join(',');
+      // Note: allow all user-approved rows regardless of prior status
       rowsToCommit = await db.prepare(`
         SELECT * FROM price_import_rows
-        WHERE batch_id = ? AND id IN (${placeholders}) AND validation_status != 'FAILED'
+        WHERE batch_id = ? AND id IN (${placeholders})
       `).all(batchId, ...selectedRowIds) as any[];
     } else {
       // Default to all PASS rows
@@ -54,6 +90,7 @@ export async function POST(request: Request) {
     }
 
     let updatedSuccessCount = 0;
+    const historyRowsToSync: any[] = [];
 
     await db.exec('BEGIN TRANSACTION;');
 
@@ -61,7 +98,7 @@ export async function POST(request: Request) {
       for (const row of rowsToCommit) {
         // Find product
         const prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
-        if (!prod || row.new_price === null || row.new_price < 0) {
+        if (!prod || row.new_price === null || row.new_price <= 0) {
           continue;
         }
 
@@ -71,14 +108,15 @@ export async function POST(request: Request) {
         `).get(prod.id, batch.price_tier_id) as any;
 
         const oldPrice = currentPriceRow ? currentPriceRow.price : null;
+        const changeId = crypto.randomUUID();
 
-        // Save history
+        // Save history in SQLite
         await db.prepare(`
           INSERT INTO price_change_history (
             id, product_id, price_tier_id, old_price, new_price, batch_id, changed_by, reason, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         `).run(
-          crypto.randomUUID(),
+          changeId,
           prod.id,
           batch.price_tier_id,
           oldPrice,
@@ -88,7 +126,7 @@ export async function POST(request: Request) {
           `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
         );
 
-        // Upsert price
+        // Upsert price in SQLite
         await db.prepare(`
           INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
           VALUES (?, ?, ?, ?, datetime('now'), ?)
@@ -98,10 +136,21 @@ export async function POST(request: Request) {
             updated_by = excluded.updated_by
         `).run('price_' + crypto.randomUUID(), prod.id, batch.price_tier_id, row.new_price, user.id);
 
+        historyRowsToSync.push({
+          id: changeId,
+          product_id: prod.sku,
+          price_tier_id: batch.price_tier_id,
+          old_price: oldPrice,
+          new_price: row.new_price,
+          batch_id: batchId,
+          changed_by: user.id,
+          reason: `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
+        });
+
         updatedSuccessCount++;
       }
 
-      // Update batch status
+      // Update batch status in SQLite
       await db.prepare(`
         UPDATE price_import_batches
         SET status = 'COMMITTED', updated_rows = ?
@@ -118,17 +167,6 @@ export async function POST(request: Request) {
             status: 'COMMITTED',
             updated_rows: updatedSuccessCount
           }).eq('id', batchId);
-
-          const historyRowsToSync = rowsToCommit.map(r => ({
-            id: crypto.randomUUID(),
-            product_id: r.detected_sku,
-            price_tier_id: batch.price_tier_id,
-            old_price: r.old_price,
-            new_price: r.new_price,
-            batch_id: batchId,
-            changed_by: user.id,
-            reason: `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
-          }));
 
           if (historyRowsToSync.length > 0) {
             for (let i = 0; i < historyRowsToSync.length; i += 100) {
@@ -154,10 +192,9 @@ export async function POST(request: Request) {
       success: true,
       message: `อัปเดตราคาสำเร็จทั้งหมด ${updatedSuccessCount} รายการ สำหรับ ${batch.tier_name}`,
       updatedRows: updatedSuccessCount,
-      batchId,
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error: any) {
-    console.error('Commit error:', error);
+    console.error('Bulk commit error:', error);
     return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการบันทึกราคา' }, { status: 500 });
   }
 }

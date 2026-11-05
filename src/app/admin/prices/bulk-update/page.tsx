@@ -137,8 +137,9 @@ export default function BulkPriceUpdatePage() {
   };
 
   const toggleRowSelect = (id: string, status: string) => {
-    if (status === 'FAILED') {
-      alert('รายการสถานะ FAILED ไม่สามารถเลือกเพื่ออัปเดตได้จนกว่าจะแก้ไขข้อมูล SKU หรือราคาให้ถูกต้อง');
+    const row = rows.find((r) => r.id === id);
+    if (!row || row.new_price === null || row.new_price <= 0) {
+      alert('กรุณากรอกราคาใหม่ที่ถูกต้องก่อนเลือกอนุมัติรายการนี้');
       return;
     }
     const next = new Set(selectedRowIds);
@@ -148,6 +149,74 @@ export default function BulkPriceUpdatePage() {
       next.add(id);
     }
     setSelectedRowIds(next);
+  };
+
+  const handleApproveSingleRow = (id: string) => {
+    const target = rows.find((r) => r.id === id);
+    if (!target) return;
+    if (target.new_price === null || target.new_price <= 0) {
+      alert('กรุณากรอกราคาใหม่ที่ถูกต้องก่อนอนุมัติ');
+      return;
+    }
+
+    const nextRows = rows.map((r) => {
+      if (r.id !== id) return r;
+      return {
+        ...r,
+        validation_status: 'PASS' as const,
+        warning_reason: 'อนุมัติโดยผู้ใช้งานแล้ว',
+      };
+    });
+
+    setRows(nextRows);
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+
+    if (batchData) {
+      const passed = nextRows.filter((r) => r.validation_status === 'PASS').length;
+      const review = nextRows.filter((r) => r.validation_status === 'NEEDS_REVIEW').length;
+      const failed = nextRows.filter((r) => r.validation_status === 'FAILED').length;
+      setBatchData({
+        ...batchData,
+        passedRows: passed,
+        reviewRows: review,
+        failedRows: failed,
+      });
+    }
+  };
+
+  const handleApproveAndSelectAll = () => {
+    const nextSelected = new Set<string>();
+    let approvedCount = 0;
+
+    const nextRows = rows.map((r) => {
+      if (r.new_price !== null && r.new_price > 0 && r.detected_sku) {
+        nextSelected.add(r.id);
+        approvedCount++;
+        return {
+          ...r,
+          validation_status: 'PASS' as const,
+          warning_reason: r.validation_status === 'PASS' ? r.warning_reason : 'อนุมัติทุกรายการโดยผู้ใช้งาน (Approve All)',
+        };
+      }
+      return r;
+    });
+
+    setRows(nextRows);
+    setSelectedRowIds(nextSelected);
+
+    if (batchData) {
+      const failed = nextRows.filter((r) => r.validation_status === 'FAILED').length;
+      setBatchData({
+        ...batchData,
+        passedRows: approvedCount,
+        reviewRows: 0,
+        failedRows: failed,
+      });
+    }
   };
 
   const selectAllPass = () => {
@@ -201,6 +270,12 @@ export default function BulkPriceUpdatePage() {
         body: JSON.stringify({
           batchId: batchData.batchId,
           selectedRowIds: Array.from(selectedRowIds),
+          overrideRows: rows.filter((r) => selectedRowIds.has(r.id)).map((r) => ({
+            id: r.id,
+            detected_sku: r.detected_sku,
+            new_price: r.new_price,
+            validation_status: r.validation_status,
+          })),
         }),
       });
 
@@ -634,18 +709,27 @@ export default function BulkPriceUpdatePage() {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleApproveAndSelectAll}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow-xs flex items-center gap-1.5"
+                title="กดอนุมัติทุกรายการที่ระบุราคาและเลือกลงระบบพร้อมกัน"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                ✨ อนุมัติและเลือกทั้งหมด ({rows.filter((r) => r.new_price !== null && r.new_price > 0).length} รายการ)
+              </button>
               <button
                 type="button"
                 onClick={selectAllPass}
-                className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition"
+                className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition border border-emerald-200"
               >
-                เลือกรายการที่ผ่านทั้งหมด
+                เลือกเฉพาะที่ผ่านเกณฑ์
               </button>
               <button
                 type="button"
                 onClick={deselectAll}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
               >
                 ยกเลิกการเลือกทั้งหมด
               </button>
@@ -685,8 +769,8 @@ export default function BulkPriceUpdatePage() {
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleRowSelect(r.id, r.validation_status)}
-                            disabled={r.validation_status === 'FAILED'}
-                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-30"
+                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            title={r.validation_status !== 'PASS' ? 'เลือกเพื่ออนุมัติรายการนี้' : 'เลือกรายการนี้'}
                           />
                         </td>
                         <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
@@ -722,20 +806,33 @@ export default function BulkPriceUpdatePage() {
                           )}
                         </td>
                         <td className="px-4 py-3.5 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              r.validation_status === 'PASS'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.validation_status === 'NEEDS_REVIEW'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {r.validation_status === 'PASS' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                            {r.validation_status === 'NEEDS_REVIEW' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
-                            {r.validation_status === 'FAILED' && <XCircle className="w-3 h-3 text-red-600" />}
-                            {r.validation_status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                r.validation_status === 'PASS'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : r.validation_status === 'NEEDS_REVIEW'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {r.validation_status === 'PASS' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                              {r.validation_status === 'NEEDS_REVIEW' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
+                              {r.validation_status === 'FAILED' && <XCircle className="w-3 h-3 text-red-600" />}
+                              {r.validation_status}
+                            </span>
+                            {r.validation_status !== 'PASS' && (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveSingleRow(r.id)}
+                                className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold transition shadow-2xs flex items-center gap-1"
+                                title="กดอนุมัติรายการนี้เพื่อนำเข้า"
+                              >
+                                <Check className="w-2.5 h-2.5" />
+                                อนุมัติ
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-slate-500 text-[11px]">
                           {r.warning_reason || (
