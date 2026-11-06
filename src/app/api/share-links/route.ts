@@ -59,9 +59,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'SYSTEM_OWNER' && !user.permissions?.share_link_manage) {
-      return NextResponse.json({ error: 'คุณไม่มีสิทธิ์สร้างลิงก์แชร์ลูกค้า (share_link_manage)' }, { status: 403 });
-    }
+    // Allowed for all authenticated accounts
+    // (user.role === SYSTEM_OWNER or other accounts)
 
     const body = await request.json();
     const { sharing_mode, price_tier_id, catalog_filter, product_ids, customer_name, expires_days } = body;

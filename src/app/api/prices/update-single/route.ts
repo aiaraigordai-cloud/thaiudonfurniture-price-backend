@@ -26,8 +26,8 @@ export async function POST(request: Request) {
 
     const db = getDb();
 
-    // Verify product exists
-    const product = await db.prepare('SELECT id, sku, name FROM products WHERE id = ?').get(productId) as any;
+    // Verify product exists (support id or sku)
+    const product = await db.prepare('SELECT id, sku, name FROM products WHERE id = ? OR sku = ?').get(productId, productId) as any;
     if (!product) {
       return NextResponse.json({ error: 'ไม่พบสินค้า' }, { status: 404 });
     }
@@ -47,50 +47,50 @@ export async function POST(request: Request) {
 
           const currentPriceRow = await db.prepare(`
             SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
-          `).get(productId, tier.id) as any;
+          `).get(product.id, tier.id) as any;
 
           const oldPrice = currentPriceRow ? currentPriceRow.price : null;
+          const historyId = crypto.randomUUID();
 
-          if (oldPrice !== newPrice) {
-            const historyId = crypto.randomUUID();
+          // Record history in local SQLite
+          await db.prepare(`
+            INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `).run(
+            historyId,
+            product.id,
+            tier.id,
+            oldPrice,
+            newPrice,
+            user.id,
+            reason || `อัปเดตราคา ${tier.name_th} แบบรายตัว`
+          );
 
-            // Record history in local SQLite
-            await db.prepare(`
-              INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            `).run(
-              historyId,
-              productId,
-              tier.id,
-              oldPrice,
-              newPrice,
-              user.id,
-              reason || `อัปเดตราคา ${tier.name_th} แบบรายตัว`
-            );
+          // Upsert price in local SQLite
+          await db.prepare(`
+            INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
+            VALUES (?, ?, ?, ?, datetime('now'), ?)
+            ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
+              price = excluded.price,
+              updated_at = datetime('now'),
+              updated_by = excluded.updated_by
+          `).run('price_' + crypto.randomUUID(), product.id, tier.id, newPrice, user.id);
 
-            // Upsert price in local SQLite
-            await db.prepare(`
-              INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
-              VALUES (?, ?, ?, ?, datetime('now'), ?)
-              ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
-                price = excluded.price,
-                updated_at = datetime('now'),
-                updated_by = excluded.updated_by
-            `).run('price_' + crypto.randomUUID(), productId, tier.id, newPrice, user.id);
-
-            // Prepare history for Supabase
-            supaHistoryToSync.push({
-              id: historyId,
-              product_id: product.sku,
-              price_tier_id: tier.id,
-              old_price: oldPrice,
-              new_price: newPrice,
-              changed_by: user.id,
-              reason: reason || `อัปเดตราคา ${tier.name_th} (${product.sku}) แบบรายตัว`,
-            });
-          }
+          // Prepare history for Supabase
+          supaHistoryToSync.push({
+            id: historyId,
+            product_id: product.sku.trim(),
+            price_tier_id: tier.id,
+            old_price: oldPrice,
+            new_price: newPrice,
+            changed_by: user.id,
+            reason: reason || `อัปเดตราคา ${tier.name_th} (${product.sku.trim()}) แบบรายตัว`,
+          });
         }
       }
+
+      // Mark product updated_at
+      await db.prepare(`UPDATE products SET updated_at = datetime('now') WHERE id = ?`).run(product.id);
 
       await db.exec('COMMIT;');
 

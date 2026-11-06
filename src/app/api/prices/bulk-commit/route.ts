@@ -51,19 +51,25 @@ export async function POST(request: Request) {
 
       const supabase = getSupabase();
       if (supabase) {
-        for (const r of overrideRows) {
-          if (r.id && r.new_price > 0) {
-            try {
-              await supabase.from('price_import_rows').update({
-                detected_sku: r.detected_sku,
-                new_price: r.new_price,
-                validation_status: 'PASS',
-                warning_reason: 'อนุมัติโดยผู้ใช้งาน'
-              }).eq('id', r.id);
-            } catch (err) {
-              console.warn('Supabase update row error:', err);
+        try {
+          const supaUpdates = overrideRows
+            .filter((r: any) => r.id && r.new_price > 0)
+            .map((r: any) => ({
+              id: r.id,
+              batch_id: batchId,
+              detected_sku: r.detected_sku,
+              new_price: r.new_price,
+              validation_status: 'PASS',
+              warning_reason: 'อนุมัติโดยผู้ใช้งาน'
+            }));
+
+          if (supaUpdates.length > 0) {
+            for (let i = 0; i < supaUpdates.length; i += 50) {
+              await supabase.from('price_import_rows').upsert(supaUpdates.slice(i, i + 50), { onConflict: 'id' });
             }
           }
+        } catch (err) {
+          console.warn('Supabase bulk update row error:', err);
         }
       }
     }
@@ -89,27 +95,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ไม่มีรายการที่ผ่านเกณฑ์หรือถูกเลือกเพื่ออัปเดต' }, { status: 400 });
     }
 
+    // Preload products for fast in-memory matching
+    const allProducts = await db.prepare('SELECT id, sku, name FROM products').all() as any[];
+    const prodBySku = new Map<string, any>();
+    const prodByCleanSku = new Map<string, any>();
+    const prodByName = new Map<string, any>();
+
+    for (const p of allProducts) {
+      if (p.sku) {
+        prodBySku.set(p.sku.toUpperCase(), p);
+        const clean = p.sku.toUpperCase().replace(/[-_\s.]/g, '');
+        prodByCleanSku.set(clean, p);
+      }
+      if (p.name) {
+        prodByName.set(p.name.toLowerCase().trim(), p);
+      }
+    }
+
     let updatedSuccessCount = 0;
     const historyRowsToSync: any[] = [];
+
+    const getPriceStmt = db.prepare(`SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?`);
+    const insertHistoryStmt = db.prepare(`
+      INSERT INTO price_change_history (
+        id, product_id, price_tier_id, old_price, new_price, batch_id, changed_by, reason, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
+    const upsertPriceStmt = db.prepare(`
+      INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
+      VALUES (?, ?, ?, ?, datetime('now'), ?)
+      ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
+        price = excluded.price,
+        updated_at = datetime('now'),
+        updated_by = excluded.updated_by
+    `);
 
     await db.exec('BEGIN TRANSACTION;');
 
     try {
       for (const row of rowsToCommit) {
-        // Find product with multi-layer fallback lookup
-        let prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_sku) as any;
+        // Find product with fast in-memory multi-layer fallback lookup
+        let prod = null;
+        if (row.detected_sku) {
+          prod = prodBySku.get(row.detected_sku.toUpperCase());
+        }
         if (!prod && row.detected_sku) {
           const clean = row.detected_sku.toUpperCase().replace(/[-_\s.]/g, '');
-          prod = await db.prepare("SELECT id, sku FROM products WHERE REPLACE(REPLACE(REPLACE(REPLACE(UPPER(sku), '-', ''), '_', ''), ' ', ''), '.', '') = ?").get(clean) as any;
+          prod = prodByCleanSku.get(clean);
         }
         if (!prod && row.detected_product_name) {
-          prod = await db.prepare('SELECT id, sku FROM products WHERE UPPER(sku) = UPPER(?)').get(row.detected_product_name) as any;
+          prod = prodBySku.get(row.detected_product_name.toUpperCase());
         }
         if (!prod && row.detected_product_name) {
-          prod = await db.prepare('SELECT id, sku FROM products WHERE LOWER(name) = LOWER(?)').get(row.detected_product_name) as any;
+          prod = prodByName.get(row.detected_product_name.toLowerCase().trim());
         }
         if (!prod && row.detected_sku) {
-          prod = await db.prepare('SELECT id, sku FROM products WHERE LOWER(name) = LOWER(?)').get(row.detected_sku) as any;
+          prod = prodByName.get(row.detected_sku.toLowerCase().trim());
         }
 
         if (!prod || row.new_price === null || row.new_price <= 0) {
@@ -117,19 +158,12 @@ export async function POST(request: Request) {
         }
 
         // Current price
-        const currentPriceRow = await db.prepare(`
-          SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
-        `).get(prod.id, batch.price_tier_id) as any;
-
+        const currentPriceRow = getPriceStmt.get(prod.id, batch.price_tier_id) as any;
         const oldPrice = currentPriceRow ? currentPriceRow.price : null;
         const changeId = crypto.randomUUID();
 
         // Save history in SQLite
-        await db.prepare(`
-          INSERT INTO price_change_history (
-            id, product_id, price_tier_id, old_price, new_price, batch_id, changed_by, reason, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).run(
+        insertHistoryStmt.run(
           changeId,
           prod.id,
           batch.price_tier_id,
@@ -141,18 +175,11 @@ export async function POST(request: Request) {
         );
 
         // Upsert price in SQLite
-        await db.prepare(`
-          INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
-          VALUES (?, ?, ?, ?, datetime('now'), ?)
-          ON CONFLICT(product_id, price_tier_id) DO UPDATE SET
-            price = excluded.price,
-            updated_at = datetime('now'),
-            updated_by = excluded.updated_by
-        `).run('price_' + crypto.randomUUID(), prod.id, batch.price_tier_id, row.new_price, user.id);
+        upsertPriceStmt.run('price_' + crypto.randomUUID(), prod.id, batch.price_tier_id, row.new_price, user.id);
 
         historyRowsToSync.push({
           id: changeId,
-          product_id: prod.sku,
+          product_id: (prod.sku || '').trim(),
           price_tier_id: batch.price_tier_id,
           old_price: oldPrice,
           new_price: row.new_price,
@@ -173,7 +200,7 @@ export async function POST(request: Request) {
 
       await db.exec('COMMIT;');
 
-      // Sync commit and history to Supabase if configured
+      // Sync commit and history to Supabase if configured (in batches of 50)
       const supabase = getSupabase();
       if (supabase) {
         try {
@@ -183,8 +210,8 @@ export async function POST(request: Request) {
           }).eq('id', batchId);
 
           if (historyRowsToSync.length > 0) {
-            for (let i = 0; i < historyRowsToSync.length; i += 100) {
-              await supabase.from('price_change_history').insert(historyRowsToSync.slice(i, i + 100));
+            for (let i = 0; i < historyRowsToSync.length; i += 50) {
+              await supabase.from('price_change_history').insert(historyRowsToSync.slice(i, i + 50));
             }
           }
         } catch (supaErr) {

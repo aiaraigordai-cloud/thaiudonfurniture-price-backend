@@ -9,17 +9,43 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'SYSTEM_OWNER' && !user.permissions?.share_link_manage) {
-      return NextResponse.json({ error: 'คุณไม่มีสิทธิ์ยกเลิกลิงก์' }, { status: 403 });
+    // Allowed for all authenticated accounts
+
+    const body = await request.json().catch(() => ({}));
+    const db = getDb();
+
+    const existing = await db.prepare('SELECT id, is_revoked, customer_name FROM share_links WHERE id = ?').get(params.id) as any;
+    if (!existing) {
+      return NextResponse.json({ error: 'ไม่พบลิงก์แชร์' }, { status: 404 });
     }
 
-    const db = getDb();
-    await db.prepare('UPDATE share_links SET is_revoked = 1 WHERE id = ?').run(params.id);
+    // If body specifies is_revoked explicitly, use it; otherwise toggle or revoke
+    let targetRevoked = 1;
+    if (body.is_revoked !== undefined) {
+      targetRevoked = body.is_revoked ? 1 : 0;
+    } else if (body.action === 'activate' || body.action === 'enable') {
+      targetRevoked = 0;
+    } else if (body.action === 'toggle') {
+      targetRevoked = existing.is_revoked === 1 ? 0 : 1;
+    }
 
-    await logAudit('REVOKE_SHARE_LINK', 'SHARE_LINK', params.id, user.id, user.username, {});
+    await db.prepare('UPDATE share_links SET is_revoked = ? WHERE id = ?').run(targetRevoked, params.id);
 
-    return NextResponse.json({ success: true, message: 'ยกเลิกลิงก์แชร์เรียบร้อยแล้ว' });
+    await logAudit(
+      targetRevoked === 1 ? 'REVOKE_SHARE_LINK' : 'ACTIVATE_SHARE_LINK',
+      'SHARE_LINK',
+      params.id,
+      user.id,
+      user.username,
+      {}
+    );
+
+    return NextResponse.json({
+      success: true,
+      is_revoked: targetRevoked,
+      message: targetRevoked === 1 ? 'ระงับลิงก์แชร์เรียบร้อยแล้ว' : 'เปิดใช้งานลิงก์แชร์เรียบร้อยแล้ว',
+    });
   } catch (error) {
-    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการยกเลิกลิงก์' }, { status: 500 });
+    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะลิงก์' }, { status: 500 });
   }
 }

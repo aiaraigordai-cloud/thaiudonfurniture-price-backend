@@ -87,6 +87,149 @@ export default function ProductsPage() {
   const [showRealtimeToast, setShowRealtimeToast] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // 6. Reference Image Uploading State
+  const [uploadingRefId, setUploadingRefId] = useState<string | null>(null);
+
+  const compressImageToDataUrl = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleUploadRefImage = async (productId: string, file?: File) => {
+    if (!file) return;
+    setUploadingRefId(productId);
+    setActionMsg('');
+
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 1200, 1200, 0.85);
+
+      const res = await fetch(`/api/products/${productId}/ref-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageUrl: dataUrl,
+          filename: file.name,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'อัปโหลดภาพอ้างอิงไม่สำเร็จ');
+      } else {
+        // Real-time optimistic update in product state
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id !== productId) return p;
+            const updatedImages = [dataUrl, ...(p.images || []).filter((img: string) => img !== dataUrl)];
+            return {
+              ...p,
+              ref_image_url: dataUrl,
+              ref_filename: file.name,
+              images: updatedImages,
+            };
+          })
+        );
+
+        if (previewProduct && previewProduct.id === productId) {
+          setPreviewProduct((prev: any) => ({
+            ...prev,
+            ref_image_url: dataUrl,
+            ref_filename: file.name,
+            images: [dataUrl, ...(prev.images || []).filter((img: string) => img !== dataUrl)],
+          }));
+        }
+
+        setActionMsg(`📸 อัปโหลดภาพอ้างอิง (${file.name}) สำเร็จแบบ Real-time`);
+
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({ type: 'PRODUCTS_UPDATED', timestamp: Date.now() });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('เกิดข้อผิดพลาดในการอัปโหลดภาพอ้างอิง');
+    } finally {
+      setUploadingRefId(null);
+    }
+  };
+
+  const handleDeleteRefImage = async (productId: string) => {
+    if (!confirm('ยืนยันการลบภาพอ้างอิงจริงของสินค้านี้?')) return;
+    try {
+      const res = await fetch(`/api/products/${productId}/ref-image`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setActionMsg('🗑️ ลบภาพอ้างอิงสำเร็จแบบ Real-time');
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id !== productId) return p;
+            return {
+              ...p,
+              ref_image_url: null,
+              ref_filename: null,
+              images: (p.images || []).filter((img: string) => !img.includes('/ref/') && !img.startsWith('data:image')),
+            };
+          })
+        );
+        if (previewProduct && previewProduct.id === productId) {
+          setPreviewProduct((prev: any) => ({
+            ...prev,
+            ref_image_url: null,
+            ref_filename: null,
+            images: (prev.images || []).filter((img: string) => !img.includes('/ref/') && !img.startsWith('data:image')),
+          }));
+          setPreviewActiveImgIdx(0);
+        }
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({ type: 'PRODUCTS_UPDATED', timestamp: Date.now() });
+          } catch {}
+        }
+      } else {
+        alert(data.error || 'ลบภาพอ้างอิงไม่สำเร็จ');
+      }
+    } catch {
+      alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    }
+  };
+
   const loadProducts = async (silent = false) => {
     if (!silent) setLoading(true);
     else setIsSyncing(true);
@@ -95,7 +238,9 @@ export default function ProductsPage() {
       const params = new URLSearchParams();
       if (search) params.append('q', search);
       if (selectedCategory) params.append('category', selectedCategory);
-      if (selectedStatus) params.append('status', selectedStatus);
+      if (selectedStatus && !['price_incomplete', 'image_incomplete', 'price_complete', 'image_complete'].includes(selectedStatus)) {
+        params.append('status', selectedStatus);
+      }
       if (catalogTypeFilter !== 'all') params.append('catalog_type', catalogTypeFilter);
 
       const res = await fetch(`/api/products?${params.toString()}`);
@@ -221,6 +366,48 @@ export default function ProductsPage() {
       alert('เกิดข้อผิดพลาดในการลบสินค้า');
     }
   };
+
+  // Check if 4 prices are incomplete
+  const checkPriceIncomplete = (prod: any) => {
+    const p = prod.prices || {};
+    const s = Number(p.SALE_PRICE) || 0;
+    const r = Number(p.RETAIL_PRICE) || 0;
+    const v = Number(p.VIP_PRICE) || 0;
+    const g = Number(p.GENERAL_PRICE) || 0;
+    return s <= 0 || r <= 0 || v <= 0 || g <= 0;
+  };
+
+  // Check if images are incomplete: "ในกรณีที่ขาดรูปภาพอ้างอิงหรือสินค้าหลัก อย่างใดอย่างหนึ่ง"
+  const checkImageIncomplete = (prod: any) => {
+    const hasRef = Boolean(
+      prod.ref_image_url ||
+      (prod.images && prod.images.some((img: string) => img.includes('/ref/') || img.startsWith('data:image')))
+    );
+    const hasPrimary = Boolean(
+      (prod.images && prod.images.some((img: string) => img !== prod.ref_image_url && !img.includes('/ref/'))) ||
+      prod.graphic_filename
+    );
+    return !hasRef || !hasPrimary;
+  };
+
+  const countPriceIncomplete = products.filter(checkPriceIncomplete).length;
+  const countImageIncomplete = products.filter(checkImageIncomplete).length;
+
+  const displayedProducts = products.filter((prod) => {
+    if (selectedStatus === 'price_incomplete') {
+      return checkPriceIncomplete(prod);
+    }
+    if (selectedStatus === 'image_incomplete') {
+      return checkImageIncomplete(prod);
+    }
+    if (selectedStatus === 'price_complete') {
+      return !checkPriceIncomplete(prod);
+    }
+    if (selectedStatus === 'image_complete') {
+      return !checkImageIncomplete(prod);
+    }
+    return true;
+  });
 
   // Open Preview Modal
   const openImagePreview = (prod: any, imgIdx = 0) => {
@@ -508,12 +695,57 @@ export default function ProductsPage() {
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-3 py-2 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs text-[#402E20] focus:outline-none focus:border-[#C5A059]"
           >
-            <option value="">ทุกสถานะ</option>
+            <option value="">ทุกสถานะ ({products.length})</option>
             <option value="Published">Published (เผยแพร่)</option>
             <option value="Draft">Draft (ร่าง)</option>
             <option value="Archived">Archived (เก็บถาวร)</option>
+            <option value="price_incomplete">⚠️ ราคาไม่ครบ ({countPriceIncomplete})</option>
+            <option value="image_incomplete">📷 รูปภาพไม่ครบ ({countImageIncomplete})</option>
+            <option value="price_complete">✓ ราคาครบ</option>
+            <option value="image_complete">✓ รูปภาพครบ</option>
           </select>
         </div>
+      </div>
+
+      {/* Quick Status Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-[#705E4F]">ตัวกรองสถานะด่วน:</span>
+        <button
+          onClick={() => setSelectedStatus(selectedStatus === 'price_incomplete' ? '' : 'price_incomplete')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+            selectedStatus === 'price_incomplete'
+              ? 'bg-amber-600 text-white border-amber-600'
+              : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+          }`}
+        >
+          <span>⚠️ ราคาไม่ครบ</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-200/80 text-amber-950 font-mono">
+            {countPriceIncomplete}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setSelectedStatus(selectedStatus === 'image_incomplete' ? '' : 'image_incomplete')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+            selectedStatus === 'image_incomplete'
+              ? 'bg-rose-600 text-white border-rose-600'
+              : 'bg-rose-50 text-rose-900 border-rose-300 hover:bg-rose-100'
+          }`}
+        >
+          <span>📷 รูปภาพไม่ครบ</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-200/80 text-rose-950 font-mono">
+            {countImageIncomplete}
+          </span>
+        </button>
+
+        {selectedStatus && (
+          <button
+            onClick={() => setSelectedStatus('')}
+            className="text-xs text-slate-500 hover:text-slate-800 underline ml-2 font-medium"
+          >
+            ล้างตัวกรองสถานะ
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -551,14 +783,14 @@ export default function ProductsPage() {
                     <div>กำลังโหลดข้อมูลสินค้า...</div>
                   </td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : displayedProducts.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-[#705E4F]">
-                    ไม่พบรายการสินค้าที่ค้นหา
+                    ไม่พบรายการสินค้าที่ค้นหา หรือตรงตามตัวกรองสถานะ
                   </td>
                 </tr>
               ) : (
-                products.map((prod) => {
+                displayedProducts.map((prod) => {
                   const isChecked = selectedProductIds.has(prod.id);
                   return (
                     <tr
@@ -614,13 +846,36 @@ export default function ProductsPage() {
                                 </span>
                               )}
                             </div>
-                            <button
-                              onClick={() => openImagePreview(prod, 0)}
-                              className="text-[10px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1 mt-0.5"
-                            >
-                              <Eye className="w-3 h-3 text-red-600" />
-                              ดูรูปภาพ
-                            </button>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <button
+                                onClick={() => openImagePreview(prod, 0)}
+                                className="text-[10px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1"
+                              >
+                                <Eye className="w-3 h-3 text-red-600" />
+                                ดูรูปภาพ
+                              </button>
+                              <span className="text-slate-300 text-[10px]">•</span>
+                              <label
+                                className={`text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
+                                  uploadingRefId === prod.id ? 'text-amber-500 animate-pulse' : 'text-amber-700 hover:text-amber-800'
+                                }`}
+                                title="อัปโหลดภาพอ้างอิงสำหรับสินค้านี้ (Real-time)"
+                              >
+                                <Camera className="w-3 h-3 text-amber-600" />
+                                <span>{uploadingRefId === prod.id ? 'กำลังอัปโหลด...' : 'ภาพอ้างอิง'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={uploadingRefId === prod.id}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleUploadRefImage(prod.id, file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </label>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -666,17 +921,59 @@ export default function ProductsPage() {
                       </td>
 
                       <td className="px-3 py-3.5 text-center">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                            prod.status === 'Published'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : prod.status === 'Draft'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {prod.status}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                              prod.status === 'Published'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : prod.status === 'Draft'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {prod.status}
+                          </span>
+
+                          {/* ราคาไม่ครบ */}
+                          {checkPriceIncomplete(prod) ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs whitespace-nowrap"
+                              title="ราคายังไม่ครบทั้ง 4 ระดับ (กรุณาระบุราคาให้ครบ)"
+                            >
+                              ⚠️ ราคาไม่ครบ
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              title="ราคาทั้ง 4 ระดับครบถ้วน"
+                            >
+                              ✓ ราคาครบ
+                            </span>
+                          )}
+
+                          {/* รูปภาพไม่ครบ: ในกรณีที่ขาดรูปภาพอ้างอิงหรือสินค้าหลัก อย่างใดอย่างหนึ่ง */}
+                          {checkImageIncomplete(prod) ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-300 shadow-2xs whitespace-nowrap"
+                              title={
+                                !prod.ref_image_url && !prod.graphic_filename && (!prod.images || prod.images.length === 0)
+                                  ? 'ขาดทั้งสินค้าหลักและภาพอ้างอิง'
+                                  : !prod.ref_image_url
+                                  ? 'ขาดภาพอ้างอิง'
+                                  : 'ขาดรูปภาพสินค้าหลัก'
+                              }
+                            >
+                              📷 รูปภาพไม่ครบ
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                              title="มีทั้งรูปภาพสินค้าหลักและภาพอ้างอิงครบถ้วน"
+                            >
+                              ✓ รูปภาพครบ
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-3.5 text-right">
@@ -690,6 +987,25 @@ export default function ProductsPage() {
                             <Share2 className="w-3.5 h-3.5 text-[#C5A059]" />
                             <span>แชร์</span>
                           </button>
+
+                          {/* Upload Reference Image Button */}
+                          <label
+                            className="p-1.5 text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg transition border border-amber-200 cursor-pointer shadow-2xs"
+                            title="อัปโหลดภาพอ้างอิงสำหรับสินค้านี้ (Real-time)"
+                          >
+                            <Camera className="w-4 h-4" />
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingRefId === prod.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleUploadRefImage(prod.id, file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
 
                           <Link
                             href={`/admin/products/${prod.id}`}
@@ -846,18 +1162,45 @@ export default function ProductsPage() {
                     ? '📸 ภาพอ้างอิงจริง (Reference / Dicut)'
                     : 'ภาพกราฟิกสินค้าหลัก (Graphic Presentation)'}
                 </div>
-                <button
-                  onClick={() => {
-                    const currentImg = previewProduct.images?.[previewActiveImgIdx];
-                    const isRef = currentImg?.includes('/ref/');
-                    const filename = isRef ? previewProduct.ref_filename : previewProduct.graphic_filename;
-                    downloadFile(currentImg, filename);
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>บันทึกไฟล์ภาพนี้ (Save File)</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {previewProduct.ref_image_url && (
+                    <button
+                      onClick={() => handleDeleteRefImage(previewProduct.id)}
+                      className="px-3.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                      title="ลบภาพอ้างอิงออกจากสินค้านี้"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                      <span>ลบภาพอ้างอิง</span>
+                    </button>
+                  )}
+                  <label className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{uploadingRefId === previewProduct.id ? 'กำลังอัปโหลด...' : 'อัปโหลดภาพอ้างอิงใหม่'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingRefId === previewProduct.id}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadRefImage(previewProduct.id, file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <button
+                    onClick={() => {
+                      const currentImg = previewProduct.images?.[previewActiveImgIdx];
+                      const isRef = currentImg?.includes('/ref/');
+                      const filename = isRef ? previewProduct.ref_filename : previewProduct.graphic_filename;
+                      downloadFile(currentImg, filename);
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>บันทึกไฟล์ภาพนี้ (Save File)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Specs & Dimensions */}

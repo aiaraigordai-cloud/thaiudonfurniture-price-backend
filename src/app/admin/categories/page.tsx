@@ -293,12 +293,102 @@ export default function CatalogsAndImportPage() {
     }
   };
 
-  // Real Image OCR + Strict Filename Extraction Logic
-  // 1. อ่านข้อความ (SKU, ชื่อสินค้า, ขนาด, ราคา) จากในรูปภาพจริงด้วย OCR (รองรับทั้งรูปเดี่ยว หน้าแคตตาล็อกรวมหลายชิ้น และตารางใบราคา)
-  // 2. อ่านชื่อไฟล์เฉพาะในกรณีที่ชื่อไฟล์ระบุรหัสสินค้า (SKU) และราคาไว้ชัดเจนเท่านั้น หากชื่อไฟล์เป็นอย่างอื่น (เช่น IMG_..., 01.jpg, Norm (1).jpg) จะไม่อ่านชื่อไฟล์มาตั้งเป็นรหัสหรือราคาเด็ดขาด
-  const analyzeFilesWithAI = async (files: FileList | File[]) => {
+  // Filename Parsing Rule:
+  // "ให้อ่านข้อมูลสินค้าจากชื่อไฟล์แทน โดยถ้าชื่อไฟล์ระบุรหัสสินค้า พร้อมราคา ให้เอามาเป็นข้อมูล แต่ถ้าชื่อไฟล์ ไม่ตรงตามเงื่อนไขข้างต้น ก็ไม่ต้องเอาข้อมูลชื่อไฟล์มาใช้ แต่ให้กรอกรายละเอียดเอง"
+  const parseFilenameForProduct = (rawFilename: string) => {
+    // Strip file extension
+    const base = rawFilename.replace(/\.[^/.]+$/, '').trim();
+
+    // Sorted known SKUs from longest to shortest to match longest prefix first
+    const sortedSkus = Array.from(existingSkus).sort((a, b) => b.length - a.length);
+
+    let foundSku = '';
+    for (const k of sortedSkus) {
+      const pattern = k.replace(/[-_]/g, '[-_]?');
+      const reg = new RegExp(`(^|[\\s_(\\[-])${pattern}([\\s_)\\]-]|$|[0-9])`, 'i');
+      if (reg.test(base)) {
+        foundSku = k;
+        break;
+      }
+    }
+
+    if (!foundSku) {
+      // Regex match standard furniture SKU patterns like TD-87, TD1784, KM-2729, TB-120, etc.
+      const skuMatch = base.match(/\b([A-Za-z]{1,4}[-_]?[0-9]{2,5}[A-Za-z0-9_-]*)\b/);
+      if (skuMatch) {
+        foundSku = skuMatch[1].toUpperCase();
+      }
+    }
+
+    // Check for Price in filename
+    let foundPrice: number | null = null;
+
+    // Pattern A: explicit price keyword, e.g. "ราคา 850", "ราคา850", "850บาท", "850.-", "price 850"
+    const explicitPriceMatch = base.match(/(?:ราคา|price|฿|\$)\s*[:=]?\s*([0-9]{3,7}(?:\.[0-9]{1,2})?)/i);
+    if (explicitPriceMatch) {
+      const p = parseFloat(explicitPriceMatch[1]);
+      if (p >= 100 && p <= 999999) {
+        foundPrice = p;
+      }
+    }
+
+    // Pattern B: number separated by delimiter (_850, -850, " 850") that is NOT part of the SKU
+    if (foundPrice === null) {
+      const numberMatches = Array.from(base.matchAll(/(?:^|[\s_\-–/])([0-9]{3,7})(?:[\s_\-–/.]|$)/g));
+      for (const m of numberMatches) {
+        const numStr = m[1];
+        const skuDigits = foundSku ? foundSku.replace(/[^0-9]/g, '') : '';
+        if (skuDigits !== numStr && (!foundSku || !foundSku.includes(numStr))) {
+          const p = parseFloat(numStr);
+          if (p >= 100 && p <= 999999) {
+            foundPrice = p;
+            break;
+          }
+        }
+      }
+    }
+
+    // Condition check: "ถ้าชื่อไฟล์ระบุรหัสสินค้า พร้อมราคา ให้เอามาเป็นข้อมูล แต่ถ้าชื่อไฟล์ ไม่ตรงตามเงื่อนไขข้างต้น ก็ไม่ต้องเอาข้อมูลชื่อไฟล์มาใช้ แต่ให้กรอกรายละเอียดเอง"
+    const isValidCondition = Boolean(foundSku && foundPrice !== null);
+
+    if (isValidCondition) {
+      const existing = existingProductsMap[foundSku.toUpperCase()];
+      let cleanName = existing?.name || '';
+      if (!cleanName) {
+        cleanName = base
+          .replace(new RegExp(foundSku, 'i'), '')
+          .replace(new RegExp(String(foundPrice), 'g'), '')
+          .replace(/ราคา|บาท|price|฿|\$/gi, '')
+          .replace(/[_\-–()[\]]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      return {
+        matched: true,
+        sku: foundSku.toUpperCase(),
+        price: foundPrice,
+        name: cleanName,
+        isExisting: Boolean(existing),
+        existing,
+      };
+    } else {
+      // Condition NOT met: do NOT use filename as SKU or Price! Let user input manually
+      return {
+        matched: false,
+        sku: '',
+        price: '' as const,
+        name: '',
+        isExisting: false,
+        existing: null,
+      };
+    }
+  };
+
+  // Image Intake: Accepts 100% of uploaded images, parses filename, no OCR delay
+  const processImageFiles = async (files: FileList | File[]) => {
     setIsProcessingAI(true);
-    setImportProgress(15);
+    setImportProgress(25);
     setImportStatus(null);
 
     const fileList = Array.from(files).filter((f) =>
@@ -311,101 +401,57 @@ export default function CatalogsAndImportPage() {
       return;
     }
 
-    const thumbnailMap = new Map<number, string>();
-    fileList.forEach((f, idx) => {
-      thumbnailMap.set(idx, URL.createObjectURL(f));
-    });
-
     const results: ParsedProduct[] = [];
 
-    try {
-      // Process in batches of up to 6 images per request for smooth progress feedback
-      const batchSize = 6;
-      for (let start = 0; start < fileList.length; start += batchSize) {
-        const chunk = fileList.slice(start, start + batchSize);
-        const formData = new FormData();
-        formData.append('catalog_id', selectedCatalogId);
-        chunk.forEach((f) => formData.append('files', f));
+    fileList.forEach((file, idx) => {
+      const thumbUrl = URL.createObjectURL(file);
+      const parseResult = parseFilenameForProduct(file.name);
 
-        const res = await fetch('/api/products/analyze-image', {
-          method: 'POST',
-          body: formData,
-        });
+      const detectedPrice: number | '' =
+        parseResult.matched && parseResult.price !== null && parseResult.price !== ''
+          ? Number(parseResult.price)
+          : '';
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.items)) {
-            data.items.forEach((item: any, itemIdx: number) => {
-              const globalFileIdx = start + (typeof item.fileIndex === 'number' ? item.fileIndex : 0);
-              const origFile = fileList[globalFileIdx] || chunk[0];
-              const thumbUrl = thumbnailMap.get(globalFileIdx) || URL.createObjectURL(origFile);
-              const normalizedSku = String(item.sku || '').trim().toUpperCase();
-              const isExisting = normalizedSku ? (Boolean(item.isExisting) || existingSkus.has(normalizedSku)) : false;
-              const existingProd = normalizedSku ? existingProductsMap[normalizedSku] : undefined;
+      const prices = computePricesForTier(detectedPrice, selectedPriceTier);
+      const isExisting = parseResult.matched ? parseResult.isExisting : false;
+      const existingProd = parseResult.matched ? parseResult.existing : null;
 
-              const detectedPrice: number | '' =
-                item.detectedPrice !== '' &&
-                item.detectedPrice !== null &&
-                item.detectedPrice !== undefined &&
-                !isNaN(Number(item.detectedPrice)) &&
-                Number(item.detectedPrice) > 0
-                  ? Number(item.detectedPrice)
-                  : '';
+      results.push({
+        id: `img_item_${idx}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        file: file,
+        filename: file.name,
+        thumbnailUrl: thumbUrl,
+        sku: parseResult.sku,
+        name: parseResult.name || existingProd?.name || '',
+        description:
+          existingProd?.description ||
+          (parseResult.sku
+            ? `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${parseResult.sku}`
+            : ''),
+        category_id: existingProd?.category_id || categories[0]?.id || '',
+        category_name: existingProd?.category_name || categories[0]?.name || 'เฟอร์นิเจอร์ทั่วไป',
+        width: existingProd?.width || '',
+        height: existingProd?.height || '',
+        depth: existingProd?.depth || '',
+        color: existingProd?.color || 'สีมาตรฐานโรงงาน',
+        priceTier: selectedPriceTier,
+        detectedBasePrice: detectedPrice,
+        prices,
+        confidence: parseResult.matched ? 100 : 50,
+        isExisting,
+        validationStatus: parseResult.matched && parseResult.sku ? 'PASS' : 'NEEDS_CHECK',
+        selected: Boolean(parseResult.matched && parseResult.sku),
+      });
+    });
 
-              // กรอกเฉพาะประเภทราคาที่เลือกไว้เท่านั้น ส่วนราคาที่ไม่ได้ระบุให้เว้นว่างไว้
-              const prices = computePricesForTier(detectedPrice, selectedPriceTier);
-
-              const resolvedName =
-                (isExisting && existingProd?.name)
-                  ? existingProd.name
-                  : (item.name || '');
-
-              results.push({
-                id: `parsed_${globalFileIdx}_${itemIdx}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-                file: origFile,
-                filename: item.filename || origFile.name,
-                thumbnailUrl: thumbUrl,
-                sku: normalizedSku,
-                name: resolvedName,
-                description:
-                  item.description ||
-                  existingProd?.description ||
-                  (normalizedSku
-                    ? `สินค้าคุณภาพเกรดพรีเมียมจากไทยอุดรเฟอร์นิเจอร์ รหัส ${normalizedSku}`
-                    : ''),
-                category_id: item.category_id || existingProd?.category_id || categories[0]?.id || '',
-                category_name: item.category_name || existingProd?.category_name || categories[0]?.name || 'เฟอร์นิเจอร์ทั่วไป',
-                width: item.width || existingProd?.width || '',
-                height: item.height || existingProd?.height || '',
-                depth: item.depth || existingProd?.depth || '',
-                color: item.color || existingProd?.color || 'สีมาตรฐานโรงงาน',
-                priceTier: selectedPriceTier,
-                detectedBasePrice: detectedPrice,
-                prices,
-                confidence: item.confidence || 96,
-                isExisting,
-                validationStatus: normalizedSku && resolvedName ? 'PASS' : 'NEEDS_CHECK',
-                selected: Boolean(normalizedSku),
-              });
-            });
-          }
-        }
-
-        setImportProgress(Math.min(98, Math.round(((start + chunk.length) / fileList.length) * 100)));
-      }
-    } catch (err) {
-      console.error('Error analyzing images with OCR:', err);
-      alert('เกิดข้อผิดพลาดในการวิเคราะห์ข้อความจากรูปภาพ กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setImportProgress(100);
-      setParsedProducts((prev) => [...prev, ...results]);
-      setIsProcessingAI(false);
-    }
+    setImportProgress(100);
+    setParsedProducts((prev) => [...prev, ...results]);
+    setIsProcessingAI(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      analyzeFilesWithAI(e.target.files);
+      processImageFiles(e.target.files);
     }
   };
 
@@ -585,11 +631,11 @@ export default function CatalogsAndImportPage() {
                 นำเข้าสินค้า / แคตตาล็อก
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#DE1B23]/10 text-[#DE1B23] border border-[#DE1B23]/20">
-                Multi-SKU & Image Intelligence
+                100% Complete Image Import
               </span>
             </div>
             <p className="text-xs text-[#705E4F] mt-0.5">
-              อ่านรหัสสินค้า (SKU) และชื่อสินค้าจากแต่ละรูปภาพจริง แยกรายชิ้นอัตโนมัติ พร้อมระบบตรวจสอบก่อนบันทึกจริงบนเว็บแบบ Real-time
+              รับรูปภาพครบทุกรูปตามจำนวนที่นำเข้า ดึงรหัสสินค้าและราคาจากชื่อไฟล์อัตโนมัติ (หากระบุ) หรือกรอกรายละเอียดเอง พร้อมบันทึกขึ้นเว็บแบบ Real-time
             </p>
           </div>
         </div>
@@ -852,7 +898,7 @@ export default function CatalogsAndImportPage() {
                   : 'คลิกเพื่อเลือกโฟลเดอร์รูปภาพสินค้า (นำเข้าทั้งโฟลเดอร์)'}
               </h3>
               <p className="text-xs text-[#705E4F] mt-1 max-w-md mx-auto">
-                รองรับ PNG, JPG, JPEG, WEBP | อ่านข้อความในรูปภาพด้วย OCR แม่นยำ หรืออ่านชื่อไฟล์เฉพาะที่เป็นรหัสสินค้าและราคา
+                รองรับ PNG, JPG, JPEG, WEBP | รับรูปภาพครบทุกรูปตามจำนวน 100% พร้อมตรวจจับรหัสสินค้าและราคาจากชื่อไฟล์อัตโนมัติ
               </p>
               <div className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-[#DE1B23] to-[#B91218] text-white rounded-xl text-xs font-bold shadow-md">
                 <Sparkles className="w-3.5 h-3.5" />
@@ -865,7 +911,7 @@ export default function CatalogsAndImportPage() {
                 <div className="flex items-center justify-between text-xs font-bold text-[#805216]">
                   <span className="flex items-center gap-2">
                     <RefreshCw className="w-4 h-4 animate-spin text-[#DE1B23]" />
-                    กำลังอ่านข้อมูลรหัสสินค้าและวิเคราะห์รูปภาพ...
+                    กำลังนำเข้ารูปภาพและวิเคราะห์ชื่อไฟล์...
                   </span>
                   <span>{importProgress}%</span>
                 </div>

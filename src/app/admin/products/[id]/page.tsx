@@ -3,13 +3,27 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save, Package, Coins, Image as ImageIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Save,
+  Package,
+  Coins,
+  Image as ImageIcon,
+  AlertCircle,
+  CheckCircle2,
+  Trash2,
+  Camera,
+  UploadCloud,
+  Eye,
+  Layers,
+} from 'lucide-react';
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingRef, setDeletingRef] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -23,14 +37,54 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [depth, setDepth] = useState('');
   const [color, setColor] = useState('');
   const [status, setStatus] = useState('Published');
-  const [imageUrl1, setImageUrl1] = useState('');
-  const [imageUrl2, setImageUrl2] = useState('');
+
+  // Images states: Distinct Primary & Reference Images
+  const [primaryImageUrl, setPrimaryImageUrl] = useState('');
+  const [refImageUrl, setRefImageUrl] = useState('');
+  const [refFilename, setRefFilename] = useState('');
+  const [secondaryImageUrl, setSecondaryImageUrl] = useState('');
 
   // 4 Prices
   const [salePrice, setSalePrice] = useState('');
   const [retailPrice, setRetailPrice] = useState('');
   const [vipPrice, setVipPrice] = useState('');
   const [generalPrice, setGeneralPrice] = useState('');
+
+  const compressImageToDataUrl = (file: File, maxWidth = 1200, maxHeight = 1200, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth || h > maxHeight) {
+            if (w > h) {
+              h = Math.round((h * maxWidth) / w);
+              w = maxWidth;
+            } else {
+              w = Math.round((w * maxHeight) / h);
+              h = maxHeight;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
 
   useEffect(() => {
     async function load() {
@@ -55,10 +109,20 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           setDepth(p.depth ? String(p.depth) : '');
           setColor(p.color || '');
           setStatus(p.status || 'Published');
-          if (p.images && p.images.length > 0) {
-            setImageUrl1(p.images[0] || '');
-            setImageUrl2(p.images[1] || '');
+
+          // Reference Image
+          setRefImageUrl(p.ref_image_url || '');
+          setRefFilename(p.ref_filename || '');
+
+          // Primary and Additional Images
+          const mainImg = p.primary_image_url || (p.images && p.images[0]) || '';
+          setPrimaryImageUrl(mainImg);
+
+          if (p.images && p.images.length > 1) {
+            const second = p.images.find((img: string) => img !== mainImg && img !== p.ref_image_url);
+            setSecondaryImageUrl(second || '');
           }
+
           if (p.prices) {
             setSalePrice(p.prices.SALE_PRICE !== undefined ? String(p.prices.SALE_PRICE) : '');
             setRetailPrice(p.prices.RETAIL_PRICE !== undefined ? String(p.prices.RETAIL_PRICE) : '');
@@ -77,13 +141,48 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     load();
   }, [params.id]);
 
+  // Handle immediate deletion of Reference Image
+  const handleDeleteRefImage = async () => {
+    if (!confirm('ยืนยันการลบภาพอ้างอิงจริงของสินค้านี้?')) return;
+    setDeletingRef(true);
+    try {
+      const res = await fetch(`/api/products/${params.id}/ref-image`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRefImageUrl('');
+        setRefFilename('');
+        setSuccess('ลบภาพอ้างอิงเรียบร้อยแล้ว');
+        // Broadcast change
+        if (typeof window !== 'undefined') {
+          const channel = new BroadcastChannel('products_channel');
+          channel.postMessage({ type: 'REF_IMAGE_DELETED', productId: params.id });
+        }
+      } else {
+        setError(data.error || 'ไม่สามารถลบภาพอ้างอิงได้');
+      }
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } finally {
+      setDeletingRef(false);
+    }
+  };
+
+  // Handle immediate deletion of Primary Image
+  const handleDeletePrimaryImage = () => {
+    if (!confirm('ยืนยันการลบรูปภาพสินค้าหลักนี้ออกจากรายการ?')) return;
+    setPrimaryImageUrl('');
+    setSuccess('ลบรูปภาพสินค้าหลักออกจากฟอร์มแล้ว (กดบันทึกเพื่ออัปเดตระบบ)');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError('');
     setSuccess('');
 
-    const images = [imageUrl1, imageUrl2].filter((url) => url.trim().length > 0);
+    const images = [primaryImageUrl, secondaryImageUrl].filter((url) => url && url.trim().length > 0);
     const prices = {
       SALE_PRICE: salePrice ? parseFloat(salePrice) : 0,
       RETAIL_PRICE: retailPrice ? parseFloat(retailPrice) : 0,
@@ -106,6 +205,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           color,
           status,
           images,
+          ref_image_url: refImageUrl ? refImageUrl.trim() : null,
+          ref_filename: refFilename ? refFilename.trim() : null,
           prices,
         }),
       });
@@ -114,7 +215,12 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       if (!res.ok) {
         setError(data.error || 'แก้ไขสินค้าไม่สำเร็จ');
       } else {
-        setSuccess('บันทึกข้อมูลสินค้าและราคาทั้ง 4 ระดับสำเร็จเรียบร้อยแล้ว');
+        setSuccess('บันทึกข้อมูลสินค้า รูปภาพ และราคาทั้ง 4 ระดับสำเร็จเรียบร้อยแล้ว');
+        // Notify other tabs via BroadcastChannel
+        if (typeof window !== 'undefined') {
+          const channel = new BroadcastChannel('products_channel');
+          channel.postMessage({ type: 'PRODUCT_UPDATED', productId: params.id });
+        }
       }
     } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
@@ -133,39 +239,52 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href="/admin/products"
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-950 transition"
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-950 transition shadow-2xs"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">แก้ไขข้อมูลสินค้า: {sku}</h1>
-            <p className="text-xs text-slate-500 mt-0.5">แก้ไขรายละเอียด สเปก และปรับราคากลาง</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">แก้ไขข้อมูลสินค้า: {sku}</h1>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                status === 'Published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+              }`}>
+                {status}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">จัดการรายละเอียด สเปก รูปภาพสินค้าหลัก ภาพอ้างอิง และราคากลาง 4 ระดับ</p>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button onClick={() => setError('')} className="font-bold text-xs text-red-500 hover:text-red-700">✕</button>
         </div>
       )}
 
       {success && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-          <span>{success}</span>
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            <span>{success}</span>
+          </div>
+          <button onClick={() => setSuccess('')} className="font-bold text-xs text-emerald-600 hover:text-emerald-800">✕</button>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info Card */}
+        {/* CARD 1: Basic Info */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
             <Package className="w-4 h-4 text-emerald-600" />
@@ -238,7 +357,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           </div>
         </div>
 
-        {/* Specifications & Dimensions */}
+        {/* CARD 2: Specifications & Dimensions */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <h2 className="text-sm font-bold text-slate-800 pb-2 border-b border-slate-100">
             ขนาดและสเปกสินค้า
@@ -290,7 +409,218 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           </div>
         </div>
 
-        {/* 4 Price Tiers Card */}
+        {/* CARD 3: IMAGE MANAGEMENT (Primary Image + Reference Image with Delete & Upload) */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-emerald-600" />
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">จัดการรูปภาพสินค้า (แสดงทั้งสินค้าหลัก & ภาพอ้างอิง)</h2>
+                <p className="text-[11px] text-slate-500">สามารถดูตัวอย่าง อัปโหลดใหม่ หรือกดลบรูปภาพได้ทันทีแบบ Real-time</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 1. PRIMARY PRODUCT IMAGE */}
+            <div className="p-4 rounded-2xl border-2 border-slate-200 bg-slate-50/50 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  <span>รูปภาพสินค้าหลัก (Primary)</span>
+                </span>
+                {primaryImageUrl && (
+                  <button
+                    type="button"
+                    onClick={handleDeletePrimaryImage}
+                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs"
+                    title="ลบรูปภาพสินค้าหลัก"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                    <span>ลบภาพหลัก</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Preview Box */}
+              <div className="relative w-full h-52 bg-white rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center shadow-inner group">
+                {primaryImageUrl ? (
+                  <>
+                    <img
+                      src={primaryImageUrl}
+                      alt="Primary Product"
+                      className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
+                    />
+                    <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-0.5 rounded-full">
+                      ภาพหลัก
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center p-4 text-slate-400 space-y-1">
+                    <ImageIcon className="w-10 h-10 mx-auto text-slate-300 stroke-[1.5]" />
+                    <div className="text-xs font-semibold text-slate-500">ยังไม่มีรูปภาพสินค้าหลัก</div>
+                    <div className="text-[10px] text-slate-400">เลือกไฟล์จากเครื่องหรือวาง URL</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-700">อัปโหลดภาพหลักใหม่:</label>
+                  <label className="text-[11px] font-bold text-blue-700 hover:text-blue-800 cursor-pointer flex items-center gap-1">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>เลือกไฟล์จากเครื่อง (Real-time)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const dataUrl = await compressImageToDataUrl(file);
+                          setPrimaryImageUrl(dataUrl);
+                          setSuccess('โหลดรูปภาพหลักเข้าสู่แบบฟอร์มแล้ว');
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={primaryImageUrl}
+                  onChange={(e) => setPrimaryImageUrl(e.target.value)}
+                  placeholder="https://... หรือคลิกเลือกไฟล์ภาพจากเครื่อง"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* 2. REFERENCE IMAGE (ภาพอ้างอิงจริง) */}
+            <div className="p-4 rounded-2xl border-2 border-amber-200 bg-[#FFFAF3] space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-amber-700" />
+                  <span>ภาพอ้างอิงจริง (Reference / Dicut)</span>
+                </span>
+                {refImageUrl && (
+                  <button
+                    type="button"
+                    disabled={deletingRef}
+                    onClick={handleDeleteRefImage}
+                    className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-2xs disabled:opacity-50"
+                    title="ลบภาพอ้างอิง"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                    <span>{deletingRef ? 'กำลังลบ...' : 'ลบภาพอ้างอิง'}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Preview Box */}
+              <div className="relative w-full h-52 bg-white rounded-xl border border-amber-200/80 overflow-hidden flex items-center justify-center shadow-inner group">
+                {refImageUrl ? (
+                  <>
+                    <img
+                      src={refImageUrl}
+                      alt="Reference Product"
+                      className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-200"
+                    />
+                    <div className="absolute top-2 right-2 bg-amber-800/80 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-0.5 rounded-full">
+                      ภาพอ้างอิง
+                    </div>
+                    {refFilename && (
+                      <div className="absolute bottom-2 inset-x-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-mono px-2 py-1 rounded-lg truncate text-center">
+                        {refFilename}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center p-4 text-amber-600/60 space-y-1">
+                    <Camera className="w-10 h-10 mx-auto text-amber-400 stroke-[1.5]" />
+                    <div className="text-xs font-semibold text-amber-800">ยังไม่มีภาพอ้างอิง</div>
+                    <div className="text-[10px] text-amber-600">อัปโหลดภาพถ่ายจริงเพื่อใช้แสดงผลคู่กับภาพกราฟิก</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Controls */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-amber-900">อัปโหลดภาพอ้างอิงใหม่:</label>
+                  <label className="text-[11px] font-bold text-amber-800 hover:text-amber-950 cursor-pointer flex items-center gap-1">
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>เลือกไฟล์ภาพถ่ายจริง (Real-time)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const dataUrl = await compressImageToDataUrl(file);
+                          setRefImageUrl(dataUrl);
+                          setRefFilename(file.name || `ref_${sku}_${Date.now()}.jpg`);
+                          setSuccess('โหลดภาพอ้างอิงเข้าสู่แบบฟอร์มแล้ว');
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  value={refImageUrl}
+                  onChange={(e) => setRefImageUrl(e.target.value)}
+                  placeholder="https://... หรือคลิกเลือกไฟล์ภาพถ่ายจริง"
+                  className="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:border-amber-600"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 3. OPTIONAL SECONDARY IMAGE */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-slate-600">รูปภาพเพิ่มเติม (Secondary / Additional Image)</label>
+              {secondaryImageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setSecondaryImageUrl('')}
+                  className="text-[11px] text-red-600 hover:text-red-700 font-semibold"
+                >
+                  ลบรูปภาพเพิ่มเติม
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={secondaryImageUrl}
+                onChange={(e) => setSecondaryImageUrl(e.target.value)}
+                placeholder="https://... หรือเลือกไฟล์ภาพเพิ่มเติม"
+                className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-emerald-600"
+              />
+              <label className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1">
+                <Camera className="w-3.5 h-3.5" />
+                <span>เลือกไฟล์</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const dataUrl = await compressImageToDataUrl(file);
+                      setSecondaryImageUrl(dataUrl);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 4: 4 Price Tiers */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
             <Coins className="w-4 h-4 text-emerald-600" />
@@ -352,36 +682,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           </div>
         </div>
 
-        {/* Images */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-            <ImageIcon className="w-4 h-4 text-emerald-600" />
-            <h2 className="text-sm font-bold text-slate-800">รูปภาพสินค้า (Image URLs)</h2>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">รูปภาพหลัก (Primary Image)</label>
-              <input
-                type="url"
-                value={imageUrl1}
-                onChange={(e) => setImageUrl1(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-emerald-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">รูปภาพเพิ่มเติม (Secondary Image)</label>
-              <input
-                type="url"
-                value={imageUrl2}
-                onChange={(e) => setImageUrl2(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-emerald-600"
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Submit */}
         <div className="flex items-center justify-end gap-3 pt-2">
           <Link
@@ -400,7 +700,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                บันทึกการแก้ไข
+                บันทึกการแก้ไขสินค้า & รูปภาพ
               </>
             )}
           </button>

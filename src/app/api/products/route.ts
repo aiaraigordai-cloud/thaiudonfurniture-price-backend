@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request) {
@@ -79,12 +80,77 @@ export async function GET(request: Request) {
         prices[pr.code] = pr.price;
       });
 
+      const imgUrls = images.map((img) => img.image_url);
+      if (prod.ref_image_url && !imgUrls.includes(prod.ref_image_url)) {
+        imgUrls.unshift(prod.ref_image_url);
+      }
+
       return {
         ...prod,
-        images: images.map((img) => img.image_url),
+        images: imgUrls,
         prices,
       };
     }));
+
+    // Overlay latest real-time prices from Supabase price_change_history if configured
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data: supaHistory } = await supabase
+          .from('price_change_history')
+          .select('product_id, price_tier_id, new_price, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5000);
+
+        if (supaHistory && supaHistory.length > 0) {
+          const tierCodeById: Record<string, string> = {
+            tier_sale: 'SALE_PRICE',
+            tier_retail: 'RETAIL_PRICE',
+            tier_vip: 'VIP_PRICE',
+            tier_general: 'GENERAL_PRICE',
+          };
+
+          const latestPriceMap = new Map<string, number>();
+          for (const item of supaHistory) {
+            if (!item.product_id) continue;
+            const rawId = String(item.product_id).trim();
+            const keyUpper = `${rawId.toUpperCase()}_${item.price_tier_id}`;
+            const keyClean = `${rawId.toUpperCase().replace(/[-_\s.]/g, '')}_${item.price_tier_id}`;
+            const keyRaw = `${rawId}_${item.price_tier_id}`;
+
+            if (!latestPriceMap.has(keyUpper)) {
+              latestPriceMap.set(keyUpper, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(keyClean)) {
+              latestPriceMap.set(keyClean, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(keyRaw)) {
+              latestPriceMap.set(keyRaw, Number(item.new_price));
+            }
+          }
+
+          enrichedProducts.forEach((p) => {
+            const skuUpper = (p.sku || '').trim().toUpperCase();
+            const skuClean = skuUpper.replace(/[-_\s.]/g, '');
+            for (const [tierId, tierCode] of Object.entries(tierCodeById)) {
+              const kUpper = `${skuUpper}_${tierId}`;
+              const kClean = `${skuClean}_${tierId}`;
+              const kId = `${p.id}_${tierId}`;
+
+              if (latestPriceMap.has(kUpper)) {
+                p.prices[tierCode] = latestPriceMap.get(kUpper)!;
+              } else if (latestPriceMap.has(kClean)) {
+                p.prices[tierCode] = latestPriceMap.get(kClean)!;
+              } else if (latestPriceMap.has(kId)) {
+                p.prices[tierCode] = latestPriceMap.get(kId)!;
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase price overlay error:', err);
+      }
+    }
 
     // Dynamic catalog counts
     const countsRow = await db.prepare(`
@@ -94,16 +160,23 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
     `).get() as any;
 
-    return NextResponse.json({
-      success: true,
-      products: enrichedProducts,
-      priceTiers: tierRows,
-      counts: {
-        all: countsRow?.all_count || 0,
-        tuulo: countsRow?.tuulo_count || 0,
-        knockdown: countsRow?.knockdown_count || 0,
+    return NextResponse.json(
+      {
+        success: true,
+        products: enrichedProducts,
+        priceTiers: tierRows,
+        counts: {
+          all: countsRow?.all_count || 0,
+          tuulo: countsRow?.tuulo_count || 0,
+          knockdown: countsRow?.knockdown_count || 0,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      }
+    );
   } catch (error: any) {
     console.error('Fetch products error:', error);
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูลสินค้าได้' }, { status: 500 });

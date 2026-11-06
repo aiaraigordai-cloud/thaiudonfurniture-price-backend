@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import crypto from 'node:crypto';
 
 export async function POST(request: Request) {
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
 
     let importedCount = 0;
     let updatedCount = 0;
+    const supaHistoryToSync: any[] = [];
 
     // Use transaction for consistency
     await db.exec('BEGIN TRANSACTION');
@@ -69,6 +71,16 @@ export async function POST(request: Request) {
                 ?, ?, ?, datetime('now'), ?
               )
             `).run(productId, tierId, 'pr_' + crypto.randomUUID(), productId, tierId, numVal, user.id);
+
+            supaHistoryToSync.push({
+              id: crypto.randomUUID(),
+              product_id: sku,
+              price_tier_id: tierId,
+              old_price: null,
+              new_price: numVal,
+              changed_by: user.id,
+              reason: `อัปเดตราคาจากการนำเข้ารูปภาพแคตตาล็อก (${sku})`,
+            });
           }
 
           updatedCount++;
@@ -124,6 +136,18 @@ export async function POST(request: Request) {
       }
 
       await db.exec('COMMIT');
+
+      // Sync price history to Supabase in chunks of 50
+      const supabase = getSupabase();
+      if (supabase && supaHistoryToSync.length > 0) {
+        try {
+          for (let i = 0; i < supaHistoryToSync.length; i += 50) {
+            await supabase.from('price_change_history').insert(supaHistoryToSync.slice(i, i + 50));
+          }
+        } catch (supaErr) {
+          console.warn('Supabase sync price change error:', supaErr);
+        }
+      }
 
       const tierLabel = tierNameMap[price_tier] || 'ราคาเซลล์';
 

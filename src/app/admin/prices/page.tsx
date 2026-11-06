@@ -37,8 +37,39 @@ export default function PricesPage() {
   });
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [priceStatusFilter, setPriceStatusFilter] = useState<'all' | 'has_price' | 'no_price' | 'has_partial'>('all');
+
+  // Helper to determine price status ("มีราคา" กับ "ไม่มีราคา")
+  const getProductPriceStatus = (prod: any) => {
+    const pVals = editingPrices[prod.id] || prod.prices || {};
+    const s = Number(pVals.SALE_PRICE) || 0;
+    const r = Number(pVals.RETAIL_PRICE) || 0;
+    const v = Number(pVals.VIP_PRICE) || 0;
+    const g = Number(pVals.GENERAL_PRICE) || 0;
+    const hasAny = s > 0 || r > 0 || v > 0 || g > 0;
+    const hasAll = s > 0 && r > 0 && v > 0 && g > 0;
+
+    if (hasAll) {
+      return { status: 'has_price', label: 'มีราคา', badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+    } else if (!hasAny) {
+      return { status: 'no_price', label: 'ไม่มีราคา', badgeClass: 'bg-red-100 text-red-800 border-red-300' };
+    } else {
+      return { status: 'has_partial', label: 'มีราคา (ไม่ครบ)', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300' };
+    }
+  };
+
+  const countHasPrice = products.filter((p) => getProductPriceStatus(p).status === 'has_price').length;
+  const countNoPrice = products.filter((p) => getProductPriceStatus(p).status === 'no_price').length;
+  const countPartial = products.filter((p) => getProductPriceStatus(p).status === 'has_partial').length;
+
+  const displayedProducts = products.filter((p) => {
+    if (priceStatusFilter === 'all') return true;
+    const ps = getProductPriceStatus(p).status;
+    return ps === priceStatusFilter;
+  });
 
   const syncTokenRef = useRef<string>('');
+  const dirtyCellsRef = useRef<Set<string>>(new Set());
 
   const loadProducts = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -49,6 +80,7 @@ export default function PricesPage() {
       if (search) params.append('q', search);
       if (catalogTypeFilter !== 'all') params.append('catalog_type', catalogTypeFilter);
       if (selectedCategory) params.append('category', selectedCategory);
+      params.append('_t', Date.now().toString());
 
       const res = await fetch(`/api/products?${params.toString()}`);
       const data = await res.json();
@@ -57,16 +89,16 @@ export default function PricesPage() {
         if (data.counts) {
           setCatalogCounts(data.counts);
         }
-        // Initialize editing state
+        // Initialize editing state: if user is NOT currently typing in that specific cell, ALWAYS use latest server price
         setEditingPrices((prev) => {
           const next = { ...prev };
           data.products.forEach((p: any) => {
-            // Keep existing edited input if user is actively typing, otherwise take latest
+            const row = prev[p.id] || {};
             next[p.id] = {
-              SALE_PRICE: prev[p.id]?.SALE_PRICE ?? p.prices?.SALE_PRICE ?? '',
-              RETAIL_PRICE: prev[p.id]?.RETAIL_PRICE ?? p.prices?.RETAIL_PRICE ?? '',
-              VIP_PRICE: prev[p.id]?.VIP_PRICE ?? p.prices?.VIP_PRICE ?? '',
-              GENERAL_PRICE: prev[p.id]?.GENERAL_PRICE ?? p.prices?.GENERAL_PRICE ?? '',
+              SALE_PRICE: dirtyCellsRef.current.has(`${p.id}_SALE_PRICE`) ? row.SALE_PRICE : (p.prices?.SALE_PRICE ?? ''),
+              RETAIL_PRICE: dirtyCellsRef.current.has(`${p.id}_RETAIL_PRICE`) ? row.RETAIL_PRICE : (p.prices?.RETAIL_PRICE ?? ''),
+              VIP_PRICE: dirtyCellsRef.current.has(`${p.id}_VIP_PRICE`) ? row.VIP_PRICE : (p.prices?.VIP_PRICE ?? ''),
+              GENERAL_PRICE: dirtyCellsRef.current.has(`${p.id}_GENERAL_PRICE`) ? row.GENERAL_PRICE : (p.prices?.GENERAL_PRICE ?? ''),
             };
           });
           return next;
@@ -154,6 +186,7 @@ export default function PricesPage() {
   }, [loadProducts]);
 
   const handlePriceChange = (prodId: string, tier: string, val: string) => {
+    dirtyCellsRef.current.add(`${prodId}_${tier}`);
     setEditingPrices((prev) => ({
       ...prev,
       [prodId]: {
@@ -202,6 +235,9 @@ export default function PricesPage() {
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || 'บันทึกราคาไม่สำเร็จ' });
       } else {
+        // Saved successfully: remove dirty marker so server value is embraced
+        dirtyCellsRef.current.delete(key);
+
         // Flash saved indicator
         setJustSavedKeys((prev) => new Set(prev).add(key));
         setTimeout(() => {
@@ -243,6 +279,12 @@ export default function PricesPage() {
         setMessage({ type: 'error', text: data.error || 'บันทึกราคาไม่สำเร็จ' });
       } else {
         setMessage({ type: 'success', text: data.message || 'บันทึกราคาสำเร็จ' });
+
+        // Remove dirty marker for all 4 cells of this product
+        ['SALE_PRICE', 'RETAIL_PRICE', 'VIP_PRICE', 'GENERAL_PRICE'].forEach((t) => {
+          dirtyCellsRef.current.delete(`${prodId}_${t}`);
+        });
+
         // Mark all 4 tiers as saved
         const keys = ['SALE_PRICE', 'RETAIL_PRICE', 'VIP_PRICE', 'GENERAL_PRICE'].map((t) => `${prodId}_${t}`);
         setJustSavedKeys((prev) => {
@@ -386,11 +428,11 @@ export default function PricesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition w-full sm:w-56"
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition w-full sm:w-48"
           >
             <option value="">ทุกหมวดหมู่ ({categories.length})</option>
             {categories.map((c) => (
@@ -399,7 +441,75 @@ export default function PricesPage() {
               </option>
             ))}
           </select>
+
+          <select
+            value={priceStatusFilter}
+            onChange={(e) => setPriceStatusFilter(e.target.value as any)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition w-full sm:w-48 font-medium"
+          >
+            <option value="all">ทุกสถานะราคา ({products.length})</option>
+            <option value="has_price">🟢 มีราคา ({countHasPrice})</option>
+            <option value="no_price">🔴 ไม่มีราคา ({countNoPrice})</option>
+            <option value="has_partial">🟡 มีราคา (ไม่ครบ) ({countPartial})</option>
+          </select>
         </div>
+      </div>
+
+      {/* Quick Price Status Filter Chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-600">สถานะราคา:</span>
+        <button
+          type="button"
+          onClick={() => setPriceStatusFilter('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border shadow-2xs ${
+            priceStatusFilter === 'all'
+              ? 'bg-slate-900 text-white border-slate-900'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          ทั้งหมด ({products.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPriceStatusFilter(priceStatusFilter === 'has_price' ? 'all' : 'has_price')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+            priceStatusFilter === 'has_price'
+              ? 'bg-emerald-600 text-white border-emerald-600'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>มีราคา ({countHasPrice})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPriceStatusFilter(priceStatusFilter === 'no_price' ? 'all' : 'no_price')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+            priceStatusFilter === 'no_price'
+              ? 'bg-red-600 text-white border-red-600'
+              : 'bg-red-50 text-red-800 border-red-300 hover:bg-red-100'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+          <span>ไม่มีราคา ({countNoPrice})</span>
+        </button>
+
+        {countPartial > 0 && (
+          <button
+            type="button"
+            onClick={() => setPriceStatusFilter(priceStatusFilter === 'has_partial' ? 'all' : 'has_partial')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+              priceStatusFilter === 'has_partial'
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span>มีราคา (ไม่ครบ) ({countPartial})</span>
+          </button>
+        )}
       </div>
 
       {/* Prices Table */}
@@ -413,25 +523,26 @@ export default function PricesPage() {
                 <th className="px-3 py-3.5 text-center text-blue-700">2. ราคาปลีก (฿)</th>
                 <th className="px-3 py-3.5 text-center text-purple-700">3. ราคา VIP (฿)</th>
                 <th className="px-3 py-3.5 text-center text-slate-700">4. ราคาทั่วไป (฿)</th>
+                <th className="px-3 py-3.5 text-center">สถานะราคา</th>
                 <th className="px-5 py-3.5 text-right">บันทึกทั้งแถว</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && products.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <span className="inline-block w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></span>
                     <div>กำลังโหลดข้อมูล...</div>
                   </td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : displayedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
-                    ไม่พบรายการสินค้า
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    ไม่พบรายการสินค้าที่ตรงกับเงื่อนไข
                   </td>
                 </tr>
               ) : (
-                products.map((prod) => {
+                displayedProducts.map((prod) => {
                   const pPrices = editingPrices[prod.id] || {};
                   const isSavingRow = savingId === prod.id;
 
@@ -569,6 +680,29 @@ export default function PricesPage() {
                         'text-slate-800',
                         'focus:ring-slate-400'
                       )}
+
+                      {/* 5. Status: มีราคา vs ไม่มีราคา */}
+                      <td className="px-3 py-3.5 text-center">
+                        {(() => {
+                          const stat = getProductPriceStatus(prod);
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-2xs whitespace-nowrap ${stat.badgeClass}`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  stat.status === 'has_price'
+                                    ? 'bg-emerald-500'
+                                    : stat.status === 'no_price'
+                                    ? 'bg-red-500'
+                                    : 'bg-amber-500'
+                                }`}
+                              ></span>
+                              <span>{stat.label}</span>
+                            </span>
+                          );
+                        })()}
+                      </td>
 
                       {/* Action */}
                       <td className="px-5 py-3.5 text-right">

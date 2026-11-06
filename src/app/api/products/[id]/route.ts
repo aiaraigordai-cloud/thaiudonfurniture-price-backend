@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
@@ -14,6 +15,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const product = await db.prepare(`
       SELECT 
         p.id, p.sku, p.name, p.description, p.category_id,
+        p.catalog_type, p.size_text, p.ref_image_url, p.ref_filename, p.graphic_filename, p.page_num,
         c.name as category_name,
         p.width, p.height, p.depth, p.color, p.status,
         p.created_at, p.updated_at
@@ -33,6 +35,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
       ORDER BY display_order ASC
     `).all(params.id) as any[];
 
+    // Filter out reference image from main images if ref_image_url matches or starts with img_ref_
+    const mainImages = images
+      .filter((img) => !img.id?.startsWith('img_ref_') && img.image_url !== product.ref_image_url)
+      .map((img) => img.image_url);
+
     const pricesList = await db.prepare(`
       SELECT pp.price, pt.code, pt.name_th
       FROM product_prices pp
@@ -45,11 +52,42 @@ export async function GET(request: Request, { params }: { params: { id: string }
       prices[pr.code] = pr.price;
     });
 
+    // Overlay latest real-time prices from Supabase price_change_history
+    const supabase = getSupabase();
+    if (supabase && product.sku) {
+      try {
+        const { data: supaHistory } = await supabase
+          .from('price_change_history')
+          .select('product_id, price_tier_id, new_price, created_at')
+          .or(`product_id.eq.${product.sku.trim()},product_id.eq.${params.id}`)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (supaHistory && supaHistory.length > 0) {
+          const tierCodeById: Record<string, string> = {
+            tier_sale: 'SALE_PRICE',
+            tier_retail: 'RETAIL_PRICE',
+            tier_vip: 'VIP_PRICE',
+            tier_general: 'GENERAL_PRICE',
+          };
+          for (const item of supaHistory) {
+            const tierCode = tierCodeById[item.price_tier_id];
+            if (tierCode && (prices[tierCode] === undefined || prices[tierCode] === null)) {
+              prices[tierCode] = Number(item.new_price);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase product price overlay error:', err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       product: {
         ...product,
-        images: images.map((img) => img.image_url),
+        images: mainImages.length > 0 ? mainImages : images.map((img) => img.image_url),
+        primary_image_url: mainImages[0] || images.find((i) => i.is_primary === 1)?.image_url || null,
         prices,
       },
     });
@@ -70,16 +108,50 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     const body = await request.json();
-    const { sku, name, description, category_id, width, height, depth, color, status, images, prices } = body;
+    const {
+      sku,
+      name,
+      description,
+      category_id,
+      width,
+      height,
+      depth,
+      color,
+      status,
+      images,
+      prices,
+      ref_image_url,
+      ref_filename,
+    } = body;
 
     const db = getDb();
 
+    // Check existing product
+    const existing = await db.prepare('SELECT id, sku, name, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+    if (!existing) {
+      return NextResponse.json({ error: 'ไม่พบสินค้ารายการนี้' }, { status: 404 });
+    }
+
     // Check SKU duplicate on other products
-    const existing = await db.prepare('SELECT id FROM products WHERE sku = ? AND id != ?').get(sku.trim(), params.id);
-    if (existing) {
+    const duplicate = await db.prepare('SELECT id FROM products WHERE sku = ? AND id != ?').get(sku.trim(), params.id);
+    if (duplicate) {
       return NextResponse.json({ error: `รหัส SKU '${sku}' ซ้ำกับสินค้าอื่นในระบบ` }, { status: 400 });
     }
 
+    // Determine final ref_image_url and ref_filename (allow explicit clearing/deletion)
+    let finalRefImageUrl = existing.ref_image_url;
+    let finalRefFilename = existing.ref_filename;
+    if (ref_image_url !== undefined) {
+      if (ref_image_url === null || ref_image_url === '' || ref_image_url === false) {
+        finalRefImageUrl = null;
+        finalRefFilename = null;
+      } else {
+        finalRefImageUrl = String(ref_image_url).trim();
+        finalRefFilename = ref_filename || existing.ref_filename || `ref_${sku.trim()}_${Date.now()}.jpg`;
+      }
+    }
+
+    const supaHistoryToSync: any[] = [];
     await db.exec('BEGIN TRANSACTION;');
 
     try {
@@ -87,6 +159,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         UPDATE products
         SET sku = ?, name = ?, description = ?, category_id = ?,
             width = ?, height = ?, depth = ?, color = ?, status = ?,
+            ref_image_url = ?,
+            ref_filename = ?,
             updated_at = datetime('now')
         WHERE id = ?
       `).run(
@@ -99,24 +173,34 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         depth ? parseFloat(depth) : null,
         color || null,
         status || 'Published',
+        finalRefImageUrl,
+        finalRefFilename,
         params.id
       );
 
       if (Array.isArray(images)) {
         await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
-        for (const [idx, imgUrl] of images.entries()) {
-          if (imgUrl && imgUrl.trim()) {
+        let order = 0;
+        for (const imgUrl of images) {
+          if (imgUrl && typeof imgUrl === 'string' && imgUrl.trim()) {
             await db.prepare(`
               INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
               VALUES (?, ?, ?, ?, ?)
-            `).run('img_' + crypto.randomUUID(), params.id, imgUrl.trim(), idx, idx === 0 ? 1 : 0);
+            `).run('img_' + crypto.randomUUID(), params.id, imgUrl.trim(), order, order === 0 ? 1 : 0);
+            order++;
           }
+        }
+        if (finalRefImageUrl && !images.includes(finalRefImageUrl)) {
+          await db.prepare(`
+            INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
+            VALUES (?, ?, ?, ?, 0)
+          `).run('img_ref_' + crypto.randomUUID(), params.id, finalRefImageUrl, order);
         }
       }
 
       // Update prices if user has price_edit permission
       if (prices && (user.role === 'SYSTEM_OWNER' || user.permissions?.price_edit)) {
-        const tiers = await db.prepare('SELECT id, code FROM price_tiers').all() as any[];
+        const tiers = await db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
         for (const tier of tiers) {
           if (prices[tier.code] !== undefined && prices[tier.code] !== null && prices[tier.code] !== '') {
             const priceNum = parseFloat(prices[tier.code]);
@@ -125,13 +209,24 @@ export async function PUT(request: Request, { params }: { params: { id: string }
                 SELECT price FROM product_prices WHERE product_id = ? AND price_tier_id = ?
               `).get(params.id, tier.id) as any;
 
-              if (currentPrice && currentPrice.price !== priceNum) {
-                // Record history
-                await db.prepare(`
-                  INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
-                  VALUES (?, ?, ?, ?, ?, ?, 'แก้ไขผ่านหน้ารายละเอียดสินค้า', datetime('now'))
-                `).run(crypto.randomUUID(), params.id, tier.id, currentPrice.price, priceNum, user.id);
-              }
+              const oldPrice = currentPrice ? currentPrice.price : null;
+              const historyId = crypto.randomUUID();
+
+              // Record history in SQLite
+              await db.prepare(`
+                INSERT INTO price_change_history (id, product_id, price_tier_id, old_price, new_price, changed_by, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'แก้ไขผ่านหน้ารายละเอียดสินค้า', datetime('now'))
+              `).run(historyId, params.id, tier.id, oldPrice, priceNum, user.id);
+
+              supaHistoryToSync.push({
+                id: historyId,
+                product_id: sku.trim(),
+                price_tier_id: tier.id,
+                old_price: oldPrice,
+                new_price: priceNum,
+                changed_by: user.id,
+                reason: `แก้ไขราคา ${tier.name_th} (${sku.trim()}) ผ่านหน้ารายละเอียดสินค้า`,
+              });
 
               await db.prepare(`
                 INSERT INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
@@ -147,6 +242,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       }
 
       await db.exec('COMMIT;');
+
+      // Sync price history to Supabase if any
+      const supabase = getSupabase();
+      if (supabase && supaHistoryToSync.length > 0) {
+        try {
+          await supabase.from('price_change_history').insert(supaHistoryToSync);
+        } catch (supaErr) {
+          console.warn('Supabase sync price change error:', supaErr);
+        }
+      }
     } catch (txErr) {
       await db.exec('ROLLBACK;');
       throw txErr;

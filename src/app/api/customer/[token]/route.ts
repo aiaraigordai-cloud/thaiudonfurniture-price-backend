@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { getSupabase } from '@/lib/supabase';
 import crypto from 'node:crypto';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: Request, { params }: { params: { token: string } }) {
   try {
@@ -12,12 +16,12 @@ export async function GET(request: Request, { params }: { params: { token: strin
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const db = getDb();
 
-    // Find link
+    // Find link (support both token_hash and direct token_raw)
     const link = await db.prepare(`
       SELECT id, sharing_mode, catalog_filter, price_tier_id, customer_name, expires_at, is_revoked
       FROM share_links
-      WHERE token_hash = ?
-    `).get(tokenHash) as any;
+      WHERE token_hash = ? OR token_raw = ?
+    `).get(tokenHash, rawToken) as any;
 
     if (!link) {
       return NextResponse.json({ error: 'ลิงก์ไม่ถูกต้อง หรือถูกลบออกจากระบบแล้ว' }, { status: 404 });
@@ -92,13 +96,67 @@ export async function GET(request: Request, { params }: { params: { token: strin
 
     const rawProducts = await db.prepare(productsQuery).all(...queryParams) as any[];
 
-    // Fetch images for each product
+    // Overlay latest real-time prices from Supabase price_change_history for this link's price tier
+    const supabase = getSupabase();
+    const latestPriceMap = new Map<string, number>();
+
+    if (supabase && link.price_tier_id) {
+      try {
+        const { data: supaHistory } = await supabase
+          .from('price_change_history')
+          .select('product_id, new_price, created_at')
+          .eq('price_tier_id', link.price_tier_id)
+          .order('created_at', { ascending: false })
+          .limit(5000);
+
+        if (supaHistory && supaHistory.length > 0) {
+          for (const item of supaHistory) {
+            if (!item.product_id) continue;
+            const rawId = String(item.product_id).trim();
+            const keyUpper = rawId.toUpperCase();
+            const keyClean = keyUpper.replace(/[-_\s.]/g, '');
+
+            if (!latestPriceMap.has(keyUpper)) {
+              latestPriceMap.set(keyUpper, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(keyClean)) {
+              latestPriceMap.set(keyClean, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(rawId)) {
+              latestPriceMap.set(rawId, Number(item.new_price));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Customer catalog Supabase price overlay error:', err);
+      }
+    }
+
+    // Fetch images and calculate live price for each product
     const products = await Promise.all(rawProducts.map(async (p) => {
       const imgs = await db.prepare(`
         SELECT image_url FROM product_images
         WHERE product_id = ?
         ORDER BY display_order ASC
       `).all(p.id) as any[];
+
+      // Resolve live price: Prioritize Supabase real-time price -> Fallback to SQLite pp.price
+      let resolvedPrice = p.price;
+      const skuUpper = (p.sku || '').trim().toUpperCase();
+      const skuClean = skuUpper.replace(/[-_\s.]/g, '');
+
+      if (latestPriceMap.has(skuUpper)) {
+        resolvedPrice = latestPriceMap.get(skuUpper)!;
+      } else if (latestPriceMap.has(skuClean)) {
+        resolvedPrice = latestPriceMap.get(skuClean)!;
+      } else if (latestPriceMap.has(p.id)) {
+        resolvedPrice = latestPriceMap.get(p.id)!;
+      }
+
+      const finalPrice =
+        resolvedPrice !== null && resolvedPrice !== undefined && Number(resolvedPrice) > 0
+          ? Number(resolvedPrice)
+          : null;
 
       return {
         id: p.id,
@@ -119,7 +177,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
         color: p.color,
         images: imgs.map((img) => img.image_url),
         // Isolated live price: null / 0 handled cleanly
-        price: p.price !== null && p.price !== undefined && p.price > 0 ? p.price : null,
+        price: finalPrice,
       };
     }));
 
@@ -133,6 +191,10 @@ export async function GET(request: Request, { params }: { params: { token: strin
       sharingMode: link.sharing_mode,
       catalogFilter: link.catalog_filter || 'all',
       products,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
     });
   } catch (error) {
     console.error('Customer catalog error:', error);
