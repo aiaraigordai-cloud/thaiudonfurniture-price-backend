@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   ListPlus,
   HelpCircle,
+  User,
 } from 'lucide-react';
 
 export default function CustomerCatalogPage({ params }: { params: { token: string } }) {
@@ -46,6 +47,10 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   const [cartCopied, setCartCopied] = useState(false);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [cartToast, setCartToast] = useState<string | null>(null);
+
+  // CUSTOMER NAME STATE (For Cart & Sharing)
+  const [customerNameInput, setCustomerNameInput] = useState<string>('');
+  const [sharedCustomerName, setSharedCustomerName] = useState<string>('');
 
   // SHARED CART VIEW MODE: Displays ONLY the customer's selected products when opened from a shared cart link
   const [isSharedCartView, setIsSharedCartView] = useState(false);
@@ -117,12 +122,20 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     };
   }, [params.token]);
 
-  // Read URL parameters on mount (?cart=...)
+  // Read URL parameters on mount (?cart=... & ?cname=...)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const cartParam = urlParams.get('cart');
+        const cnameParam = urlParams.get('cname') || urlParams.get('name') || urlParams.get('customer_name');
+
+        if (cnameParam && cnameParam.trim()) {
+          const cleanName = cnameParam.trim();
+          setSharedCustomerName(cleanName);
+          setCustomerNameInput(cleanName);
+        }
+
         if (cartParam) {
           const ids = cartParam.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
           if (ids.length > 0) {
@@ -137,19 +150,26 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     }
   }, []);
 
-  // Load Cart from sessionStorage if not in shared cart mode
+  // Load Cart & Customer Name from sessionStorage if not in shared cart mode
   useEffect(() => {
-    if (typeof window !== 'undefined' && sharedCartSkus.length === 0) {
+    if (typeof window !== 'undefined') {
       try {
-        const saved = sessionStorage.getItem(`thaiudon_cart_${params.token}`);
-        if (saved) {
-          setCart(JSON.parse(saved));
+        const savedName = sessionStorage.getItem(`thaiudon_cname_${params.token}`);
+        if (savedName && !sharedCustomerName) {
+          setCustomerNameInput(savedName);
+        }
+
+        if (sharedCartSkus.length === 0) {
+          const savedCart = sessionStorage.getItem(`thaiudon_cart_${params.token}`);
+          if (savedCart) {
+            setCart(JSON.parse(savedCart));
+          }
         }
       } catch (e) {
-        console.error('Failed to load cart', e);
+        console.error('Failed to load cart/name from storage', e);
       }
     }
-  }, [params.token, sharedCartSkus.length]);
+  }, [params.token, sharedCartSkus.length, sharedCustomerName]);
 
   // Populate Cart from catalogData when sharedCartSkus is present
   useEffect(() => {
@@ -187,6 +207,15 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     setTimeout(() => {
       setCartToast((prev) => (prev === msg ? null : prev));
     }, 2800);
+  };
+
+  const handleCustomerNameChange = (val: string) => {
+    setCustomerNameInput(val);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(`thaiudon_cname_${params.token}`, val);
+      } catch {}
+    }
   };
 
   const saveCart = (newCart: any[]) => {
@@ -250,21 +279,27 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   // Cart total calculations
   const cartTotalAmount = cart.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
 
-  // Generate shareable URL with ONLY cart product SKUs/IDs
+  // Generate shareable URL with ONLY cart product SKUs/IDs and optional customer name
   const getCartShareUrl = () => {
     if (typeof window === 'undefined') return '';
     const origin = window.location.origin;
     const pathname = window.location.pathname;
     if (cart.length === 0) return `${origin}${pathname}`;
     const ids = cart.map((p) => p.sku || p.id).join(',');
-    return `${origin}${pathname}?cart=${encodeURIComponent(ids)}`;
+    let url = `${origin}${pathname}?cart=${encodeURIComponent(ids)}`;
+    if (customerNameInput.trim()) {
+      url += `&cname=${encodeURIComponent(customerNameInput.trim())}`;
+    }
+    return url;
   };
 
   // Generate full summary text for LINE / Copying
   const getCartSummaryText = () => {
     const shareUrl = getCartShareUrl();
+    const hasName = Boolean(customerNameInput.trim());
     const lines = [
       `🛒 *สรุปรายการสินค้าที่เลือกไว้ในตะกร้า* (${cart.length} รายการ)`,
+      ...(hasName ? [`👤 *ชื่อลูกค้า:* คุณ${customerNameInput.trim()}`] : []),
       `โชว์รูมและโรงงาน: ไทยอุดรเฟอร์นิเจอร์`,
       `-------------------------------------------`,
       ...cart.map((p, idx) => {
@@ -428,7 +463,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 </span>
               </div>
               <div className="text-xs text-slate-500 font-medium mt-0.5">
-                {(catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ').replace(/\s*\(?\bVIP\b\)?/gi, '').trim() || 'แคตตาล็อกสินค้าทางการ'}
+                {sharedCustomerName
+                  ? `รายการสินค้าในตะกร้าของ: คุณ${sharedCustomerName}`
+                  : ((catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ').replace(/\s*\(?\bVIP\b\)?/gi, '').trim() || 'แคตตาล็อกสินค้าทางการ')}
               </div>
             </div>
           </div>
@@ -484,14 +521,20 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 <ShoppingCart className="w-6 h-6" />
               </div>
               <div>
-                <div className="font-extrabold text-base flex items-center gap-2">
-                  <span>รายการสินค้าที่ลูกค้าเลือกไว้ ({filtered.length} รายการ)</span>
+                <div className="font-extrabold text-base flex flex-wrap items-center gap-2">
+                  <span>
+                    {sharedCustomerName
+                      ? `รายการสินค้าของ "คุณ${sharedCustomerName}" ที่เลือกไว้ (${filtered.length} รายการ)`
+                      : `รายการสินค้าที่ลูกค้าเลือกไว้ (${filtered.length} รายการ)`}
+                  </span>
                   <span className="bg-amber-400 text-[#161B40] text-[11px] px-2.5 py-0.5 rounded-full font-black">
-                    เฉพาะสินค้าในตะกร้า
+                    {sharedCustomerName ? `ลูกค้า: คุณ${sharedCustomerName}` : 'เฉพาะสินค้าในตะกร้า'}
                   </span>
                 </div>
                 <div className="text-xs text-slate-300 mt-1">
-                  ระบบแสดงเฉพาะสินค้าที่ลูกค้าเลือกไว้ในตะกร้า พร้อมราคาปัจจุบันตรงจากโรงงาน เพื่อให้ฝ่ายขายตรวจสอบได้ทันที
+                  {sharedCustomerName
+                    ? `คุณ${sharedCustomerName} ได้เลือกสินค้าเหล่านี้และส่งต่อให้ฝ่ายขายตรวจสอบราคาและสต็อกปัจจุบัน`
+                    : `ระบบแสดงเฉพาะสินค้าที่ลูกค้าเลือกไว้ในตะกร้า พร้อมราคาปัจจุบันตรงจากโรงงาน เพื่อให้ฝ่ายขายตรวจสอบได้ทันที`}
                 </div>
               </div>
             </div>
@@ -1159,8 +1202,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         </div>
       )}
 
-      {/* 5. FLOATING CART POPUP BUTTON (BOTTOM-RIGHT) */}
-      <div className="fixed bottom-6 right-6 z-40">
+      {/* 5. FLOATING CART POPUP BUTTON (ELEVATED 10% FROM BOTTOM AS REQUESTED) */}
+      <div className="fixed bottom-[10%] right-6 z-40">
         <button
           onClick={() => setIsCartOpen(true)}
           className="relative flex items-center gap-3 px-4 py-3 bg-[#161B40] hover:bg-[#1f2557] text-white rounded-full shadow-2xl border-2 border-amber-400 hover:scale-105 active:scale-95 transition-all group"
@@ -1290,10 +1333,33 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
             {/* Modal Footer: Action Buttons */}
             {cart.length > 0 && (
               <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 space-y-3">
+                {/* Customer Name Input Box before sharing or sending */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                  <label className="text-xs font-bold text-[#161B40] flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-blue-600" />
+                    <span>ชื่อลูกค้า / ผู้สั่งซื้อ (ระบุเพื่อให้ฝ่ายขายทราบ):</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customerNameInput}
+                    onChange={(e) => handleCustomerNameChange(e.target.value)}
+                    placeholder="พิมพ์ชื่อลูกค้า เช่น คุณสมชาย หรือ ร้านเฟอร์นิเจอร์ (เว้นว่างได้)"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-hidden transition placeholder:text-slate-400 bg-slate-50 focus:bg-white"
+                  />
+                  <div className="text-[10px] text-slate-400">
+                    * หากระบุชื่อ ระบบจะแนบชื่อส่งให้ฝ่ายขายและแสดงบนลิงก์ที่แชร์ให้อัตโนมัติ (หากไม่ระบุจะไม่แสดง)
+                  </div>
+                </div>
+
                 {/* Total Summary */}
                 <div className="bg-white p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between">
                   <div>
-                    <div className="text-[10px] uppercase font-bold text-slate-400">ยอดรวมสินค้าโดยประมาณ ({cart.length} รายการ)</div>
+                    <div className="text-[10px] uppercase font-bold text-slate-400">
+                      ยอดรวมสินค้าโดยประมาณ ({cart.length} รายการ)
+                      {customerNameInput.trim() && (
+                        <span className="ml-1 text-blue-600">ของ คุณ{customerNameInput.trim()}</span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500">ค่าจัดส่งติดต่อฝ่ายขายผ่าน LINE</div>
                   </div>
                   <div className="text-right">
@@ -1354,7 +1420,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <button
                     onClick={copyCartShareLink}
                     className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition"
-                    title="คัดลอกลิงก์ตะกร้าเพื่อส่งต่อ (จะแสดงเฉพาะสินค้าที่เลือก)"
+                    title="คัดลอกลิงก์ตะกร้าเพื่อส่งต่อ (จะแสดงเฉพาะสินค้าที่เลือกและชื่อลูกค้า)"
                   >
                     {shareLinkCopied ? (
                       <>
@@ -1407,7 +1473,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 ท่านสามารถเลือกดูสินค้าและสั่งซื้อได้สะดวกรวดเร็ว ผ่าน 3 ขั้นตอนง่ายๆ ดังนี้:
               </p>
 
-              {/* Step 1: ตัด "ทั้งตู้กับข้าวและเฟอร์นิเจอร์น็อคดาวน์" ออกตามคำสั่ง */}
+              {/* Step 1 */}
               <div className="flex items-start gap-3.5 p-3 rounded-2xl bg-slate-50 border border-slate-200">
                 <div className="w-9 h-9 rounded-xl bg-red-100 text-red-600 font-black text-sm flex items-center justify-center shrink-0">
                   1
