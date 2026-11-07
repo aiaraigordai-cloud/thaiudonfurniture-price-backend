@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { updatePersistentShareLink } from '@/lib/share-store';
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -8,8 +9,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Allowed for all authenticated accounts
 
     const body = await request.json().catch(() => ({}));
     const db = getDb();
@@ -30,6 +29,9 @@ export async function POST(request: Request, { params }: { params: { id: string 
     }
 
     await db.prepare('UPDATE share_links SET is_revoked = ? WHERE id = ?').run(targetRevoked, params.id);
+
+    // Sync to persistent store (Netlify Blobs)
+    await updatePersistentShareLink(params.id, { is_revoked: targetRevoked });
 
     await logAudit(
       targetRevoked === 1 ? 'REVOKE_SHARE_LINK' : 'ACTIVATE_SHARE_LINK',

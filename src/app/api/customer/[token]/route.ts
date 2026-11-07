@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getSupabase } from '@/lib/supabase';
 import { loadProductOverrides } from '@/lib/product-store';
+import { findShareLinkByToken } from '@/lib/share-store';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -17,24 +18,47 @@ export async function GET(request: Request, { params }: { params: { token: strin
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const db = getDb();
 
-    // Find link (support both token_hash and direct token_raw)
-    const link = await db.prepare(`
-      SELECT id, sharing_mode, catalog_filter, price_tier_id, customer_name, expires_at, is_revoked
+    // 1. Find link in SQLite first
+    let link = (await db.prepare(`
+      SELECT id, token_raw, sharing_mode, catalog_filter, price_tier_id, customer_name, expires_at, is_revoked
       FROM share_links
       WHERE token_hash = ? OR token_raw = ?
-    `).get(tokenHash, rawToken) as any;
+    `).get(tokenHash, rawToken)) as any;
+
+    // 2. If not found in SQLite (e.g. serverless cold start), resolve via persistent share-store & canonical dictionary
+    if (!link) {
+      const persistentLink = await findShareLinkByToken(rawToken, db);
+      if (persistentLink) {
+        link = {
+          id: persistentLink.id,
+          token_raw: persistentLink.token_raw,
+          sharing_mode: persistentLink.sharing_mode,
+          catalog_filter: persistentLink.catalog_filter,
+          price_tier_id: persistentLink.price_tier_id,
+          customer_name: persistentLink.customer_name,
+          expires_at: persistentLink.expires_at,
+          is_revoked: persistentLink.is_revoked,
+        };
+      }
+    }
 
     if (!link) {
       return NextResponse.json({ error: 'ลิงก์ไม่ถูกต้อง หรือถูกลบออกจากระบบแล้ว' }, { status: 404 });
     }
 
-    if (link.is_revoked) {
+    if (link.is_revoked === 1 || link.is_revoked === true) {
       return NextResponse.json({ error: 'ลิงก์นี้ถูกยกเลิกการเข้าถึงโดยเจ้าหน้าที่แล้ว' }, { status: 410 });
     }
 
-    if (link.expires_at) {
+    // Standard full-catalog links never expire
+    const isStandardCatalog =
+      link.sharing_mode === 'FULL_CATALOG' &&
+      link.token_raw &&
+      link.token_raw.startsWith('catalog-');
+
+    if (!isStandardCatalog && link.expires_at) {
       const expDate = new Date(link.expires_at);
-      if (new Date() > expDate) {
+      if (!isNaN(expDate.getTime()) && new Date() > expDate) {
         return NextResponse.json({ error: 'ลิงก์นี้หมดอายุการใช้งานแล้ว' }, { status: 410 });
       }
     }

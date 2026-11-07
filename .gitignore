@@ -34,6 +34,7 @@ yarn-error.log*
 /data/*.json
 !data/employees_persistent.json
 !data/products_persistent.json
+!data/share_links_persistent.json
 
 # typescript
 *.tsbuildinfo

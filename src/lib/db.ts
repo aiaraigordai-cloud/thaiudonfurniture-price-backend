@@ -307,6 +307,14 @@ function initSchema(db: DatabaseSync) {
         `).run(l.id, hash, l.token, l.cat, l.title);
       }
     }
+
+    // Sync all canonical and persistent share links
+    try {
+      const { syncShareLinksToDb } = require('./share-store');
+      syncShareLinksToDb(db);
+    } catch (e) {
+      console.warn('syncShareLinksToDb error:', e);
+    }
   } catch (e) {
     console.warn('Migration note:', e);
   }

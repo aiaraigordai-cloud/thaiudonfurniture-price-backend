@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { loadPersistentShareLinks, savePersistentShareLink, syncShareLinksToDb } from '@/lib/share-store';
 import crypto from 'node:crypto';
 
 export async function GET() {
@@ -11,6 +12,13 @@ export async function GET() {
     }
 
     const db = getDb();
+
+    // Ensure all persistent and canonical links exist in SQLite
+    try {
+      syncShareLinksToDb(db);
+      await loadPersistentShareLinks();
+    } catch {}
+
     const links = await db.prepare(`
       SELECT 
         sl.id, sl.token_raw, sl.sharing_mode, sl.catalog_filter, sl.customer_name, sl.expires_at, sl.is_revoked, sl.created_at,
@@ -58,9 +66,6 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Allowed for all authenticated accounts
-    // (user.role === SYSTEM_OWNER or other accounts)
 
     const body = await request.json();
     const { sharing_mode, price_tier_id, catalog_filter, product_ids, customer_name, expires_days } = body;
@@ -111,6 +116,22 @@ export async function POST(request: Request) {
       await db.exec('ROLLBACK;');
       throw e;
     }
+
+    // Persist to Netlify Blobs & JSON persistent store (Serverless Durable)
+    await savePersistentShareLink({
+      id: linkId,
+      token_raw: rawToken,
+      token_hash: tokenHash,
+      sharing_mode,
+      catalog_filter: finalCatalogFilter,
+      price_tier_id,
+      customer_name: customer_name || null,
+      expires_at: expiresAt,
+      is_revoked: 0,
+      created_by: user.id,
+      created_at: new Date().toISOString(),
+      product_ids: Array.isArray(product_ids) ? product_ids : [],
+    });
 
     await logAudit('CREATE_SHARE_LINK', 'SHARE_LINK', linkId, user.id, user.username, {
       sharing_mode,

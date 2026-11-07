@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { updatePersistentShareLink } from '@/lib/share-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,8 +41,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Allowed for all authenticated accounts
 
     const body = await request.json();
     const { expires_at, expires_days, is_revoked, customer_name } = body;
@@ -87,6 +86,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       WHERE id = ?
     `).run(finalExpiresAt, finalIsRevoked, finalCustomerName, params.id);
 
+    // Sync to Persistent Store (Netlify Blobs)
+    await updatePersistentShareLink(params.id, {
+      expires_at: finalExpiresAt,
+      is_revoked: finalIsRevoked,
+      customer_name: finalCustomerName,
+    });
+
     const actionText = finalIsRevoked !== existing.is_revoked
       ? (finalIsRevoked === 1 ? 'SUSPEND_SHARE_LINK' : 'ACTIVATE_SHARE_LINK')
       : 'UPDATE_SHARE_LINK';
@@ -129,10 +135,11 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Allowed for all authenticated accounts
-
     const db = getDb();
     await db.prepare('DELETE FROM share_links WHERE id = ?').run(params.id);
+
+    // Sync revoke to persistent store
+    await updatePersistentShareLink(params.id, { is_revoked: 1 });
 
     await logAudit('DELETE_SHARE_LINK', 'SHARE_LINK', params.id, user.id, user.username, {});
 
