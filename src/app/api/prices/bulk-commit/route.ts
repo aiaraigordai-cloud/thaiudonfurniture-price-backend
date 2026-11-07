@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import crypto from 'node:crypto';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, invalidateSupabasePriceCache } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -218,6 +218,7 @@ export async function POST(request: Request) {
           console.warn('Supabase sync error (bulk-commit):', supaErr);
         }
       }
+      invalidateSupabasePriceCache();
     } catch (err: any) {
       await db.exec('ROLLBACK;');
       throw err;

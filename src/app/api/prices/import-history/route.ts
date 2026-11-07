@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, invalidateSupabasePriceCache } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -184,6 +184,7 @@ export async function POST(request: Request) {
       }
 
       await db.exec('COMMIT;');
+      invalidateSupabasePriceCache();
     } catch (e) {
       await db.exec('ROLLBACK;');
       throw e;

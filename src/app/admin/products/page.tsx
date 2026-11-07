@@ -492,9 +492,10 @@ export default function ProductsPage() {
     };
     window.addEventListener('focus', handleFocus);
 
-    // 5. Lightweight Polling (every 3.5 seconds)
+    // 5. Lightweight Polling (every 12 seconds when tab is visible)
     let currentToken = '';
     const checkSyncToken = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       try {
         const res = await fetch('/api/products/sync-status');
         const data = await res.json();
@@ -510,8 +511,7 @@ export default function ProductsPage() {
       } catch {}
     };
 
-    checkSyncToken();
-    const interval = setInterval(checkSyncToken, 3500);
+    const interval = setInterval(checkSyncToken, 12000);
 
     return () => {
       if (bc) bc.close();

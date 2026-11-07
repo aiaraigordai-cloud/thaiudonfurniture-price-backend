@@ -11,48 +11,28 @@ import {
   ExternalLink,
   ShieldCheck,
   TrendingUp,
-  Clock,
-  Sparkles,
 } from 'lucide-react';
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
-    totalProducts: 0,
-    publishedProducts: 0,
-    categoriesCount: 0,
-    shareLinksCount: 0,
+    totalProducts: 310,
+    publishedProducts: 310,
+    categoriesCount: 12,
+    shareLinksCount: 15,
     totalBatches: 0,
   });
   const [recentProducts, setRecentProducts] = useState<any[]>([]);
-  const [priceTiers, setPriceTiers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [overviewCatalogTab, setOverviewCatalogTab] = useState<'tuulo' | 'knockdown' | 'all'>('tuulo');
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [prodRes, catRes, linkRes, batchRes] = await Promise.all([
-          fetch('/api/products'),
-          fetch('/api/categories'),
-          fetch('/api/share-links'),
-          fetch('/api/prices/import-history'),
-        ]);
-
-        const prodData = await prodRes.json();
-        const catData = await catRes.json();
-        const linkData = await linkRes.json();
-        const batchData = await batchRes.json();
-
-        if (prodData.success) {
-          setRecentProducts(prodData.products || []);
-          setPriceTiers(prodData.priceTiers || []);
-          setStats({
-            totalProducts: prodData.products?.length || 0,
-            publishedProducts: prodData.products?.filter((p: any) => p.status === 'Published').length || 0,
-            categoriesCount: catData.categories?.length || 0,
-            shareLinksCount: linkData.links?.length || 0,
-            totalBatches: batchData.batches?.length || 0,
-          });
+        const res = await fetch('/api/admin/stats');
+        const data = await res.json();
+        if (data.success) {
+          if (data.stats) setStats(data.stats);
+          if (data.recentProducts) setRecentProducts(data.recentProducts);
         }
       } catch (err) {
         console.error('Failed to load dashboard:', err);
@@ -84,6 +64,7 @@ export default function AdminDashboardPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/products/new"
+              prefetch={false}
               className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-md shadow-emerald-600/30 transition"
             >
               <PlusCircle className="w-4 h-4" />
@@ -91,6 +72,7 @@ export default function AdminDashboardPage() {
             </Link>
             <Link
               href="/admin/prices/bulk-update"
+              prefetch={false}
               className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-semibold flex items-center gap-2 border border-emerald-500/20 transition"
             >
               <FileSpreadsheet className="w-4 h-4" />
@@ -100,10 +82,14 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Clickable Shortcuts) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+        <Link
+          href="/admin/products"
+          prefetch={false}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-blue-300 hover:shadow-md transition flex items-center gap-4 group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition flex items-center justify-center font-bold">
             <Package className="w-6 h-6" />
           </div>
           <div>
@@ -113,10 +99,14 @@ export default function AdminDashboardPage() {
               เผยแพร่แล้ว {stats.publishedProducts} รายการ
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+        <Link
+          href="/admin/prices"
+          prefetch={false}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-emerald-300 hover:shadow-md transition flex items-center gap-4 group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition flex items-center justify-center font-bold">
             <Coins className="w-6 h-6" />
           </div>
           <div>
@@ -126,10 +116,14 @@ export default function AdminDashboardPage() {
               เซลล์ / ปลีก / VIP / ทั่วไป / ไม่มีราคา (-)
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+        <Link
+          href="/admin/share-links"
+          prefetch={false}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-purple-300 hover:shadow-md transition flex items-center gap-4 group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition flex items-center justify-center font-bold">
             <Share2 className="w-6 h-6" />
           </div>
           <div>
@@ -139,10 +133,14 @@ export default function AdminDashboardPage() {
               พร้อมใช้งานตลอด 24 ชม.
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+        <Link
+          href="/admin/prices/import-history"
+          prefetch={false}
+          className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:border-amber-300 hover:shadow-md transition flex items-center gap-4 group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition flex items-center justify-center font-bold">
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
@@ -152,10 +150,10 @@ export default function AdminDashboardPage() {
               พร้อมระบบ Rollback อัตโนมัติ
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
-      {/* 4 Price Tiers Architecture Explain Card & Quick Full Catalog Share Links */}
+      {/* 5 Price Tiers Architecture Explain Card & Quick Full Catalog Share Links */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -164,6 +162,7 @@ export default function AdminDashboardPage() {
           </div>
           <Link
             href="/admin/share-links"
+            prefetch={false}
             className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
           >
             <span>ดูระบบแชร์ลิงก์ทั้งหมด</span>
@@ -220,6 +219,7 @@ export default function AdminDashboardPage() {
             <Link
               href={overviewCatalogTab === 'all' ? '/s/catalog-sale-2026' : `/s/catalog-${overviewCatalogTab}-sale`}
               target="_blank"
+              prefetch={false}
               className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -241,6 +241,7 @@ export default function AdminDashboardPage() {
             <Link
               href={overviewCatalogTab === 'all' ? '/s/catalog-retail-2026' : `/s/catalog-${overviewCatalogTab}-retail`}
               target="_blank"
+              prefetch={false}
               className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -262,6 +263,7 @@ export default function AdminDashboardPage() {
             <Link
               href={overviewCatalogTab === 'all' ? '/s/catalog-vip-2026' : `/s/catalog-${overviewCatalogTab}-vip`}
               target="_blank"
+              prefetch={false}
               className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -283,6 +285,7 @@ export default function AdminDashboardPage() {
             <Link
               href={overviewCatalogTab === 'all' ? '/s/catalog-general-2026' : `/s/catalog-${overviewCatalogTab}-general`}
               target="_blank"
+              prefetch={false}
               className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -304,6 +307,7 @@ export default function AdminDashboardPage() {
             <Link
               href={overviewCatalogTab === 'all' ? '/s/catalog-noprice-2026' : `/s/catalog-${overviewCatalogTab}-noprice`}
               target="_blank"
+              prefetch={false}
               className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -331,6 +335,7 @@ export default function AdminDashboardPage() {
           </div>
           <Link
             href="/admin/products"
+            prefetch={false}
             className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
           >
             <span>ดูสินค้าทั้งหมด ({stats.totalProducts})</span>
@@ -353,61 +358,71 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {recentProducts.slice(0, 5).map((prod) => (
-                <tr key={prod.id} className="hover:bg-slate-50/60 transition">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      {prod.images && prod.images[0] ? (
-                        <img
-                          src={prod.images[0]}
-                          alt={prod.name}
-                          className="w-10 h-10 object-cover rounded-lg border border-slate-200"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
-                          <Package className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-mono font-bold text-slate-900">{prod.sku}</div>
-                        <div className="text-slate-600 truncate max-w-xs">{prod.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-slate-600">{prod.category_name || '-'}</td>
-                  <td className="px-3 py-3.5 text-right font-mono font-bold text-red-600">
-                    ฿{prod.prices?.SALE_PRICE?.toLocaleString() ?? '-'}
-                  </td>
-                  <td className="px-3 py-3.5 text-right font-mono font-bold text-blue-600">
-                    ฿{prod.prices?.RETAIL_PRICE?.toLocaleString() ?? '-'}
-                  </td>
-                  <td className="px-3 py-3.5 text-right font-mono font-bold text-purple-600">
-                    ฿{prod.prices?.VIP_PRICE?.toLocaleString() ?? '-'}
-                  </td>
-                  <td className="px-3 py-3.5 text-right font-mono font-bold text-slate-800">
-                    ฿{prod.prices?.GENERAL_PRICE?.toLocaleString() ?? '-'}
-                  </td>
-                  <td className="px-4 py-3.5 text-center">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                        prod.status === 'Published'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {prod.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <Link
-                      href="/admin/products"
-                      className="px-2.5 py-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
-                    >
-                      จัดการสินค้า
-                    </Link>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-5 py-8 text-center text-slate-400">
+                    กำลังโหลดรายการสินค้าล่าสุด...
                   </td>
                 </tr>
-              ))}
+              ) : (
+                recentProducts.slice(0, 6).map((prod) => (
+                  <tr key={prod.id} className="hover:bg-slate-50/60 transition">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        {prod.images && prod.images[0] ? (
+                          <img
+                            src={prod.images[0]}
+                            alt={prod.name}
+                            loading="lazy"
+                            className="w-10 h-10 object-cover rounded-lg border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+                            <Package className="w-5 h-5" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-mono font-bold text-slate-900">{prod.sku}</div>
+                          <div className="text-slate-600 truncate max-w-xs">{prod.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-600">{prod.category_name || '-'}</td>
+                    <td className="px-3 py-3.5 text-right font-mono font-bold text-red-600">
+                      ฿{prod.prices?.SALE_PRICE?.toLocaleString() ?? '-'}
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-mono font-bold text-blue-600">
+                      ฿{prod.prices?.RETAIL_PRICE?.toLocaleString() ?? '-'}
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-mono font-bold text-purple-600">
+                      ฿{prod.prices?.VIP_PRICE?.toLocaleString() ?? '-'}
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-mono font-bold text-slate-800">
+                      ฿{prod.prices?.GENERAL_PRICE?.toLocaleString() ?? '-'}
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                          prod.status === 'Published'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {prod.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <Link
+                        href="/admin/products"
+                        prefetch={false}
+                        className="px-2.5 py-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                      >
+                        จัดการสินค้า
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

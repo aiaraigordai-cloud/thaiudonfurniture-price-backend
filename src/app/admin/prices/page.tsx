@@ -159,8 +159,9 @@ export default function PricesPage() {
     };
     window.addEventListener('focus', handleFocus);
 
-    // Heartbeat Polling every 3.5 seconds
+    // Heartbeat Polling every 12 seconds when tab is visible
     const intervalId = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       try {
         const res = await fetch('/api/products/sync-status');
         const data = await res.json();
@@ -173,7 +174,7 @@ export default function PricesPage() {
           }
         }
       } catch {}
-    }, 3500);
+    }, 12000);
 
     return () => {
       if (bc) bc.close();

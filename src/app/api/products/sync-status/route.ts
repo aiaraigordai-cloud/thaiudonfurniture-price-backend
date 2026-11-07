@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { getSupabase } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory } from '@/lib/supabase';
 import { getLastProductUpdateTime } from '@/lib/product-store';
 
 export const dynamic = 'force-dynamic';
@@ -23,19 +23,12 @@ export async function GET() {
     `).get() as any;
 
     let supaPriceStamp = '';
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { data: supaLatest } = await supabase
-          .from('price_change_history')
-          .select('created_at')
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (supaLatest && supaLatest.length > 0) {
-          supaPriceStamp = supaLatest[0].created_at || '';
-        }
-      } catch {}
-    }
+    try {
+      const supaHistory = await getCachedSupabasePriceHistory();
+      if (supaHistory && supaHistory.length > 0) {
+        supaPriceStamp = supaHistory[0].created_at || '';
+      }
+    } catch {}
 
     const lastOverrideUpdate = getLastProductUpdateTime();
     const syncToken = `${row?.product_count || 0}_${row?.tuulo_count || 0}_${row?.knockdown_count || 0}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;

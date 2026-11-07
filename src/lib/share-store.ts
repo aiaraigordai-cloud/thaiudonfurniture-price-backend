@@ -307,7 +307,7 @@ async function getNetlifyShareStore() {
 
 export async function loadPersistentShareLinks(forceRefresh = false): Promise<PersistentShareLink[]> {
   const now = Date.now();
-  if (!forceRefresh && inMemoryLinks !== null && now - lastCacheReadTime < 3000) {
+  if (!forceRefresh && inMemoryLinks !== null && now - lastCacheReadTime < 15000) {
     return inMemoryLinks;
   }
 
@@ -503,10 +503,17 @@ export async function findShareLinkByToken(
   return found;
 }
 
+let lastDbSyncTime = 0;
+
 /**
  * Syncs all canonical and persistent links into SQLite on schema init.
  */
-export function syncShareLinksToDb(db: DatabaseSync): void {
+export function syncShareLinksToDb(db: DatabaseSync, force = false): void {
+  const now = Date.now();
+  if (!force && now - lastDbSyncTime < 30000) {
+    return;
+  }
+  lastDbSyncTime = now;
   try {
     const insert = db.prepare(`
       INSERT OR IGNORE INTO share_links (

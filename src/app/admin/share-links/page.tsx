@@ -68,10 +68,12 @@ export default function ShareLinksPage() {
   useEffect(() => {
     loadLinks();
 
-    // 1. Real-time background polling every 4 seconds
+    // 1. Real-time background polling every 12 seconds when tab is visible
     const interval = setInterval(() => {
-      loadLinks(true);
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadLinks(true);
+      }
+    }, 12000);
 
     // 2. BroadcastChannel for instant cross-tab real-time sync
     let bc: BroadcastChannel | null = null;

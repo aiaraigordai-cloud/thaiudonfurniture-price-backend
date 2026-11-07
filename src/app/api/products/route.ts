@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, invalidateSupabasePriceCache } from '@/lib/supabase';
 import { loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     const category = searchParams.get('category') || '';
     const catalogType = searchParams.get('catalog_type') || '';
     const status = searchParams.get('status') || '';
+    const limitParam = parseInt(searchParams.get('limit') || '0', 10);
 
     const db = getDb();
 
@@ -63,130 +64,145 @@ export async function GET(request: Request) {
 
     query += ` ORDER BY p.page_num ASC, p.sku ASC`;
 
-    const products = await db.prepare(query).all(...params) as any[];
-
-    // Fetch images and prices for each product
-    const tierRows = await db.prepare('SELECT id, code, name_th FROM price_tiers ORDER BY display_order').all() as any[];
-
-    const enrichedProducts = await Promise.all(products.map(async (prod) => {
-      const images = await db.prepare(`
-        SELECT id, image_url, display_order, is_primary
-        FROM product_images
-        WHERE product_id = ?
-        ORDER BY display_order ASC
-      `).all(prod.id) as any[];
-
-      const pricesList = await db.prepare(`
-        SELECT pp.price, pt.code, pt.name_th
+    // Execute batch queries instead of 620 N+1 queries
+    const products = (await db.prepare(query).all(...params)) as any[];
+    const tierRows = (await db.prepare('SELECT id, code, name_th FROM price_tiers ORDER BY display_order').all()) as any[];
+    const allImages = (await db
+      .prepare('SELECT product_id, image_url, display_order, is_primary FROM product_images ORDER BY display_order ASC')
+      .all()) as any[];
+    const allPrices = (await db
+      .prepare(`
+        SELECT pp.product_id, pp.price, pt.code
         FROM product_prices pp
         JOIN price_tiers pt ON pp.price_tier_id = pt.id
-        WHERE pp.product_id = ?
-      `).all(prod.id) as any[];
+      `)
+      .all()) as any[];
 
-      const prices: Record<string, number> = {};
-      pricesList.forEach((pr) => {
-        prices[pr.code] = pr.price;
-      });
+    const imagesByProductId = new Map<string, string[]>();
+    for (const img of allImages) {
+      if (!img.product_id || !img.image_url) continue;
+      let list = imagesByProductId.get(img.product_id);
+      if (!list) {
+        list = [];
+        imagesByProductId.set(img.product_id, list);
+      }
+      list.push(img.image_url);
+    }
 
-      const imgUrls = images.map((img) => img.image_url);
+    const pricesByProductId = new Map<string, Record<string, number>>();
+    for (const pr of allPrices) {
+      if (!pr.product_id || !pr.code) continue;
+      let map = pricesByProductId.get(pr.product_id);
+      if (!map) {
+        map = {};
+        pricesByProductId.set(pr.product_id, map);
+      }
+      map[pr.code] = pr.price;
+    }
+
+    const enrichedProducts = products.map((prod) => {
+      const imgUrls = [...(imagesByProductId.get(prod.id) || [])];
       if (prod.ref_image_url && !imgUrls.includes(prod.ref_image_url)) {
         imgUrls.unshift(prod.ref_image_url);
       }
+      const prices = { ...(pricesByProductId.get(prod.id) || {}) };
 
       return {
         ...prod,
-        color: prod.catalog_type === 'tuulo' ? 'ตามภาพ' : (prod.color || null),
+        color: prod.catalog_type === 'tuulo' ? 'ตามภาพ' : prod.color || null,
         images: imgUrls,
         prices,
       };
-    }));
+    });
 
-    // Overlay latest real-time prices from Supabase price_change_history if configured
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const { data: supaHistory } = await supabase
-          .from('price_change_history')
-          .select('product_id, price_tier_id, new_price, created_at')
-          .order('created_at', { ascending: false })
-          .limit(5000);
-
-        if (supaHistory && supaHistory.length > 0) {
-          const tierCodeById: Record<string, string> = {
-            tier_sale: 'SALE_PRICE',
-            tier_retail: 'RETAIL_PRICE',
-            tier_vip: 'VIP_PRICE',
-            tier_general: 'GENERAL_PRICE',
-          };
-
-          const latestPriceMap = new Map<string, number>();
-          for (const item of supaHistory) {
-            if (!item.product_id) continue;
-            const rawId = String(item.product_id).trim();
-            const keyUpper = `${rawId.toUpperCase()}_${item.price_tier_id}`;
-            const keyClean = `${rawId.toUpperCase().replace(/[-_\s.]/g, '')}_${item.price_tier_id}`;
-            const keyRaw = `${rawId}_${item.price_tier_id}`;
-
-            if (!latestPriceMap.has(keyUpper)) {
-              latestPriceMap.set(keyUpper, Number(item.new_price));
-            }
-            if (!latestPriceMap.has(keyClean)) {
-              latestPriceMap.set(keyClean, Number(item.new_price));
-            }
-            if (!latestPriceMap.has(keyRaw)) {
-              latestPriceMap.set(keyRaw, Number(item.new_price));
-            }
-          }
-
-          enrichedProducts.forEach((p) => {
-            const skuUpper = (p.sku || '').trim().toUpperCase();
-            const skuClean = skuUpper.replace(/[-_\s.]/g, '');
-            for (const [tierId, tierCode] of Object.entries(tierCodeById)) {
-              const kUpper = `${skuUpper}_${tierId}`;
-              const kClean = `${skuClean}_${tierId}`;
-              const kId = `${p.id}_${tierId}`;
-
-              if (latestPriceMap.has(kUpper)) {
-                p.prices[tierCode] = latestPriceMap.get(kUpper)!;
-              } else if (latestPriceMap.has(kClean)) {
-                p.prices[tierCode] = latestPriceMap.get(kClean)!;
-              } else if (latestPriceMap.has(kId)) {
-                p.prices[tierCode] = latestPriceMap.get(kId)!;
-              }
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('Supabase price overlay error:', err);
-      }
-    }
-
-    // Dynamic catalog counts
-    const countsRow = await db.prepare(`
-      SELECT 
-        (SELECT COUNT(*) FROM products) as all_count,
-        (SELECT COUNT(*) FROM products WHERE catalog_type = 'tuulo') as tuulo_count,
-        (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
-    `).get() as any;
-
-    // Overlay persistent product overrides (for realtime name, image, description updates)
+    // 1. Apply persistent product overrides (for realtime name, category, image, description updates)
     let finalProducts = enrichedProducts;
     try {
       const overrides = await loadProductOverrides();
       finalProducts = applyProductOverrides(enrichedProducts, overrides);
-      finalProducts.forEach((p) => {
-        if (p.catalog_type === 'tuulo') {
-          p.color = 'ตามภาพ';
-        }
-      });
     } catch (e) {
       console.warn('Failed to apply product overrides:', e);
     }
 
+    // 2. Overlay latest real-time prices from cached Supabase price_change_history (Authoritative Price Layer)
+    try {
+      const supaHistory = await getCachedSupabasePriceHistory();
+      if (supaHistory && supaHistory.length > 0) {
+        const tierCodeById: Record<string, string> = {
+          tier_sale: 'SALE_PRICE',
+          tier_retail: 'RETAIL_PRICE',
+          tier_vip: 'VIP_PRICE',
+          tier_general: 'GENERAL_PRICE',
+        };
+
+        const latestPriceMap = new Map<string, number>();
+        for (const item of supaHistory) {
+          if (!item.product_id || item.price_tier_id === 'PRODUCT_INFO_ONLY') continue;
+          if (item.new_price === null || item.new_price === undefined) continue;
+          const rawId = String(item.product_id).trim();
+          const keyUpper = `${rawId.toUpperCase()}_${item.price_tier_id}`;
+          const keyClean = `${rawId.toUpperCase().replace(/[-_\s.]/g, '')}_${item.price_tier_id}`;
+          const keyRaw = `${rawId}_${item.price_tier_id}`;
+
+          if (!latestPriceMap.has(keyUpper)) {
+            latestPriceMap.set(keyUpper, Number(item.new_price));
+          }
+          if (!latestPriceMap.has(keyClean)) {
+            latestPriceMap.set(keyClean, Number(item.new_price));
+          }
+          if (!latestPriceMap.has(keyRaw)) {
+            latestPriceMap.set(keyRaw, Number(item.new_price));
+          }
+        }
+
+        for (const p of finalProducts) {
+          const skuUpper = (p.sku || '').trim().toUpperCase();
+          const skuClean = skuUpper.replace(/[-_\s.]/g, '');
+          for (const [tierId, tierCode] of Object.entries(tierCodeById)) {
+            const kUpper = `${skuUpper}_${tierId}`;
+            const kClean = `${skuClean}_${tierId}`;
+            const kId = `${p.id}_${tierId}`;
+
+            if (latestPriceMap.has(kUpper)) {
+              p.prices[tierCode] = latestPriceMap.get(kUpper)!;
+            } else if (latestPriceMap.has(kClean)) {
+              p.prices[tierCode] = latestPriceMap.get(kClean)!;
+            } else if (latestPriceMap.has(kId)) {
+              p.prices[tierCode] = latestPriceMap.get(kId)!;
+            }
+          }
+          if (p.catalog_type === 'tuulo') {
+            p.color = 'ตามภาพ';
+          }
+        }
+      } else {
+        for (const p of finalProducts) {
+          if (p.catalog_type === 'tuulo') {
+            p.color = 'ตามภาพ';
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase price overlay error:', err);
+    }
+
+    // Dynamic catalog counts
+    const countsRow = (await db
+      .prepare(`
+      SELECT 
+        (SELECT COUNT(*) FROM products) as all_count,
+        (SELECT COUNT(*) FROM products WHERE catalog_type = 'tuulo') as tuulo_count,
+        (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
+    `)
+      .get()) as any;
+
+    const outputProducts = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
+
     return NextResponse.json(
       {
         success: true,
-        products: finalProducts,
+        products: outputProducts,
+        totalCount: finalProducts.length,
         priceTiers: tierRows,
         counts: {
           all: countsRow?.all_count || 0,
@@ -281,6 +297,7 @@ export async function POST(request: Request) {
       }
 
       await db.exec('COMMIT;');
+      invalidateSupabasePriceCache();
     } catch (txErr) {
       await db.exec('ROLLBACK;');
       throw txErr;

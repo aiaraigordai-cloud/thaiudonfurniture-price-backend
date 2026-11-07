@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, invalidateSupabasePriceCache } from '@/lib/supabase';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -103,6 +103,7 @@ export async function POST(request: Request) {
           console.warn('Supabase sync error (update-single):', supaErr);
         }
       }
+      invalidateSupabasePriceCache();
     } catch (err: any) {
       await db.exec('ROLLBACK;');
       return NextResponse.json({ error: err.message || 'บันทึกราคาไม่สำเร็จ' }, { status: 400 });

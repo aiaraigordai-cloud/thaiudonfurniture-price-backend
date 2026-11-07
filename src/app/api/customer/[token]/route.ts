@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { getSupabase } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory } from '@/lib/supabase';
 import { loadProductOverrides } from '@/lib/product-store';
 import { findShareLinkByToken } from '@/lib/share-store';
 import crypto from 'node:crypto';
@@ -63,12 +63,12 @@ export async function GET(request: Request, { params }: { params: { token: strin
       }
     }
 
-    // Record share event
+    // Record share event without blocking response
     try {
       const userAgent = request.headers.get('user-agent') || '';
       const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
       const ipHash = crypto.createHash('sha256').update(ip).digest('hex').substring(0, 16);
-      await db.prepare(`
+      db.prepare(`
         INSERT INTO share_events (id, share_link_id, ip_hash, user_agent, accessed_at)
         VALUES (?, ?, ?, ?, datetime('now'))
       `).run('ev_' + crypto.randomUUID(), link.id, ipHash, userAgent);
@@ -119,73 +119,35 @@ export async function GET(request: Request, { params }: { params: { token: strin
       queryParams.push(link.price_tier_id, link.id);
     }
 
-    const rawProducts = await db.prepare(productsQuery).all(...queryParams) as any[];
+    const rawProducts = (await db.prepare(productsQuery).all(...queryParams)) as any[];
+
+    // Single batch query for all product images (eliminates 310 N+1 queries)
+    const allImages = (await db
+      .prepare('SELECT product_id, image_url FROM product_images ORDER BY display_order ASC')
+      .all()) as any[];
+
+    const imagesByProductId = new Map<string, string[]>();
+    for (const img of allImages) {
+      if (!img.product_id || !img.image_url) continue;
+      let list = imagesByProductId.get(img.product_id);
+      if (!list) {
+        list = [];
+        imagesByProductId.set(img.product_id, list);
+      }
+      list.push(img.image_url);
+    }
 
     const isNoPriceTier =
       link.price_tier_id === 'tier_noprice' ||
       (link.token_raw && link.token_raw.toLowerCase().includes('noprice')) ||
       (link.tier_code && link.tier_code === 'NO_PRICE');
 
-    // Overlay latest real-time prices from Supabase price_change_history for this link's price tier
-    const supabase = getSupabase();
-    const latestPriceMap = new Map<string, number>();
-
-    if (supabase && link.price_tier_id && !isNoPriceTier) {
-      try {
-        const { data: supaHistory } = await supabase
-          .from('price_change_history')
-          .select('product_id, new_price, created_at')
-          .eq('price_tier_id', link.price_tier_id)
-          .order('created_at', { ascending: false })
-          .limit(5000);
-
-        if (supaHistory && supaHistory.length > 0) {
-          for (const item of supaHistory) {
-            if (!item.product_id) continue;
-            const rawId = String(item.product_id).trim();
-            const keyUpper = rawId.toUpperCase();
-            const keyClean = keyUpper.replace(/[-_\s.]/g, '');
-
-            if (!latestPriceMap.has(keyUpper)) {
-              latestPriceMap.set(keyUpper, Number(item.new_price));
-            }
-            if (!latestPriceMap.has(keyClean)) {
-              latestPriceMap.set(keyClean, Number(item.new_price));
-            }
-            if (!latestPriceMap.has(rawId)) {
-              latestPriceMap.set(rawId, Number(item.new_price));
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Customer catalog Supabase price overlay error:', err);
-      }
-    }
-
-    // Fetch images and calculate live price for each product
-    const products = await Promise.all(rawProducts.map(async (p) => {
-      const imgs = await db.prepare(`
-        SELECT image_url FROM product_images
-        WHERE product_id = ?
-        ORDER BY display_order ASC
-      `).all(p.id) as any[];
-
-      // Resolve live price: Prioritize Supabase real-time price -> Fallback to SQLite pp.price
-      let resolvedPrice = p.price;
-      const skuUpper = (p.sku || '').trim().toUpperCase();
-      const skuClean = skuUpper.replace(/[-_\s.]/g, '');
-
-      if (latestPriceMap.has(skuUpper)) {
-        resolvedPrice = latestPriceMap.get(skuUpper)!;
-      } else if (latestPriceMap.has(skuClean)) {
-        resolvedPrice = latestPriceMap.get(skuClean)!;
-      } else if (latestPriceMap.has(p.id)) {
-        resolvedPrice = latestPriceMap.get(p.id)!;
-      }
-
-      const finalPrice =
-        !isNoPriceTier && resolvedPrice !== null && resolvedPrice !== undefined && Number(resolvedPrice) > 0
-          ? Number(resolvedPrice)
+    // Map base products
+    const products = rawProducts.map((p) => {
+      const imgs = imagesByProductId.get(p.id) || [];
+      const basePrice =
+        !isNoPriceTier && p.price !== null && p.price !== undefined && Number(p.price) > 0
+          ? Number(p.price)
           : null;
 
       return {
@@ -205,13 +167,12 @@ export async function GET(request: Request, { params }: { params: { token: strin
         height: p.height,
         depth: p.depth,
         color: p.catalog_type === 'tuulo' ? 'ตามภาพ' : p.color,
-        images: imgs.map((img) => img.image_url),
-        // Isolated live price: null / 0 handled cleanly
-        price: finalPrice,
+        images: [...imgs],
+        price: basePrice,
       };
-    }));
+    });
 
-    // Overlay persistent product overrides (for realtime name, image, sizes, prices)
+    // 1. Overlay persistent product overrides (for realtime name, category, image, sizes, fallback prices)
     try {
       const overrides = await loadProductOverrides();
       if (overrides && Object.keys(overrides).length > 0) {
@@ -242,7 +203,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
             if (Array.isArray(ovr.images) && ovr.images.length > 0) {
               prod.images = ovr.images;
             }
-            if (currentTierCode && ovr.prices && ovr.prices[currentTierCode] !== undefined) {
+            if (!isNoPriceTier && currentTierCode && ovr.prices && ovr.prices[currentTierCode] !== undefined) {
               const pVal = Number(ovr.prices[currentTierCode]);
               if (pVal > 0) {
                 prod.price = pVal;
@@ -256,6 +217,51 @@ export async function GET(request: Request, { params }: { params: { token: strin
       }
     } catch (e) {
       console.warn('Customer catalog overrides overlay error:', e);
+    }
+
+    // 2. Overlay latest real-time prices from cached Supabase price_change_history (Authoritative Price Layer)
+    if (link.price_tier_id && !isNoPriceTier) {
+      try {
+        const supaHistory = await getCachedSupabasePriceHistory();
+        if (supaHistory && supaHistory.length > 0) {
+          const latestPriceMap = new Map<string, number>();
+          for (const item of supaHistory) {
+            if (!item.product_id || item.price_tier_id !== link.price_tier_id) continue;
+            if (item.new_price === null || item.new_price === undefined) continue;
+            const rawId = String(item.product_id).trim();
+            const keyUpper = rawId.toUpperCase();
+            const keyClean = keyUpper.replace(/[-_\s.]/g, '');
+
+            if (!latestPriceMap.has(keyUpper)) {
+              latestPriceMap.set(keyUpper, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(keyClean)) {
+              latestPriceMap.set(keyClean, Number(item.new_price));
+            }
+            if (!latestPriceMap.has(rawId)) {
+              latestPriceMap.set(rawId, Number(item.new_price));
+            }
+          }
+
+          for (const prod of products) {
+            const skuUpper = (prod.sku || '').trim().toUpperCase();
+            const skuClean = skuUpper.replace(/[-_\s.]/g, '');
+            let resolvedPrice: number | null = null;
+            if (latestPriceMap.has(skuUpper)) {
+              resolvedPrice = latestPriceMap.get(skuUpper)!;
+            } else if (latestPriceMap.has(skuClean)) {
+              resolvedPrice = latestPriceMap.get(skuClean)!;
+            } else if (latestPriceMap.has(prod.id)) {
+              resolvedPrice = latestPriceMap.get(prod.id)!;
+            }
+            if (resolvedPrice !== null && resolvedPrice > 0) {
+              prod.price = resolvedPrice;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Customer catalog Supabase price overlay error:', err);
+      }
     }
 
     if (isNoPriceTier) {

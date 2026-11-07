@@ -58,7 +58,7 @@ async function getNetlifyProductStore() {
 
 export async function loadProductOverrides(forceRefresh = false): Promise<Record<string, ProductOverride>> {
   const now = Date.now();
-  if (!forceRefresh && inMemoryOverrides !== null && now - lastCacheReadTime < 2000) {
+  if (!forceRefresh && inMemoryOverrides !== null && now - lastCacheReadTime < 15000) {
     return inMemoryOverrides;
   }
 

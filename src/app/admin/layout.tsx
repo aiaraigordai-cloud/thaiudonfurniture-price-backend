@@ -125,7 +125,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* User Card */}
         <div className="px-4 py-3 bg-[#0F132C] border border-white/10 mx-3 my-3 rounded-2xl">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold text-white truncate max-w-[140px]">{user?.employee_name}</span>
+            <span className="text-xs font-semibold text-white truncate max-w-[140px]">
+              {user?.employee_name || (loading ? 'กำลังโหลดข้อมูล...' : 'ผู้ดูแลระบบ')}
+            </span>
             <span
               className={`px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wide uppercase ${
                 isOwner
@@ -133,10 +135,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               }`}
             >
-              {user?.role}
+              {user?.role || 'SYSTEM_OWNER'}
             </span>
           </div>
-          <div className="text-[11px] text-slate-400 truncate">@{user?.username}</div>
+          <div className="text-[11px] text-slate-400 truncate">@{user?.username || 'admin'}</div>
         </div>
 
         {/* Navigation Menus */}
@@ -153,6 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                     active
@@ -188,6 +191,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                       active
@@ -212,6 +216,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link
             href="/s/catalog-sale-all"
             target="_blank"
+            prefetch={false}
             className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium bg-[#0F132C] text-red-400 hover:bg-white/10 transition border border-white/10"
           >
             <span className="flex items-center gap-2">

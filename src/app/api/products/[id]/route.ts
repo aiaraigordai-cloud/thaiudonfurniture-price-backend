@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, invalidateSupabasePriceCache } from '@/lib/supabase';
 import { loadProductOverrides, saveProductOverride, applyProductOverrideSingle } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
@@ -259,6 +259,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           console.warn('Supabase sync price change error:', supaErr);
         }
       }
+      invalidateSupabasePriceCache();
 
       // Persist product overrides to Netlify Blobs & local store for cross-container realtime sync
       try {

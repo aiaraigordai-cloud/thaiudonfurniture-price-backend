@@ -13,46 +13,74 @@ export async function GET() {
 
     const db = getDb();
 
-    // Ensure all persistent and canonical links exist in SQLite
+    // Ensure all persistent and canonical links exist in SQLite (cached for 30s)
     try {
       syncShareLinksToDb(db);
       await loadPersistentShareLinks();
     } catch {}
 
-    const links = await db.prepare(`
+    const links = (await db
+      .prepare(`
       SELECT 
         sl.id, sl.token_raw, sl.sharing_mode, sl.catalog_filter, sl.customer_name, sl.expires_at, sl.is_revoked, sl.created_at,
         pt.name_th as price_tier_name,
         pt.code as price_tier_code,
-        p.employee_name as creator_name,
-        (SELECT COUNT(*) FROM share_events se WHERE se.share_link_id = sl.id) as view_count
+        p.employee_name as creator_name
       FROM share_links sl
       JOIN price_tiers pt ON sl.price_tier_id = pt.id
       LEFT JOIN profiles p ON sl.created_by = p.id
       ORDER BY sl.created_at DESC
-    `).all() as any[];
+    `)
+      .all()) as any[];
 
-    // For each link, get product count or details if not full catalog
-    const enriched = await Promise.all(links.map(async (link) => {
+    // Single batch query for catalog counts
+    const catalogCounts = (await db
+      .prepare(`
+      SELECT 
+        (SELECT COUNT(*) FROM products WHERE status = 'Published') as all_count,
+        (SELECT COUNT(*) FROM products WHERE status = 'Published' AND catalog_type = 'tuulo') as tuulo_count,
+        (SELECT COUNT(*) FROM products WHERE status = 'Published' AND catalog_type = 'knockdown') as knockdown_count
+    `)
+      .get()) as any;
+
+    // Single batch query for custom link product counts
+    const customProductCounts = (await db
+      .prepare('SELECT share_link_id, COUNT(*) as c FROM share_link_products GROUP BY share_link_id')
+      .all()) as any[];
+    const prodCountByLinkId = new Map<string, number>();
+    for (const row of customProductCounts) {
+      prodCountByLinkId.set(row.share_link_id, row.c || 0);
+    }
+
+    // Single batch query for view counts
+    const viewCountRows = (await db
+      .prepare('SELECT share_link_id, COUNT(*) as c FROM share_events GROUP BY share_link_id')
+      .all()) as any[];
+    const viewCountByLinkId = new Map<string, number>();
+    for (const row of viewCountRows) {
+      viewCountByLinkId.set(row.share_link_id, row.c || 0);
+    }
+
+    const enriched = links.map((link) => {
       let productCount = 0;
       if (link.sharing_mode === 'FULL_CATALOG') {
-        let filterSql = "status = 'Published'";
-        const params: any[] = [];
-        if (link.catalog_filter && link.catalog_filter !== 'all') {
-          filterSql += " AND catalog_type = ?";
-          params.push(link.catalog_filter);
+        if (link.catalog_filter === 'tuulo') {
+          productCount = catalogCounts?.tuulo_count || 0;
+        } else if (link.catalog_filter === 'knockdown') {
+          productCount = catalogCounts?.knockdown_count || 0;
+        } else {
+          productCount = catalogCounts?.all_count || 0;
         }
-        const cnt = await db.prepare(`SELECT COUNT(*) as c FROM products WHERE ${filterSql}`).get(...params) as any;
-        productCount = cnt ? cnt.c : 0;
       } else {
-        const cnt = await db.prepare("SELECT COUNT(*) as c FROM share_link_products WHERE share_link_id = ?").get(link.id) as any;
-        productCount = cnt ? cnt.c : 0;
+        productCount = prodCountByLinkId.get(link.id) || 0;
       }
+
       return {
         ...link,
+        view_count: viewCountByLinkId.get(link.id) || 0,
         productCount,
       };
-    }));
+    });
 
     return NextResponse.json({ success: true, links: enriched });
   } catch (error) {
