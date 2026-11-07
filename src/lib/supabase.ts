@@ -69,16 +69,24 @@ export async function getCachedSupabasePriceHistory(
 
   inFlightPriceHistoryPromise = (async () => {
     try {
-      const { data } = await supabase
+      const fetchPromise = supabase
         .from('price_change_history')
         .select('product_id, price_tier_id, new_price, created_at')
         .order('created_at', { ascending: false })
         .limit(5000);
 
-      const rows = (data as CachedPriceHistoryRow[]) || [];
-      cachedPriceHistory = rows;
-      cachedPriceHistoryTime = Date.now();
-      return rows;
+      const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), 2500)
+      );
+
+      const result = await Promise.race([fetchPromise, timeoutPromise]);
+      if (result && Array.isArray(result.data)) {
+        const rows = result.data as CachedPriceHistoryRow[];
+        cachedPriceHistory = rows;
+        cachedPriceHistoryTime = Date.now();
+        return rows;
+      }
+      return cachedPriceHistory || [];
     } catch (err) {
       console.warn('[supabase] price_change_history cache fetch warning:', err);
       return cachedPriceHistory || [];

@@ -52,6 +52,13 @@ function getLocalStorePath(): string {
 
 let inMemoryStore: PersistentEmployee[] | null = null;
 
+function withTimeout<T>(promise: Promise<T>, ms = 800): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function getNetlifyStore() {
   try {
     if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -69,11 +76,11 @@ export async function loadPersistentEmployees(): Promise<PersistentEmployee[]> {
     return inMemoryStore;
   }
 
-  // 1. Try Netlify Blobs if in serverless
+  // 1. Try Netlify Blobs if in serverless (with strict 800ms timeout)
   try {
     const netlifyStore = await getNetlifyStore();
     if (netlifyStore) {
-      const blobData = await netlifyStore.get('employees_list', { type: 'json' });
+      const blobData = await withTimeout(netlifyStore.get('employees_list', { type: 'json' }), 800);
       if (Array.isArray(blobData) && blobData.length > 0) {
         inMemoryStore = blobData as PersistentEmployee[];
         try {
@@ -151,7 +158,7 @@ export async function savePersistentEmployees(employees: PersistentEmployee[]): 
   try {
     const netlifyStore = await getNetlifyStore();
     if (netlifyStore) {
-      await netlifyStore.setJSON('employees_list', employees);
+      await withTimeout(netlifyStore.setJSON('employees_list', employees), 1200);
     }
   } catch (err) {
     console.warn('[employee-store] Netlify blob write warning:', err);
@@ -319,7 +326,7 @@ export async function syncFromDbToPersistent(db: DatabaseSync): Promise<void> {
       fs.writeFileSync(localPath, JSON.stringify(list, null, 2), 'utf-8');
       const netlifyStore = await getNetlifyStore();
       if (netlifyStore) {
-        await netlifyStore.setJSON('employees_list', list);
+        await withTimeout(netlifyStore.setJSON('employees_list', list), 1200);
       }
     }
   } catch (err) {

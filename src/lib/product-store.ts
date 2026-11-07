@@ -44,6 +44,13 @@ let inMemoryOverrides: Record<string, ProductOverride> | null = null;
 let lastProductUpdateTime: number = Date.now();
 let lastCacheReadTime: number = 0;
 
+function withTimeout<T>(promise: Promise<T>, ms = 800): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function getNetlifyProductStore() {
   try {
     if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -62,11 +69,11 @@ export async function loadProductOverrides(forceRefresh = false): Promise<Record
     return inMemoryOverrides;
   }
 
-  // 1. Try Netlify Blobs if in serverless
+  // 1. Try Netlify Blobs if in serverless (with strict 800ms timeout to prevent 30s Lambda hang)
   try {
     const netlifyStore = await getNetlifyProductStore();
     if (netlifyStore) {
-      const blobData = await netlifyStore.get('products_overrides', { type: 'json' });
+      const blobData = await withTimeout(netlifyStore.get('products_overrides', { type: 'json' }), 800);
       if (blobData && typeof blobData === 'object') {
         inMemoryOverrides = blobData as Record<string, ProductOverride>;
         lastCacheReadTime = Date.now();
@@ -134,11 +141,11 @@ export async function saveProductOverride(
     console.warn('[product-store] Failed to write local JSON:', err);
   }
 
-  // Save to Netlify Blobs
+  // Save to Netlify Blobs (with strict timeout)
   try {
     const netlifyStore = await getNetlifyProductStore();
     if (netlifyStore) {
-      await netlifyStore.setJSON('products_overrides', overrides);
+      await withTimeout(netlifyStore.setJSON('products_overrides', overrides), 1200);
     }
   } catch (err) {
     console.warn('[product-store] Netlify blob write warning:', err);
@@ -184,7 +191,7 @@ export async function saveProductOverridesBatch(
   try {
     const netlifyStore = await getNetlifyProductStore();
     if (netlifyStore) {
-      await netlifyStore.setJSON('products_overrides', overrides);
+      await withTimeout(netlifyStore.setJSON('products_overrides', overrides), 1200);
     }
   } catch (err) {
     console.warn('[product-store] Netlify blob batch write warning:', err);

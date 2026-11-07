@@ -293,6 +293,13 @@ function getLocalStorePath(): string {
 let inMemoryLinks: PersistentShareLink[] | null = null;
 let lastCacheReadTime: number = 0;
 
+function withTimeout<T>(promise: Promise<T>, ms = 800): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function getNetlifyShareStore() {
   try {
     if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -311,11 +318,11 @@ export async function loadPersistentShareLinks(forceRefresh = false): Promise<Pe
     return inMemoryLinks;
   }
 
-  // 1. Try Netlify Blobs if in serverless
+  // 1. Try Netlify Blobs if in serverless (with strict 800ms timeout to prevent 30s Lambda hang)
   try {
     const netlifyStore = await getNetlifyShareStore();
     if (netlifyStore) {
-      const blobData = await netlifyStore.get('share_links_list', { type: 'json' });
+      const blobData = await withTimeout(netlifyStore.get('share_links_list', { type: 'json' }), 800);
       if (Array.isArray(blobData) && blobData.length > 0) {
         // Merge with canonicals to guarantee all official links exist
         inMemoryLinks = mergeLinks(CANONICAL_CATALOG_LINKS, blobData as PersistentShareLink[]);
@@ -387,11 +394,11 @@ export async function savePersistentShareLink(link: PersistentShareLink): Promis
       console.warn('[share-store] Local save warning:', e);
     }
 
-    // 2. Write to Netlify Blobs
+    // 2. Write to Netlify Blobs (with strict timeout)
     try {
       const netlifyStore = await getNetlifyShareStore();
       if (netlifyStore) {
-        await netlifyStore.setJSON('share_links_list', all);
+        await withTimeout(netlifyStore.setJSON('share_links_list', all), 1200);
       }
     } catch (e) {
       console.warn('[share-store] Netlify blob save warning:', e);
@@ -424,7 +431,7 @@ export async function updatePersistentShareLink(
     try {
       const netlifyStore = await getNetlifyShareStore();
       if (netlifyStore) {
-        await netlifyStore.setJSON('share_links_list', all);
+        await withTimeout(netlifyStore.setJSON('share_links_list', all), 1200);
       }
     } catch {}
 
