@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import { getSupabase } from '@/lib/supabase';
+import { loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request) {
@@ -33,9 +34,16 @@ export async function GET(request: Request) {
     const params: any[] = [];
 
     if (search) {
-      query += ` AND (p.sku LIKE ? OR p.name LIKE ? OR p.description LIKE ?)`;
-      const term = `%${search}%`;
-      params.push(term, term, term);
+      const cleanDigits = search.trim().replace(/[,฿\s\.\-]/g, '');
+      const term = `%${search.trim()}%`;
+      const priceTerm = cleanDigits ? `%${cleanDigits}%` : term;
+      query += ` AND (
+        p.sku LIKE ? OR 
+        p.name LIKE ? OR 
+        p.description LIKE ? OR 
+        p.id IN (SELECT product_id FROM product_prices WHERE CAST(ROUND(price) AS TEXT) LIKE ? OR CAST(price AS TEXT) LIKE ?)
+      )`;
+      params.push(term, term, term, priceTerm, priceTerm);
     }
 
     if (catalogType && catalogType !== 'all') {
@@ -87,6 +95,7 @@ export async function GET(request: Request) {
 
       return {
         ...prod,
+        color: prod.catalog_type === 'tuulo' ? 'ตามภาพ' : (prod.color || null),
         images: imgUrls,
         prices,
       };
@@ -160,10 +169,24 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
     `).get() as any;
 
+    // Overlay persistent product overrides (for realtime name, image, description updates)
+    let finalProducts = enrichedProducts;
+    try {
+      const overrides = await loadProductOverrides();
+      finalProducts = applyProductOverrides(enrichedProducts, overrides);
+      finalProducts.forEach((p) => {
+        if (p.catalog_type === 'tuulo') {
+          p.color = 'ตามภาพ';
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to apply product overrides:', e);
+    }
+
     return NextResponse.json(
       {
         success: true,
-        products: enrichedProducts,
+        products: finalProducts,
         priceTiers: tierRows,
         counts: {
           all: countsRow?.all_count || 0,

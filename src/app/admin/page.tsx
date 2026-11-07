@@ -26,7 +26,7 @@ export default function AdminDashboardPage() {
   const [recentProducts, setRecentProducts] = useState<any[]>([]);
   const [priceTiers, setPriceTiers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [overviewCatalogTab, setOverviewCatalogTab] = useState<'tuulo' | 'knockdown'>('tuulo');
+  const [overviewCatalogTab, setOverviewCatalogTab] = useState<'tuulo' | 'knockdown' | 'all'>('tuulo');
 
   useEffect(() => {
     async function loadData() {
@@ -76,7 +76,7 @@ export default function AdminDashboardPage() {
             </div>
             <h1 className="text-2xl font-bold tracking-tight">ยินดีต้อนรับสู่ระบบจัดการ Catalog ไทยอุดรเฟอร์นิเจอร์</h1>
             <p className="text-slate-300 text-xs mt-1 max-w-2xl leading-relaxed">
-              จัดการฐานข้อมูลสินค้ากลาง ควบคุมระบบราคาทั้ง 4 ระดับ อัปเดตราคาจำนวนมากด้วย AI Document Parser
+              จัดการฐานข้อมูลสินค้ากลาง ควบคุมระบบราคาทั้ง 5 ระดับ อัปเดตราคาจำนวนมากด้วย AI Document Parser
               และสร้างลิงก์แชร์ลูกค้าแบบ Real-time Live Pricing ที่มีความปลอดภัยสูงสุด
             </p>
           </div>
@@ -120,10 +120,10 @@ export default function AdminDashboardPage() {
             <Coins className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-500 font-medium">ระบบราคา 4 ระดับ</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">4 ประเภทราคา</div>
+            <div className="text-xs text-slate-500 font-medium">ระบบราคา 5 ระดับ</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">5 ประเภทราคา</div>
             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-              เซลล์ / ปลีก / VIP / ทั่วไป
+              เซลล์ / ปลีก / VIP / ทั่วไป / ไม่มีราคา (-)
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
 
-        {/* Catalog Selector Tabs */}
+        {/* Catalog Selector Tabs (3 แบบ: ตู้โล / น็อคดาวน์ / รวมทั้งหมด) */}
         <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
           <button
             onClick={() => setOverviewCatalogTab('tuulo')}
@@ -193,9 +193,20 @@ export default function AdminDashboardPage() {
           >
             <span>แคตตาล็อกน็อคดาวน์ (189 รายการ)</span>
           </button>
+          <button
+            onClick={() => setOverviewCatalogTab('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              overviewCatalogTab === 'all'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            <span>รวมสินค้าทั้งหมด (310 รายการ)</span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          {/* 1. SALE_PRICE */}
           <div className="p-4 rounded-xl border border-red-200 bg-red-50/40 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
@@ -203,11 +214,11 @@ export default function AdminDashboardPage() {
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold">SALE_PRICE</span>
               </div>
               <p className="text-[11px] text-slate-600 mt-2">
-                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'} ด้วยราคาโปรโมชั่น
+                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : overviewCatalogTab === 'knockdown' ? 'น็อคดาวน์' : 'ทั้งหมด'} ด้วยราคาโปรโมชั่น
               </p>
             </div>
             <Link
-              href={`/s/catalog-${overviewCatalogTab}-sale`}
+              href={overviewCatalogTab === 'all' ? '/s/catalog-sale-2026' : `/s/catalog-${overviewCatalogTab}-sale`}
               target="_blank"
               className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
@@ -216,6 +227,7 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
 
+          {/* 2. RETAIL_PRICE */}
           <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/40 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
@@ -223,11 +235,11 @@ export default function AdminDashboardPage() {
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">RETAIL_PRICE</span>
               </div>
               <p className="text-[11px] text-slate-600 mt-2">
-                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'} ด้วยราคามาตรฐานหน้าร้าน
+                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : overviewCatalogTab === 'knockdown' ? 'น็อคดาวน์' : 'ทั้งหมด'} ด้วยราคามาตรฐานหน้าร้าน
               </p>
             </div>
             <Link
-              href={`/s/catalog-${overviewCatalogTab}-retail`}
+              href={overviewCatalogTab === 'all' ? '/s/catalog-retail-2026' : `/s/catalog-${overviewCatalogTab}-retail`}
               target="_blank"
               className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
@@ -236,6 +248,7 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
 
+          {/* 3. VIP_PRICE */}
           <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/40 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
@@ -243,11 +256,11 @@ export default function AdminDashboardPage() {
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold">VIP_PRICE</span>
               </div>
               <p className="text-[11px] text-slate-600 mt-2">
-                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'} ด้วยราคาลูกค้า VIP
+                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : overviewCatalogTab === 'knockdown' ? 'น็อคดาวน์' : 'ทั้งหมด'} ด้วยราคาลูกค้า VIP
               </p>
             </div>
             <Link
-              href={`/s/catalog-${overviewCatalogTab}-vip`}
+              href={overviewCatalogTab === 'all' ? '/s/catalog-vip-2026' : `/s/catalog-${overviewCatalogTab}-vip`}
               target="_blank"
               className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
@@ -256,6 +269,7 @@ export default function AdminDashboardPage() {
             </Link>
           </div>
 
+          {/* 4. GENERAL_PRICE */}
           <div className="p-4 rounded-xl border border-slate-300 bg-slate-50 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between">
@@ -263,16 +277,37 @@ export default function AdminDashboardPage() {
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">GENERAL_PRICE</span>
               </div>
               <p className="text-[11px] text-slate-600 mt-2">
-                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'} ด้วยราคาโครงการ
+                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : overviewCatalogTab === 'knockdown' ? 'น็อคดาวน์' : 'ทั้งหมด'} ด้วยราคาโครงการ
               </p>
             </div>
             <Link
-              href={`/s/catalog-${overviewCatalogTab}-general`}
+              href={overviewCatalogTab === 'all' ? '/s/catalog-general-2026' : `/s/catalog-${overviewCatalogTab}-general`}
               target="_blank"
               className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>เปิดแคตตาล็อกราคาทั่วไป</span>
+            </Link>
+          </div>
+
+          {/* 5. NO_PRICE */}
+          <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/60 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-900">5. ไม่มีราคา (-)</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-200 text-amber-800 font-bold">NO_PRICE</span>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-2">
+                แชร์สินค้า {overviewCatalogTab === 'tuulo' ? 'ตู้โล' : overviewCatalogTab === 'knockdown' ? 'น็อคดาวน์' : 'ทั้งหมด'} แสดงเฉพาะสินค้า ไม่มีราคา (-)
+              </p>
+            </div>
+            <Link
+              href={overviewCatalogTab === 'all' ? '/s/catalog-noprice-2026' : `/s/catalog-${overviewCatalogTab}-noprice`}
+              target="_blank"
+              className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>เปิดแคตตาล็อกไม่มีราคา</span>
             </Link>
           </div>
         </div>
@@ -365,10 +400,10 @@ export default function AdminDashboardPage() {
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     <Link
-                      href={`/admin/products/${prod.id}`}
+                      href="/admin/products"
                       className="px-2.5 py-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
                     >
-                      แก้ไข
+                      จัดการสินค้า
                     </Link>
                   </td>
                 </tr>

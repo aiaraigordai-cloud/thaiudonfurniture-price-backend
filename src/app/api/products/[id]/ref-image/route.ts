@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
+import { saveProductOverride } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       await db.exec('ROLLBACK;');
       throw err;
     }
+
+    try {
+      await saveProductOverride(params.id, {
+        ref_image_url: imageUrl,
+        ref_filename: cleanFilename,
+      });
+    } catch {}
 
     await logAudit('UPLOAD_REF_IMAGE', 'PRODUCT', params.id, user.id, user.username, {
       sku: product.sku,
@@ -116,6 +124,13 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       await db.exec('ROLLBACK;');
       throw err;
     }
+
+    try {
+      await saveProductOverride(params.id, {
+        ref_image_url: null,
+        ref_filename: null,
+      });
+    } catch {}
 
     await logAudit('DELETE_REF_IMAGE', 'PRODUCT', params.id, user.id, user.username, {
       sku: product.sku,

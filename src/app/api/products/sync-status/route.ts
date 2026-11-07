@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getSupabase } from '@/lib/supabase';
+import { getLastProductUpdateTime } from '@/lib/product-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,8 @@ export async function GET() {
       } catch {}
     }
 
-    const syncToken = `${row?.product_count || 0}_${row?.tuulo_count || 0}_${row?.knockdown_count || 0}_${row?.last_product_update || ''}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
+    const lastOverrideUpdate = getLastProductUpdateTime();
+    const syncToken = `${row?.product_count || 0}_${row?.tuulo_count || 0}_${row?.knockdown_count || 0}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
 
     return NextResponse.json(
       {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import { getSupabase } from '@/lib/supabase';
+import { loadProductOverrides, saveProductOverride, applyProductOverrideSingle } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
@@ -82,14 +83,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
       }
     }
 
+    const baseProduct = {
+      ...product,
+      images: mainImages.length > 0 ? mainImages : images.map((img) => img.image_url),
+      primary_image_url: mainImages[0] || images.find((i) => i.is_primary === 1)?.image_url || null,
+      prices,
+    };
+
+    // Apply persistent product overrides if available
+    const overrides = await loadProductOverrides();
+    const finalProduct = applyProductOverrideSingle(baseProduct, overrides);
+
     return NextResponse.json({
       success: true,
-      product: {
-        ...product,
-        images: mainImages.length > 0 ? mainImages : images.map((img) => img.image_url),
-        primary_image_url: mainImages[0] || images.find((i) => i.is_primary === 1)?.image_url || null,
-        prices,
-      },
+      product: finalProduct,
     });
   } catch (error) {
     return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการดึงข้อมูลสินค้า' }, { status: 500 });
@@ -251,6 +258,35 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         } catch (supaErr) {
           console.warn('Supabase sync price change error:', supaErr);
         }
+      }
+
+      // Persist product overrides to Netlify Blobs & local store for cross-container realtime sync
+      try {
+        let resolvedCategoryName: string | null = null;
+        if (category_id) {
+          const cat = await db.prepare('SELECT name FROM categories WHERE id = ?').get(category_id) as any;
+          if (cat) resolvedCategoryName = cat.name;
+        }
+
+        await saveProductOverride(params.id, {
+          sku: sku.trim(),
+          name: name.trim(),
+          description: description || '',
+          category_id: category_id || null,
+          category_name: resolvedCategoryName,
+          width: width ? parseFloat(width) : null,
+          height: height ? parseFloat(height) : null,
+          depth: depth ? parseFloat(depth) : null,
+          color: color || null,
+          status: status || 'Published',
+          ref_image_url: finalRefImageUrl,
+          ref_filename: finalRefFilename,
+          primary_image_url: Array.isArray(images) && images.length > 0 ? images[0] : null,
+          images: Array.isArray(images) ? images : undefined,
+          prices: prices || undefined,
+        });
+      } catch (storeErr) {
+        console.warn('Persistent store update error:', storeErr);
       }
     } catch (txErr) {
       await db.exec('ROLLBACK;');

@@ -44,7 +44,7 @@ export default function ShareLinksPage() {
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Catalog Category Tab for Full Catalog Share
-  const [catalogCategoryTab, setCatalogCategoryTab] = useState<'tuulo' | 'knockdown'>('tuulo');
+  const [catalogCategoryTab, setCatalogCategoryTab] = useState<'tuulo' | 'knockdown' | 'all'>('tuulo');
 
   const loadLinks = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -257,6 +257,14 @@ export default function ShareLinksPage() {
         textColor: 'text-slate-800',
         desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเรทราคาทั่วไป',
       },
+      {
+        code: 'NO_PRICE',
+        name_th: 'ไม่มีราคา (-)',
+        token: 'catalog-tuulo-noprice',
+        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+        textColor: 'text-amber-800',
+        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
+      },
     ],
     knockdown: [
       {
@@ -290,6 +298,56 @@ export default function ShareLinksPage() {
         badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
         textColor: 'text-slate-800',
         desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเรทราคาทั่วไป',
+      },
+      {
+        code: 'NO_PRICE',
+        name_th: 'ไม่มีราคา (-)',
+        token: 'catalog-knockdown-noprice',
+        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+        textColor: 'text-amber-800',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
+      },
+    ],
+    all: [
+      {
+        code: 'SALE_PRICE',
+        name_th: 'ราคาเซลล์',
+        token: 'catalog-sale-2026',
+        badgeColor: 'bg-red-50 text-red-700 border-red-200',
+        textColor: 'text-red-700',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาเซลล์',
+      },
+      {
+        code: 'RETAIL_PRICE',
+        name_th: 'ราคาปลีก',
+        token: 'catalog-retail-2026',
+        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        textColor: 'text-blue-700',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาปลีก',
+      },
+      {
+        code: 'VIP_PRICE',
+        name_th: 'ราคา VIP',
+        token: 'catalog-vip-2026',
+        badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+        textColor: 'text-purple-700',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคา VIP',
+      },
+      {
+        code: 'GENERAL_PRICE',
+        name_th: 'ราคาทั่วไป',
+        token: 'catalog-general-2026',
+        badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
+        textColor: 'text-slate-800',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาทั่วไป',
+      },
+      {
+        code: 'NO_PRICE',
+        name_th: 'ไม่มีราคา (-)',
+        token: 'catalog-noprice-2026',
+        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+        textColor: 'text-amber-800',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
       },
     ],
   };
@@ -359,7 +417,7 @@ export default function ShareLinksPage() {
           </span>
         </div>
 
-        {/* Catalog Type Switcher Tabs (2 แบบ: ตู้โล / น็อคดาวน์) */}
+        {/* Catalog Type Switcher Tabs (3 แบบ: ตู้โล / น็อคดาวน์ / รวมทั้งหมด) */}
         <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
           <button
             onClick={() => setCatalogCategoryTab('tuulo')}
@@ -381,9 +439,19 @@ export default function ShareLinksPage() {
           >
             <span>แคตตาล็อกน็อคดาวน์ (189 รายการ)</span>
           </button>
+          <button
+            onClick={() => setCatalogCategoryTab('all')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              catalogCategoryTab === 'all'
+                ? 'bg-red-600 text-white shadow-xs'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span>รวมสินค้าทั้งหมด (310 รายการ)</span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {currentFullLinks.map((catTier) => {
             const isCopied = copiedId === catTier.token;
             return (

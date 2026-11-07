@@ -33,6 +33,7 @@ yarn-error.log*
 /data/*.db-*
 /data/*.json
 !data/employees_persistent.json
+!data/products_persistent.json
 
 # typescript
 *.tsbuildinfo

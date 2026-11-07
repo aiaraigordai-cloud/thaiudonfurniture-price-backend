@@ -354,7 +354,7 @@ export default function PricesPage() {
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            อัปเดตราคาด้วยไฟล์
+            อัปเดทราคา/ข้อมูลสินค้า ด้วยไฟล์
           </Link>
         </div>
       </div>

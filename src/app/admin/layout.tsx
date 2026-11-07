@@ -74,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/products', label: 'จัดการสินค้า', icon: Package },
     { href: '/admin/categories', label: 'นำเข้าสินค้า/แคตตาล็อก', icon: Layers },
     { href: '/admin/prices', label: 'แก้ไขราคา 4 ระดับ', icon: Coins },
-    { href: '/admin/prices/bulk-update', label: 'อัปเดตราคาด้วยไฟล์', icon: FileSpreadsheet },
+    { href: '/admin/prices/bulk-update', label: 'อัปเดทราคา/ข้อมูลสินค้า ด้วยไฟล์', icon: FileSpreadsheet },
     { href: '/admin/prices/import-history', label: 'ประวัตินำเข้า / Rollback', icon: History },
     { href: '/admin/share-links', label: 'ระบบแชร์ลิงก์ลูกค้า', icon: Share2 },
   ];

@@ -22,6 +22,9 @@ import {
   Edit3,
   Check,
   Layers,
+  Package,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react';
 
 interface ParsedRow {
@@ -40,6 +43,11 @@ interface ParsedRow {
 
 export default function BulkPriceUpdatePage() {
   const router = useRouter();
+
+  // Mode Switcher: 'price' for Price bulk update, 'product_info' for Product Info bulk update
+  const [activeMode, setActiveMode] = useState<'price' | 'product_info'>('price');
+
+  // MODE 1: PRICE BULK UPDATE STATES
   const [priceTiers, setPriceTiers] = useState<any[]>([]);
   const [selectedTierId, setSelectedTierId] = useState('');
   const [selectedCatalogType, setSelectedCatalogType] = useState<'all' | 'tuulo' | 'knockdown'>('all');
@@ -50,11 +58,23 @@ export default function BulkPriceUpdatePage() {
   const [error, setError] = useState('');
   const [commitResult, setCommitResult] = useState<any | null>(null);
 
-  // Parsed Batch State
   const [batchData, setBatchData] = useState<any | null>(null);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [filterTab, setFilterTab] = useState<'ALL' | 'PASS' | 'NEEDS_REVIEW' | 'FAILED' | 'SELECTED'>('ALL');
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+
+  // MODE 2: PRODUCT INFO BULK UPDATE STATES (DOES NOT TOUCH PRICES)
+  const [infoFile, setInfoFile] = useState<File | null>(null);
+  const [infoUploading, setInfoUploading] = useState(false);
+  const [infoUploadProgress, setInfoUploadProgress] = useState(0);
+  const [infoCatalogType, setInfoCatalogType] = useState<'all' | 'tuulo' | 'knockdown'>('all');
+  const [infoBatchData, setInfoBatchData] = useState<any | null>(null);
+  const [infoRows, setInfoRows] = useState<any[]>([]);
+  const [infoFilterTab, setInfoFilterTab] = useState<'ALL' | 'PASS' | 'FAILED' | 'SELECTED'>('ALL');
+  const [infoSelectedRowIds, setInfoSelectedRowIds] = useState<Set<string>>(new Set());
+  const [infoCommitting, setInfoCommitting] = useState(false);
+  const [infoCommitResult, setInfoCommitResult] = useState<any | null>(null);
+  const [infoError, setInfoError] = useState('');
 
   useEffect(() => {
     fetch('/api/products')
@@ -69,6 +89,7 @@ export default function BulkPriceUpdatePage() {
       });
   }, []);
 
+  // MODE 1: PRICE PARSE & COMMIT HANDLERS
   const handleFileUploadAndParse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) {
@@ -110,7 +131,6 @@ export default function BulkPriceUpdatePage() {
         setBatchData(data);
         setRows(data.rows || []);
 
-        // Auto-select PASS rows
         const autoSelected = new Set<string>();
         data.rows.forEach((r: ParsedRow) => {
           if (r.validation_status === 'PASS') {
@@ -199,7 +219,7 @@ export default function BulkPriceUpdatePage() {
         return {
           ...r,
           validation_status: 'PASS' as const,
-          warning_reason: r.validation_status === 'PASS' ? r.warning_reason : 'อนุมัติทุกรายการโดยผู้ใช้งาน (Approve All)',
+          warning_reason: r.validation_status === 'PASS' ? r.warning_reason : 'อนุมัติทั้งหมดโดยผู้ใช้',
         };
       }
       return r;
@@ -209,54 +229,45 @@ export default function BulkPriceUpdatePage() {
     setSelectedRowIds(nextSelected);
 
     if (batchData) {
-      const failed = nextRows.filter((r) => r.validation_status === 'FAILED').length;
       setBatchData({
         ...batchData,
         passedRows: approvedCount,
         reviewRows: 0,
-        failedRows: failed,
       });
     }
   };
 
-  const selectAllPass = () => {
-    const next = new Set<string>();
-    rows.forEach((r) => {
-      if (r.validation_status === 'PASS') {
-        next.add(r.id);
-      }
-    });
-    setSelectedRowIds(next);
-  };
-
-  const deselectAll = () => {
-    setSelectedRowIds(new Set());
-  };
-
-  // Inline Row Editor in Verification Step
   const handleUpdateRowField = (id: string, field: 'detected_sku' | 'new_price', value: string) => {
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r;
-        const updated = { ...r };
         if (field === 'detected_sku') {
-          updated.detected_sku = value.trim().toUpperCase();
-        } else if (field === 'new_price') {
-          const num = parseFloat(value.replace(/,/g, ''));
-          updated.new_price = isNaN(num) ? null : num;
-          if (updated.new_price && updated.new_price > 0 && updated.validation_status === 'FAILED') {
-            updated.validation_status = 'PASS';
-            updated.warning_reason = 'แก้ไขราคาแล้ว พร้อมอัปเดต';
-          }
+          return { ...r, detected_sku: value.trim() };
         }
-        return updated;
+        if (field === 'new_price') {
+          const num = value === '' ? null : parseFloat(value);
+          return {
+            ...r,
+            new_price: isNaN(num as number) ? null : num,
+            validation_status: num && num > 0 ? ('PASS' as const) : r.validation_status,
+          };
+        }
+        return r;
       })
     );
   };
 
   const handleSingleConfirm = async () => {
-    if (selectedRowIds.size === 0) {
-      alert('กรุณาเลือกอย่างน้อย 1 รายการเพื่ออัปเดตราคา');
+    if (!batchData || selectedRowIds.size === 0) {
+      alert('กรุณาเลือกรายการที่ต้องการอนุมัติอย่างน้อย 1 รายการ');
+      return;
+    }
+
+    if (
+      !confirm(
+        `ยืนยันอัปเดตราคาจริงจำนวน ${selectedRowIds.size} รายการ?\n\n* ข้อมูลจะถูกบันทึกลงระบบทันทีแบบ Real-time\n* ลูกค้าจะเห็นราคาใหม่ทันทีโดยไม่ต้องรีโหลด`
+      )
+    ) {
       return;
     }
 
@@ -270,12 +281,7 @@ export default function BulkPriceUpdatePage() {
         body: JSON.stringify({
           batchId: batchData.batchId,
           selectedRowIds: Array.from(selectedRowIds),
-          overrideRows: rows.filter((r) => selectedRowIds.has(r.id)).map((r) => ({
-            id: r.id,
-            detected_sku: r.detected_sku,
-            new_price: r.new_price,
-            validation_status: r.validation_status,
-          })),
+          overrideRows: rows.filter((r) => selectedRowIds.has(r.id)),
         }),
       });
 
@@ -284,15 +290,14 @@ export default function BulkPriceUpdatePage() {
         setError(data.error || 'เกิดข้อผิดพลาดในการบันทึกราคา');
       } else {
         setCommitResult(data);
+
         if (typeof window !== 'undefined') {
           try {
             const bc = new BroadcastChannel('thaiudon_sync_channel');
-            bc.postMessage({ type: 'PRICES_UPDATED', timestamp: Date.now() });
-            bc.postMessage({ type: 'PRICE_BATCH_UPDATED', batchId: batchData?.batchId, timestamp: Date.now() });
+            bc.postMessage({ type: 'PRICES_UPDATED', batchId: batchData.batchId, timestamp: Date.now() });
+            localStorage.setItem('thaiudon_price_sync', Date.now().toString());
             localStorage.setItem('thaiudon_last_sync', Date.now().toString());
-            localStorage.setItem('thaiudon_batch_sync', Date.now().toString());
             window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
-            window.dispatchEvent(new CustomEvent('thaiudon_batch_sync'));
           } catch {}
         }
       }
@@ -303,12 +308,154 @@ export default function BulkPriceUpdatePage() {
     }
   };
 
-  const filteredRows = rows.filter((r) => {
+  // MODE 2: PRODUCT INFO PARSE & COMMIT HANDLERS (DOES NOT TOUCH PRICES)
+  const handleInfoFileUploadAndParse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!infoFile) {
+      setInfoError('กรุณาเลือกไฟล์ข้อมูลสินค้าที่ต้องการนำเข้า');
+      return;
+    }
+
+    setInfoUploading(true);
+    setInfoUploadProgress(20);
+    setInfoError('');
+    setInfoBatchData(null);
+    setInfoCommitResult(null);
+
+    const formData = new FormData();
+    formData.append('file', infoFile);
+    formData.append('catalog_type', infoCatalogType);
+
+    const progressTimer = setInterval(() => {
+      setInfoUploadProgress((prev) => (prev < 90 ? prev + 15 : prev));
+    }, 200);
+
+    try {
+      const res = await fetch('/api/products/bulk-parse-info', {
+        method: 'POST',
+        body: formData,
+      });
+      clearInterval(progressTimer);
+      setInfoUploadProgress(100);
+
+      const data = await res.json();
+      if (!res.ok) {
+        setInfoError(data.error || 'เกิดข้อผิดพลาดในการประมวลผลไฟล์ข้อมูลสินค้า');
+      } else {
+        setInfoBatchData(data);
+        setInfoRows(data.rows || []);
+
+        const autoSelected = new Set<string>();
+        (data.rows || []).forEach((r: any) => {
+          if (r.validation_status === 'PASS') {
+            autoSelected.add(r.id);
+          }
+        });
+        setInfoSelectedRowIds(autoSelected);
+      }
+    } catch {
+      clearInterval(progressTimer);
+      setInfoError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setInfoUploading(false);
+    }
+  };
+
+  const toggleInfoRowSelect = (id: string) => {
+    const next = new Set(infoSelectedRowIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setInfoSelectedRowIds(next);
+  };
+
+  const handleInfoSelectAll = () => {
+    const passedRows = infoRows.filter((r) => r.validation_status === 'PASS');
+    if (infoSelectedRowIds.size === passedRows.length) {
+      setInfoSelectedRowIds(new Set());
+    } else {
+      setInfoSelectedRowIds(new Set(passedRows.map((r) => r.id)));
+    }
+  };
+
+  const handleInfoCommit = async () => {
+    if (!infoBatchData || infoSelectedRowIds.size === 0) {
+      alert('กรุณาเลือกรายการที่ต้องการบันทึกอย่างน้อย 1 รายการ');
+      return;
+    }
+
+    const rowsToCommit = infoRows.filter((r) => infoSelectedRowIds.has(r.id) && r.validation_status === 'PASS');
+    if (rowsToCommit.length === 0) {
+      alert('ไม่มีรายการที่ผ่านเกณฑ์เพื่อบันทึก');
+      return;
+    }
+
+    if (
+      !confirm(
+        `ยืนยันอัปเดทข้อมูลสินค้า ${rowsToCommit.length} รายการ?\n\n* ข้อมูลรายละเอียดสินค้าจะถูกอัปเดตลงระบบและ Supabase ทันทีแบบ Real-time\n* 🔒 ราคาเดิมทุกระดับจะได้รับการปกป้องและคงเดิม 100% ไม่มีการเปลี่ยนแปลงใดๆ`
+      )
+    ) {
+      return;
+    }
+
+    setInfoCommitting(true);
+    setInfoError('');
+
+    try {
+      const res = await fetch('/api/products/bulk-commit-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: infoBatchData.batchId,
+          rowsToCommit,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setInfoError(data.error || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลสินค้า');
+      } else {
+        setInfoCommitResult(data);
+
+        // Multi-channel Real-time Broadcast
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({
+              type: 'PRODUCTS_UPDATED',
+              action: 'BULK_FILE_INFO_UPDATE',
+              batchId: infoBatchData.batchId,
+              timestamp: Date.now(),
+            });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            localStorage.setItem('thaiudon_product_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
+      }
+    } catch {
+      setInfoError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setInfoCommitting(false);
+    }
+  };
+
+  const filteredPriceRows = rows.filter((r) => {
     if (filterTab === 'ALL') return true;
     if (filterTab === 'PASS') return r.validation_status === 'PASS';
     if (filterTab === 'NEEDS_REVIEW') return r.validation_status === 'NEEDS_REVIEW';
     if (filterTab === 'FAILED') return r.validation_status === 'FAILED';
     if (filterTab === 'SELECTED') return selectedRowIds.has(r.id);
+    return true;
+  });
+
+  const filteredInfoRows = infoRows.filter((r) => {
+    if (infoFilterTab === 'ALL') return true;
+    if (infoFilterTab === 'PASS') return r.validation_status === 'PASS';
+    if (infoFilterTab === 'FAILED') return r.validation_status === 'FAILED';
+    if (infoFilterTab === 'SELECTED') return infoSelectedRowIds.has(r.id);
     return true;
   });
 
@@ -319,27 +466,39 @@ export default function BulkPriceUpdatePage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              อัปเดตราคาด้วยไฟล์
+              อัปเดทราคา/ข้อมูลสินค้า ด้วยไฟล์
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center gap-1 border border-emerald-200">
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              SKU-First & Real-time Update
+              SKU-First & Real-time Sync
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            อ่านรหัสสินค้า (SKU) เป็นหลัก พร้อมชื่อประกอบในกรณีข้อมูลไม่ชัดเจน มีระบบตรวจสอบความถูกต้องก่อนอัปเดตจริงบนเว็บแบบ Real-time
+            นำเข้าไฟล์ Excel (.xlsx, .xls) หรือ CSV เพื่ออัปเดตราคา หรืออัปเดตข้อมูลรายละเอียดสินค้าแบบ Real-time พร้อมบันทึกลง Supabase
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <a
-            href="/api/prices/sample-template"
-            download
-            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-600" />
-            ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)
-          </a>
+          {activeMode === 'price' ? (
+            <a
+              href="/api/prices/sample-template"
+              download
+              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              ดาวน์โหลดเทมเพลตราคา (.xlsx)
+            </a>
+          ) : (
+            <a
+              href="/api/products/sample-template"
+              download
+              className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              ดาวน์โหลดเทมเพลตข้อมูลสินค้า (.xlsx)
+            </a>
+          )}
+
           <Link
             href="/admin/prices/import-history"
             className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
@@ -350,502 +509,909 @@ export default function BulkPriceUpdatePage() {
         </div>
       </div>
 
-      {error && (
-        <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
-          <XCircle className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {/* UPDATE MODE SELECTOR TABS */}
+      <div className="flex rounded-2xl bg-slate-200/80 p-1.5 border border-slate-300/80 max-w-2xl shadow-inner">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveMode('price');
+            setError('');
+          }}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition cursor-pointer ${
+            activeMode === 'price'
+              ? 'bg-white text-emerald-800 shadow-md ring-1 ring-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Coins className="w-4 h-4 text-emerald-600" />
+          <span>1. อัปเดตราคาด้วยไฟล์</span>
+        </button>
 
-      {/* Commit Result Success Card */}
-      {commitResult && (
-        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-emerald-600/30">
-              <CheckCircle2 className="w-7 h-7" />
+        <button
+          type="button"
+          onClick={() => {
+            setActiveMode('product_info');
+            setInfoError('');
+          }}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition cursor-pointer ${
+            activeMode === 'product_info'
+              ? 'bg-white text-blue-900 shadow-md ring-1 ring-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Package className="w-4 h-4 text-blue-600" />
+          <span>2. อัปเดทข้อมูลสินค้าด้วยไฟล์ (ไม่แตะราคา)</span>
+        </button>
+      </div>
+
+      {/* ============================================================== */}
+      {/* MODE 1: PRICE BULK UPDATE SECTION                             */}
+      {/* ============================================================== */}
+      {activeMode === 'price' && (
+        <div className="space-y-6">
+          {error && (
+            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
             </div>
-            <div className="space-y-2 flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-emerald-950">
-                  {commitResult.message}
-                </h2>
-                <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded-full text-[10px] font-bold">
-                  ⚡ Real-time Active
-                </span>
+          )}
+
+          {/* Commit Result Success Card */}
+          {commitResult && (
+            <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-emerald-600/30">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-emerald-950">
+                      {commitResult.message}
+                    </h2>
+                    <span className="px-2 py-0.5 bg-emerald-200 text-emerald-900 rounded-full text-[10px] font-bold">
+                      ⚡ Real-time Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    ระบบได้บันทึกการเปลี่ยนแปลงราคาลงฐานข้อมูลกลางเรียบร้อยแล้วพร้อมซิงค์ Supabase ลิงก์ลูกค้าและหน้าเว็บจะแสดงราคาล่าสุดทันทีโดยไม่ต้องรีโหลด
+                  </p>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Link
+                      href="/admin/prices"
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                    >
+                      ตรวจสอบหน้ารวมราคา
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCommitResult(null);
+                        setBatchData(null);
+                        setFile(null);
+                      }}
+                      className="px-4 py-2 bg-white border border-emerald-300 text-emerald-900 rounded-xl text-xs font-semibold hover:bg-emerald-100/50 transition cursor-pointer"
+                    >
+                      + นำเข้าไฟล์ชุดใหม่
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-emerald-800 leading-relaxed">
-                ระบบได้บันทึกการเปลี่ยนแปลงราคาลงฐานข้อมูลกลางเรียบร้อยแล้วผ่าน Database Transaction ที่ปลอดภัย
-                พร้อมบันทึกประวัติ Price History และ Audit Log ครบถ้วน ลิงก์ลูกค้าและหน้าเว็บจะแสดงราคาล่าสุดทันทีโดยไม่ต้องรีโหลด
-              </p>
-              <div className="flex items-center gap-3 pt-2">
-                <Link
-                  href="/admin/prices"
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-                >
-                  ตรวจสอบหน้ารวมราคา
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCommitResult(null);
-                    setBatchData(null);
-                    setFile(null);
-                  }}
-                  className="px-4 py-2 bg-white border border-emerald-300 text-emerald-900 rounded-xl text-xs font-semibold hover:bg-emerald-100/50 transition"
-                >
-                  + นำเข้าไฟล์ชุดใหม่
-                </button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Step 1, 2, 3: Catalog Selection, Tier Selection & File Upload */}
-      {!batchData && (
-        <form onSubmit={handleFileUploadAndParse} className="space-y-6">
-          {/* Step 1: Catalog Type Selection */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <Layers className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 1: เลือกประเภทแคตตาล็อกสินค้า (Catalog Type)
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              ระบุประเภทแคตตาล็อกสินค้าที่ต้องการอัปเดต เช่น ตู้โล หรือ น็อคดาวน์ เพื่อให้ระบบเจาะจงค้นหารหัสสินค้า (SKU) ได้อย่างแม่นยำ หรือเลือกทั้งหมดเพื่อค้นหาครอบคลุมทั้งระบบ
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <label
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
-                  selectedCatalogType === 'all'
-                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                }`}
-              >
-                <div>
-                  <div className="font-bold text-xs text-slate-900">🌐 ทุกแคตตาล็อก (สินค้าทั้งหมด)</div>
-                  <div className="text-[11px] text-slate-500 mt-1">ค้นหาและจับคู่ทั้งตู้โลและน็อคดาวน์ (310 รายการ)</div>
+          {/* Step 1, 2, 3: Price Upload Form */}
+          {!batchData && (
+            <form onSubmit={handleFileUploadAndParse} className="space-y-6">
+              {/* Step 1: Catalog Type Selection */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Layers className="w-4 h-4 text-emerald-600" />
+                  <h2 className="text-sm font-bold text-slate-800">
+                    ขั้นตอนที่ 1: เลือกประเภทแคตตาล็อกสินค้า (Catalog Type)
+                  </h2>
                 </div>
-                <input
-                  type="radio"
-                  name="catalog_type_select"
-                  checked={selectedCatalogType === 'all'}
-                  onChange={() => setSelectedCatalogType('all')}
-                  className="text-emerald-600 focus:ring-emerald-500"
-                />
-              </label>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  ระบุประเภทแคตตาล็อกสินค้าที่ต้องการอัปเดตราคา เช่น ตู้โล หรือ น็อคดาวน์
+                </p>
 
-              <label
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
-                  selectedCatalogType === 'tuulo'
-                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                }`}
-              >
-                <div>
-                  <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (121 รายการ)</div>
-                  <div className="text-[11px] text-slate-500 mt-1">ตู้กับข้าว ตู้โชว์อลูมิเนียม เคาน์เตอร์ครัว ตู้พระ</div>
-                </div>
-                <input
-                  type="radio"
-                  name="catalog_type_select"
-                  checked={selectedCatalogType === 'tuulo'}
-                  onChange={() => setSelectedCatalogType('tuulo')}
-                  className="text-emerald-600 focus:ring-emerald-500"
-                />
-              </label>
-
-              <label
-                className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
-                  selectedCatalogType === 'knockdown'
-                    ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                    : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                }`}
-              >
-                <div>
-                  <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (189 รายการ)</div>
-                  <div className="text-[11px] text-slate-500 mt-1">ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะเครื่องแป้ง ตู้คอนโซล</div>
-                </div>
-                <input
-                  type="radio"
-                  name="catalog_type_select"
-                  checked={selectedCatalogType === 'knockdown'}
-                  onChange={() => setSelectedCatalogType('knockdown')}
-                  className="text-emerald-600 focus:ring-emerald-500"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* Step 2: Tier Selection */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <Coins className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 2: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Price Tier Target)
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              การอัปเดตหนึ่ง Batch จะเขียนข้อมูลเฉพาะ Price Tier ที่เลือกเท่านั้น เพื่อป้องกันการแก้ไขราคาประเภทอื่นโดยไม่ตั้งใจ
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
-              {priceTiers.map((tier) => (
-                <label
-                  key={tier.id}
-                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                    selectedTierId === tier.id
-                      ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                      : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-xs text-slate-900">{tier.name_th}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      selectedCatalogType === 'all'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🌐 ทุกแคตตาล็อก (สินค้าทั้งหมด)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">ค้นหาและจับคู่ทั้งตู้โลและน็อคดาวน์ (310 รายการ)</div>
+                    </div>
                     <input
                       type="radio"
-                      name="tier_select"
-                      checked={selectedTierId === tier.id}
-                      onChange={() => setSelectedTierId(tier.id)}
+                      name="catalog_type_select"
+                      checked={selectedCatalogType === 'all'}
+                      onChange={() => setSelectedCatalogType('all')}
                       className="text-emerald-600 focus:ring-emerald-500"
                     />
+                  </label>
+
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      selectedCatalogType === 'tuulo'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (121 รายการ)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">ตู้กับข้าว ตู้โชว์อลูมิเนียม เคาน์เตอร์ครัว ตู้พระ</div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="catalog_type_select"
+                      checked={selectedCatalogType === 'tuulo'}
+                      onChange={() => setSelectedCatalogType('tuulo')}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                  </label>
+
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      selectedCatalogType === 'knockdown'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (189 รายการ)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะเครื่องแป้ง ตู้คอนโซล</div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="catalog_type_select"
+                      checked={selectedCatalogType === 'knockdown'}
+                      onChange={() => setSelectedCatalogType('knockdown')}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Step 2: Tier Selection */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Coins className="w-4 h-4 text-emerald-600" />
+                  <h2 className="text-sm font-bold text-slate-800">
+                    ขั้นตอนที่ 2: เลือกประเภทราคาเป้าหมายที่จะอัปเดต (Price Tier Target)
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  การอัปเดตหนึ่ง Batch จะเขียนข้อมูลเฉพาะ Price Tier ที่เลือกเท่านั้น
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
+                  {priceTiers.map((tier) => (
+                    <label
+                      key={tier.id}
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                        selectedTierId === tier.id
+                          ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-xs text-slate-900">{tier.name_th}</span>
+                        <input
+                          type="radio"
+                          name="tier_select"
+                          checked={selectedTierId === tier.id}
+                          onChange={() => setSelectedTierId(tier.id)}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500 uppercase">{tier.code}</div>
+                      <div className="text-[11px] text-slate-600 mt-2">{tier.description || '-'}</div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 3: File Upload */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <UploadCloud className="w-4 h-4 text-emerald-600" />
+                  <h2 className="text-sm font-bold text-slate-800">
+                    ขั้นตอนที่ 3: อัปโหลดไฟล์ราคาสินค้า (Excel, Word, PDF, CSV, Text)
+                  </h2>
+                </div>
+
+                <div className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-8 text-center transition bg-slate-50/50">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 mb-3">
+                    <FileSpreadsheet className="w-6 h-6" />
                   </div>
-                  <div className="text-[10px] font-mono text-slate-500 uppercase">{tier.code}</div>
-                  <div className="text-[11px] text-slate-600 mt-2">{tier.description || '-'}</div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Step 3: Multi-format File Upload (Excel, Word, PDF, CSV, Text) */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-              <UploadCloud className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-slate-800">
-                ขั้นตอนที่ 3: อัปโหลดไฟล์ราคาสินค้า (Excel, Word, PDF, CSV, Text)
-              </h2>
-            </div>
-
-            <div className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-8 text-center transition bg-slate-50/50">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 mb-3">
-                <FileSpreadsheet className="w-6 h-6" />
-              </div>
-              <div className="text-xs font-semibold text-slate-700">
-                {file ? file.name : 'ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
-                รองรับ <strong>Excel (.xlsx, .xls)</strong>, <strong>Word (.docx, .doc)</strong>, <strong>PDF (.pdf)</strong>, <strong>CSV (.csv)</strong>, <strong>Text (.txt)</strong><br />
-                ระบบจะค้นหารหัสสินค้า (SKU) เป็นหลัก และใช้ชื่อสินค้าช่วยยืนยัน
-              </p>
-              <input
-                type="file"
-                id="file-upload"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setFile(e.target.files[0]);
-                  }
-                }}
-                className="hidden"
-                accept=".xlsx,.xls,.csv,.txt,.pdf,.docx,.doc"
-              />
-              <label
-                htmlFor="file-upload"
-                className="mt-4 inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition shadow-xs"
-              >
-                {file ? 'เปลี่ยนไฟล์' : 'เลือกไฟล์จากอุปกรณ์'}
-              </label>
-            </div>
-
-            {uploading && (
-              <div className="space-y-2 p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
-                <div className="flex items-center justify-between text-xs font-semibold text-emerald-900">
-                  <span className="flex items-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                    กำลังอ่านไฟล์และตรวจสอบรหัสสินค้ากับฐานข้อมูล...
-                  </span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-emerald-600 h-2 transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
+                  <div className="text-xs font-semibold text-slate-700">
+                    {file ? file.name : 'ลากไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
+                    รองรับ Excel (.xlsx, .xls), Word (.docx, .doc), PDF (.pdf), CSV (.csv), Text (.txt)
+                  </p>
+                  <input
+                    type="file"
+                    id="file-upload-price"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv,.txt,.pdf,.docx,.doc"
                   />
+                  <label
+                    htmlFor="file-upload-price"
+                    className="mt-4 inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition shadow-xs"
+                  >
+                    {file ? 'เปลี่ยนไฟล์' : 'เลือกไฟล์จากอุปกรณ์'}
+                  </label>
+                </div>
+
+                {uploading && (
+                  <div className="space-y-2 p-4 bg-emerald-50/80 border border-emerald-200 rounded-xl">
+                    <div className="flex items-center justify-between text-xs font-semibold text-emerald-900">
+                      <span className="flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                        กำลังอ่านไฟล์และตรวจสอบรหัสสินค้ากับฐานข้อมูล...
+                      </span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-emerald-200 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-emerald-600 h-2 transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={uploading || !file}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      กำลังประมวลผลไฟล์...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      เริ่มวิเคราะห์ไฟล์และเปิดหน้าจอตรวจสอบความถูกต้อง
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Step 3: Review Table for Price */}
+          {batchData && !commitResult && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                  <div className="text-[11px] text-slate-500">ข้อมูลทั้งหมดในไฟล์</div>
+                  <div className="text-xl font-bold text-slate-900 mt-1">{batchData.totalRows} แถว</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">{batchData.filename}</div>
+                </div>
+
+                <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
+                  <div className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    PASS (ตรงรหัส 100%)
+                  </div>
+                  <div className="text-xl font-bold text-emerald-700 mt-1">{batchData.passedRows} รายการ</div>
+                  <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                    ✓ Auto-selected อัตโนมัติแล้ว
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
+                  <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    NEEDS_REVIEW
+                  </div>
+                  <div className="text-xl font-bold text-amber-700 mt-1">{batchData.reviewRows} รายการ</div>
+                  <div className="text-[10px] text-amber-600 mt-0.5">จับคู่ด้วยชื่อ/รหัสใกล้เคียง</div>
+                </div>
+
+                <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200 shadow-xs">
+                  <div className="text-[11px] font-semibold text-red-800 flex items-center gap-1.5">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    FAILED (ไม่ผ่าน)
+                  </div>
+                  <div className="text-xl font-bold text-red-700 mt-1">{batchData.failedRows} รายการ</div>
+                  <div className="text-[10px] text-red-600 mt-0.5">ไม่พบรหัสหรือราคาผิดพลาด</div>
                 </div>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={uploading || !file}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {uploading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  กำลังประมวลผลไฟล์...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  เริ่มวิเคราะห์ไฟล์และเปิดหน้าจอตรวจสอบความถูกต้อง
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+              <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                      เป้าหมาย:
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                      {batchData.priceTier?.name_th} ({batchData.priceTier?.code})
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    โปรดตรวจสอบความถูกต้องของรหัสและราคาก่อนกดปุ่มยืนยัน ข้อมูลจะถูกอัปเดตลงเว็บไซต์แบบ Real-time ทันที
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBatchData(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    ยกเลิก / อัปโหลดใหม่
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSingleConfirm}
+                    disabled={committing || selectedRowIds.size === 0}
+                    className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/25 transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {committing ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        กำลังบันทึกและอัปเดตแบบ Real-time...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        ยืนยันอัปเดตราคาจริง ({selectedRowIds.size} รายการ)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-700 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3.5 w-12 text-center">เลือก</th>
+                        <th className="px-3 py-3.5 w-12 text-center">#</th>
+                        <th className="px-4 py-3.5 font-bold text-slate-900">รหัสสินค้า (SKU)</th>
+                        <th className="px-4 py-3.5">ชื่อสินค้า</th>
+                        <th className="px-4 py-3.5 text-right">ราคาเดิม</th>
+                        <th className="px-4 py-3.5 text-right font-bold text-emerald-700">ราคาใหม่</th>
+                        <th className="px-4 py-3.5 text-right">ส่วนต่าง</th>
+                        <th className="px-4 py-3.5 text-center">สถานะ</th>
+                        <th className="px-4 py-3.5">คำอธิบาย</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredPriceRows.map((r) => {
+                        const isChecked = selectedRowIds.has(r.id);
+                        const diff = r.old_price && r.new_price ? r.new_price - r.old_price : null;
+                        return (
+                          <tr key={r.id} className={`hover:bg-slate-50/80 transition ${isChecked ? 'bg-emerald-50/20' : ''}`}>
+                            <td className="px-4 py-3.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleRowSelect(r.id, r.validation_status)}
+                                className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
+                            <td className="px-4 py-3.5 font-mono font-bold text-slate-900">{r.detected_sku}</td>
+                            <td className="px-4 py-3.5 text-slate-700 truncate max-w-xs">{r.detected_product_name}</td>
+                            <td className="px-4 py-3.5 text-right font-mono text-slate-500">
+                              {r.old_price ? `฿${r.old_price.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
+                              {r.new_price ? `฿${r.new_price.toLocaleString()}` : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono">
+                              {diff !== null ? (
+                                <span className={diff >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                  {diff >= 0 ? `+฿${diff.toLocaleString()}` : `-฿${Math.abs(diff).toLocaleString()}`}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  r.validation_status === 'PASS'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : r.validation_status === 'NEEDS_REVIEW'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {r.validation_status === 'PASS' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                                {r.validation_status === 'NEEDS_REVIEW' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
+                                {r.validation_status === 'FAILED' && <XCircle className="w-3 h-3 text-red-600" />}
+                                {r.validation_status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 text-[11px]">{r.warning_reason || '✓ ตรงรหัสสินค้า'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Step 3: Review & Verification Table (Pre-commit Verification Step) */}
-      {batchData && !commitResult && (
+      {/* ============================================================== */}
+      {/* MODE 2: PRODUCT INFO BULK UPDATE SECTION (PROTECTED PRICES)   */}
+      {/* ============================================================== */}
+      {activeMode === 'product_info' && (
         <div className="space-y-6">
-          {/* Summary Metric Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-              <div className="text-[11px] text-slate-500">ข้อมูลทั้งหมดในไฟล์</div>
-              <div className="text-xl font-bold text-slate-900 mt-1">{batchData.totalRows} แถว</div>
-              <div className="text-[10px] text-slate-400 mt-0.5 truncate">{batchData.filename}</div>
+          {infoError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+              <XCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{infoError}</span>
             </div>
+          )}
 
-            <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
-              <div className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                PASS (ตรงรหัส 100%)
-              </div>
-              <div className="text-xl font-bold text-emerald-700 mt-1">{batchData.passedRows} รายการ</div>
-              <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                ✓ Auto-selected อัตโนมัติแล้ว
+          {/* Success Card */}
+          {infoCommitResult && (
+            <div className="bg-blue-50 border border-blue-300 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-600/30">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-blue-950">
+                      {infoCommitResult.message}
+                    </h2>
+                    <span className="px-2 py-0.5 bg-blue-200 text-blue-900 rounded-full text-[10px] font-bold">
+                      ⚡ Real-time Synced
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    ระบบได้อัปเดตข้อมูลรายละเอียดสินค้าลงฐานข้อมูลกลาง, Supabase, และ Persistent Store เรียบร้อยแล้ว <strong>โดยราคาเดิมทุกระดับปลอดภัย 100%</strong> หน้าเว็บแชร์ลูกค้าและระบบหลังบ้านจะแสดงข้อมูลใหม่ทันที
+                  </p>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Link
+                      href="/admin/products"
+                      className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                    >
+                      ตรวจสอบหน้าจัดการสินค้า
+                    </Link>
+                    <Link
+                      href="/s/catalog-tuulo-retail"
+                      target="_blank"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+                    >
+                      เปิดดูหน้าแคตตาล็อกลูกค้า
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInfoCommitResult(null);
+                        setInfoBatchData(null);
+                        setInfoFile(null);
+                      }}
+                      className="px-4 py-2 bg-white border border-blue-300 text-blue-900 rounded-xl text-xs font-semibold hover:bg-blue-100/50 transition cursor-pointer"
+                    >
+                      + นำเข้าไฟล์ข้อมูลชุดใหม่
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
-              <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                NEEDS_REVIEW
+          {/* Form Step: Info Upload */}
+          {!infoBatchData && (
+            <form onSubmit={handleInfoFileUploadAndParse} className="space-y-6">
+              {/* Security & Price Protection Banner */}
+              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-5 flex items-start gap-3.5 shadow-2xs">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Lock className="w-5 h-5 text-emerald-100" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                    <span>ระบบป้องกันราคาเดิม 100% (Price Protection Guaranteed)</span>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                      ปลอดภัยสูงสุด
+                    </span>
+                  </h3>
+                  <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                    โหมดนี้ออกแบบมาเพื่อ <strong>อัปเดตเฉพาะข้อมูลรายละเอียดสินค้าเท่านั้น</strong> (เช่น ชื่อสินค้า, หมวดหมู่, ขนาด, สี, รายละเอียดสินค้า, และรูปภาพ) โดยระบบจะไม่ไปแตะต้องหรือแก้ไขราคาเดิมทั้ง 4 ระดับ (ราคาเซลล์, ราคาปลีก, ราคา VIP, ราคาทั่วไป) อย่างเด็ดขาด
+                  </p>
+                </div>
               </div>
-              <div className="text-xl font-bold text-amber-700 mt-1">{batchData.reviewRows} รายการ</div>
-              <div className="text-[10px] text-amber-600 mt-0.5">จับคู่ด้วยชื่อ/รหัสใกล้เคียง (ต้องตรวจก่อน)</div>
-            </div>
 
-            <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200 shadow-xs">
-              <div className="text-[11px] font-semibold text-red-800 flex items-center gap-1.5">
-                <XCircle className="w-4 h-4 text-red-600" />
-                FAILED (ไม่ผ่าน)
+              {/* Step 1: Catalog Type Selection */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <h2 className="text-sm font-bold text-slate-800">
+                    ขั้นตอนที่ 1: เลือกประเภทแคตตาล็อกสินค้าที่ต้องการอัปเดตข้อมูล
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      infoCatalogType === 'all'
+                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🌐 ทุกแคตตาล็อก (สินค้าทั้งหมด)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">อัปเดตข้อมูลทั้งตู้โลและน็อคดาวน์ (310 รายการ)</div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="info_catalog_type"
+                      checked={infoCatalogType === 'all'}
+                      onChange={() => setInfoCatalogType('all')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                  </label>
+
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      infoCatalogType === 'tuulo'
+                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (121 รายการ)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">ตู้กับข้าว ตู้โชว์ เคาน์เตอร์ครัว ตู้พระ</div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="info_catalog_type"
+                      checked={infoCatalogType === 'tuulo'}
+                      onChange={() => setInfoCatalogType('tuulo')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                  </label>
+
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${
+                      infoCatalogType === 'knockdown'
+                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (189 รายการ)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะแป้ง</div>
+                    </div>
+                    <input
+                      type="radio"
+                      name="info_catalog_type"
+                      checked={infoCatalogType === 'knockdown'}
+                      onChange={() => setInfoCatalogType('knockdown')}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                  </label>
+                </div>
               </div>
-              <div className="text-xl font-bold text-red-700 mt-1">{batchData.failedRows} รายการ</div>
-              <div className="text-[10px] text-red-600 mt-0.5">ไม่พบรหัสหรือราคาผิดพลาด</div>
-            </div>
-          </div>
 
-          {/* Action Confirmation Bar */}
-          <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                  เป้าหมาย:
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
-                  {batchData.priceTier?.name_th} ({batchData.priceTier?.code})
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700">
-                  {batchData.catalogType === 'tuulo' ? '🚪 แคตตาล็อกตู้โล' : batchData.catalogType === 'knockdown' ? '🛏️ แคตตาล็อกน็อคดาวน์' : '🌐 ทุกแคตตาล็อก'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-1">
-                โปรดตรวจสอบความถูกต้องของรหัสและราคาก่อนกดปุ่มยืนยัน ข้อมูลจะถูกอัปเดตลงเว็บไซต์แบบ Real-time ทันที
-              </p>
-            </div>
+              {/* Step 2: File Upload */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <UploadCloud className="w-4 h-4 text-blue-600" />
+                  <h2 className="text-sm font-bold text-slate-800">
+                    ขั้นตอนที่ 2: อัปโหลดไฟล์ข้อมูลสินค้า (Excel .xlsx / .xls หรือ CSV .csv)
+                  </h2>
+                </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setBatchData(null)}
-                className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold hover:bg-slate-800 transition"
-              >
-                ยกเลิก / อัปโหลดใหม่
-              </button>
+                <div className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-2xl p-8 text-center transition bg-slate-50/50">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-50 text-blue-600 mb-3">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <div className="text-xs font-semibold text-slate-700">
+                    {infoFile ? infoFile.name : 'ลากไฟล์ข้อมูลสินค้ามาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
+                    รองรับไฟล์ <strong>Excel (.xlsx, .xls)</strong> หรือ <strong>CSV (.csv)</strong><br />
+                    ระบบจะใช้รหัสสินค้า (SKU) ในไฟล์เพื่อค้นหาและอัปเดตข้อมูลสินค้าที่ตรงกัน
+                  </p>
+                  <input
+                    type="file"
+                    id="file-upload-info"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setInfoFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                    accept=".xlsx,.xls,.csv"
+                  />
+                  <label
+                    htmlFor="file-upload-info"
+                    className="mt-4 inline-block px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-semibold cursor-pointer transition shadow-xs"
+                  >
+                    {infoFile ? 'เปลี่ยนไฟล์' : 'เลือกไฟล์ข้อมูลสินค้า'}
+                  </label>
+                </div>
 
-              <button
-                type="button"
-                onClick={handleSingleConfirm}
-                disabled={committing || selectedRowIds.size === 0}
-                className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/25 transition disabled:opacity-50 flex items-center gap-2"
-              >
-                {committing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    กำลังบันทึกและอัปเดตแบบ Real-time...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    ยืนยันอัปเดตราคาจริง ({selectedRowIds.size} รายการ)
-                  </>
+                {infoUploading && (
+                  <div className="space-y-2 p-4 bg-blue-50/80 border border-blue-200 rounded-xl">
+                    <div className="flex items-center justify-between text-xs font-semibold text-blue-900">
+                      <span className="flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                        กำลังอ่านไฟล์และจับคู่ข้อมูลสินค้า...
+                      </span>
+                      <span>{infoUploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-blue-200 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-2 transition-all duration-300"
+                        style={{ width: `${infoUploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {/* Filter Tabs & Batch Select Tools */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {(['ALL', 'PASS', 'NEEDS_REVIEW', 'FAILED', 'SELECTED'] as const).map((tab) => (
                 <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setFilterTab(tab)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                    filterTab === tab
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  type="submit"
+                  disabled={infoUploading || !infoFile}
+                  className="w-full py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  {tab === 'ALL' && `ทั้งหมด (${rows.length})`}
-                  {tab === 'PASS' && `ผ่านเกณฑ์ (${batchData.passedRows})`}
-                  {tab === 'NEEDS_REVIEW' && `รอตรวจสอบ (${batchData.reviewRows})`}
-                  {tab === 'FAILED' && `ไม่ผ่าน (${batchData.failedRows})`}
-                  {tab === 'SELECTED' && `ที่เลือกไว้ (${selectedRowIds.size})`}
+                  {infoUploading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      กำลังประมวลผลไฟล์...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      เริ่มวิเคราะห์ไฟล์ข้อมูลสินค้า (เปิดหน้าจอตรวจสอบก่อนบันทึก)
+                    </>
+                  )}
                 </button>
-              ))}
-            </div>
+              </div>
+            </form>
+          )}
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleApproveAndSelectAll}
-                className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow-xs flex items-center gap-1.5"
-                title="กดอนุมัติทุกรายการที่ระบุราคาและเลือกลงระบบพร้อมกัน"
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-                ✨ อนุมัติและเลือกทั้งหมด ({rows.filter((r) => r.new_price !== null && r.new_price > 0).length} รายการ)
-              </button>
-              <button
-                type="button"
-                onClick={selectAllPass}
-                className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition border border-emerald-200"
-              >
-                เลือกเฉพาะที่ผ่านเกณฑ์
-              </button>
-              <button
-                type="button"
-                onClick={deselectAll}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
-              >
-                ยกเลิกการเลือกทั้งหมด
-              </button>
-            </div>
-          </div>
+          {/* Review Table for Product Info */}
+          {infoBatchData && !infoCommitResult && (
+            <div className="space-y-6">
+              {/* Metric Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                  <div className="text-[11px] text-slate-500">ข้อมูลทั้งหมดในไฟล์</div>
+                  <div className="text-xl font-bold text-slate-900 mt-1">{infoBatchData.totalRows} แถว</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">{infoBatchData.filename}</div>
+                </div>
 
-          {/* Table */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3.5 w-12 text-center">เลือก</th>
-                    <th className="px-3 py-3.5 w-16 text-center">แถว</th>
-                    <th className="px-4 py-3.5 min-w-[140px]">รหัสสินค้า (SKU)</th>
-                    <th className="px-4 py-3.5 min-w-[180px]">ชื่อสินค้าที่ตรงกัน</th>
-                    <th className="px-4 py-3.5 text-right">ราคาเดิม</th>
-                    <th className="px-4 py-3.5 text-right font-bold text-emerald-700 min-w-[120px]">ราคาใหม่</th>
-                    <th className="px-4 py-3.5 text-right">ส่วนต่าง</th>
-                    <th className="px-4 py-3.5 text-center">สถานะ</th>
-                    <th className="px-4 py-3.5">คำอธิบายการตรวจสอบ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRows.map((r) => {
-                    const isChecked = selectedRowIds.has(r.id);
-                    const diff = r.old_price && r.new_price ? r.new_price - r.old_price : null;
-                    return (
-                      <tr
-                        key={r.id}
-                        className={`hover:bg-slate-50/80 transition ${
-                          isChecked ? 'bg-emerald-50/20' : ''
-                        }`}
-                      >
-                        <td className="px-4 py-3.5 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleRowSelect(r.id, r.validation_status)}
-                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            title={r.validation_status !== 'PASS' ? 'เลือกเพื่ออนุมัติรายการนี้' : 'เลือกรายการนี้'}
-                          />
-                        </td>
-                        <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
-                        <td className="px-4 py-3.5">
-                          <input
-                            type="text"
-                            value={r.detected_sku}
-                            onChange={(e) => handleUpdateRowField(r.id, 'detected_sku', e.target.value)}
-                            className="px-2 py-1 bg-white border border-slate-200 rounded font-mono font-bold text-slate-900 w-full text-xs"
-                          />
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-700 max-w-xs">
-                          <span className="line-clamp-2">{r.detected_product_name}</span>
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono text-slate-500">
-                          {r.old_price ? `฿${r.old_price.toLocaleString()}` : '-'}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <input
-                            type="number"
-                            value={r.new_price !== null ? r.new_price : ''}
-                            onChange={(e) => handleUpdateRowField(r.id, 'new_price', e.target.value)}
-                            className="px-2 py-1 bg-white border border-emerald-300 rounded font-mono font-bold text-emerald-700 w-24 text-right text-xs"
-                          />
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-mono">
-                          {diff !== null ? (
-                            <span className={diff >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
-                              {diff >= 0 ? `+฿${diff.toLocaleString()}` : `-฿${Math.abs(diff).toLocaleString()}`}
-                            </span>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                r.validation_status === 'PASS'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : r.validation_status === 'NEEDS_REVIEW'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {r.validation_status === 'PASS' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                              {r.validation_status === 'NEEDS_REVIEW' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
-                              {r.validation_status === 'FAILED' && <XCircle className="w-3 h-3 text-red-600" />}
-                              {r.validation_status}
-                            </span>
-                            {r.validation_status !== 'PASS' && (
-                              <button
-                                type="button"
-                                onClick={() => handleApproveSingleRow(r.id)}
-                                className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-bold transition shadow-2xs flex items-center gap-1"
-                                title="กดอนุมัติรายการนี้เพื่อนำเข้า"
-                              >
-                                <Check className="w-2.5 h-2.5" />
-                                อนุมัติ
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-500 text-[11px]">
-                          {r.warning_reason || (
-                            <span className="text-emerald-600 font-medium">✓ จับคู่ตรงรหัสสินค้า 100%</span>
-                          )}
-                        </td>
+                <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
+                  <div className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    PASS (พบรหัสสินค้าในระบบ)
+                  </div>
+                  <div className="text-xl font-bold text-emerald-700 mt-1">{infoBatchData.passedRows} รายการ</div>
+                  <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                    ✓ เลือกอัปเดตอัตโนมัติแล้ว
+                  </div>
+                </div>
+
+                <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200 shadow-xs">
+                  <div className="text-[11px] font-semibold text-red-800 flex items-center gap-1.5">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    FAILED (ไม่พบรหัสสินค้า)
+                  </div>
+                  <div className="text-xl font-bold text-red-700 mt-1">{infoBatchData.failedRows} รายการ</div>
+                  <div className="text-[10px] text-red-600 mt-0.5">รหัส SKU ไม่ตรงกับในระบบ</div>
+                </div>
+              </div>
+
+              {/* Action Confirmation Bar */}
+              <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                      โหมดอัปเดต:
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30">
+                      📦 อัปเดทเฉพาะข้อมูลสินค้า
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      ราคาเดิมปลอดภัย 100%
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    ระบบจะอัปเดตเฉพาะชื่อสินค้า, หมวดหมู่, ขนาด, สี, รายละเอียด และบันทึกลง Supabase แบบ Real-time
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setInfoBatchData(null)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    ยกเลิก / อัปโหลดใหม่
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInfoCommit}
+                    disabled={infoCommitting || infoSelectedRowIds.size === 0}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/25 transition disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {infoCommitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        กำลังบันทึกและซิงค์ Real-time...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        ยืนยันอัปเดทข้อมูลสินค้า ({infoSelectedRowIds.size} รายการ)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['ALL', 'PASS', 'FAILED', 'SELECTED'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setInfoFilterTab(tab)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                        infoFilterTab === tab
+                          ? 'bg-blue-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab === 'ALL' && `ทั้งหมด (${infoRows.length})`}
+                      {tab === 'PASS' && `✓ ผ่าน (${infoBatchData.passedRows})`}
+                      {tab === 'FAILED' && `✕ ไม่พบ (${infoBatchData.failedRows})`}
+                      {tab === 'SELECTED' && `เลือกไว้ (${infoSelectedRowIds.size})`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleInfoSelectAll}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold transition cursor-pointer"
+                  >
+                    {infoSelectedRowIds.size === infoBatchData.passedRows ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกรายการที่ผ่านทั้งหมด'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-700 uppercase font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3.5 w-12 text-center">เลือก</th>
+                        <th className="px-3 py-3.5 w-12 text-center">#</th>
+                        <th className="px-4 py-3.5 font-bold text-slate-900">รหัสสินค้า (SKU)</th>
+                        <th className="px-4 py-3.5 min-w-[200px]">ชื่อสินค้า (เดิม ➔ ใหม่)</th>
+                        <th className="px-4 py-3.5 min-w-[150px]">หมวดหมู่ (เดิม ➔ ใหม่)</th>
+                        <th className="px-4 py-3.5 min-w-[150px]">ขนาด & สี</th>
+                        <th className="px-4 py-3.5 text-center min-w-[130px]">ราคา (Protected)</th>
+                        <th className="px-4 py-3.5 text-center">สถานะ</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredInfoRows.map((r) => {
+                        const isChecked = infoSelectedRowIds.has(r.id);
+                        const isNameChanged = r.new_name && r.new_name !== r.old_name;
+                        const isCatChanged = r.new_category_name && r.new_category_name !== r.old_category_name;
+                        const isSizeChanged = r.new_size_text && r.new_size_text !== r.old_size_text;
+                        const isColorChanged = r.new_color && r.new_color !== r.old_color;
+
+                        return (
+                          <tr key={r.id} className={`hover:bg-slate-50/80 transition ${isChecked ? 'bg-blue-50/20' : ''}`}>
+                            <td className="px-4 py-3.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleInfoRowSelect(r.id)}
+                                disabled={r.validation_status !== 'PASS'}
+                                className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-30"
+                              />
+                            </td>
+                            <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
+                            <td className="px-4 py-3.5 font-mono font-bold text-slate-900">
+                              <span className="bg-slate-100 px-2 py-0.5 rounded text-red-600">
+                                {r.detected_sku}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              {r.old_name ? (
+                                <div>
+                                  <div className="text-slate-500 line-through text-[11px]">{r.old_name}</div>
+                                  <div className={`font-bold ${isNameChanged ? 'text-blue-700' : 'text-slate-800'}`}>
+                                    {r.new_name || r.old_name}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-red-500 font-semibold">{r.detected_product_name || 'ไม่พบในระบบ'}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              {r.old_category_name ? (
+                                <div>
+                                  <div className="text-slate-400 text-[10px]">เดิม: {r.old_category_name}</div>
+                                  <div className={`text-xs font-semibold ${isCatChanged ? 'text-emerald-700 font-bold' : 'text-slate-700'}`}>
+                                    {r.new_category_name || r.old_category_name}
+                                  </div>
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-[11px]">
+                              <div>
+                                ขนาด: <span className="font-semibold text-slate-800">{r.new_size_text || r.old_size_text || '-'}</span>
+                              </div>
+                              <div>
+                                สี: <span className="font-semibold text-slate-800">{r.new_color || r.old_color || 'ตามภาพ'}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <Lock className="w-3 h-3 text-emerald-600" />
+                                <span>คงเดิมไม่แตะต้อง</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  r.validation_status === 'PASS'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {r.validation_status === 'PASS' ? (
+                                  <>
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>PASS</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="w-3 h-3 text-red-600" />
+                                    <span>ไม่พบ SKU</span>
+                                  </>
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

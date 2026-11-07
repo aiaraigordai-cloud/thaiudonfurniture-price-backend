@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 let dbInstance: DatabaseSync | null = null;
 
@@ -282,6 +283,29 @@ function initSchema(db: DatabaseSync) {
     const batchColNames = batchCols.map((c: any) => c.name);
     if (!batchColNames.includes('catalog_type')) {
       db.exec("ALTER TABLE price_import_batches ADD COLUMN catalog_type TEXT DEFAULT 'all';");
+    }
+
+    // Ensure 'tier_noprice' exists for Requirement 2
+    db.prepare(`
+      INSERT OR IGNORE INTO price_tiers (id, code, name_th, description, display_order)
+      VALUES ('tier_noprice', 'NO_PRICE', 'ไม่มีราคา (-)', 'ไม่แสดงราคา หรือสอบถามราคาทาง LINE', 5)
+    `).run();
+
+    // Ensure official no-price catalog links exist for each catalog type
+    const defaultNoPriceLinks = [
+      { id: 'link_tuulo_noprice', token: 'catalog-tuulo-noprice', cat: 'tuulo', title: 'แคตตาล็อกตู้โล (ไม่มีราคา)' },
+      { id: 'link_knockdown_noprice', token: 'catalog-knockdown-noprice', cat: 'knockdown', title: 'แคตตาล็อกเฟอร์นิเจอร์น็อคดาวน์ Modern Luxury (ไม่มีราคา)' },
+      { id: 'link_all_noprice', token: 'catalog-noprice-2026', cat: 'all', title: 'แคตตาล็อกสินค้าทั้งหมด (ไม่มีราคา)' },
+    ];
+    for (const l of defaultNoPriceLinks) {
+      const existing = db.prepare('SELECT id FROM share_links WHERE token_raw = ?').get(l.token);
+      if (!existing) {
+        const hash = crypto.createHash('sha256').update(l.token).digest('hex');
+        db.prepare(`
+          INSERT INTO share_links (id, token_hash, token_raw, sharing_mode, catalog_filter, price_tier_id, customer_name, is_revoked, created_at)
+          VALUES (?, ?, ?, 'FULL_CATALOG', ?, 'tier_noprice', ?, 0, datetime('now'))
+        `).run(l.id, hash, l.token, l.cat, l.title);
+      }
     }
   } catch (e) {
     console.warn('Migration note:', e);

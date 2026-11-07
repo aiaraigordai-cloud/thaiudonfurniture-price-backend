@@ -29,7 +29,23 @@ import {
   ListPlus,
   HelpCircle,
   User,
+  Coins,
+  ChevronDown,
+  QrCode,
+  ExternalLink,
 } from 'lucide-react';
+
+const PRICE_RANGES = [
+  { id: 'all', label: 'ทุกช่วงราคา', min: 0, max: Infinity },
+  { id: 'under_2k', label: 'ต่ำกว่า 2,000 บาท', min: 1, max: 1999 },
+  { id: '2k_2999', label: '2,000–2,999 บาท', min: 2000, max: 2999 },
+  { id: '3k_4999', label: '3,000–4,999 บาท', min: 3000, max: 4999 },
+  { id: '5k_7999', label: '5,000–7,999 บาท', min: 5000, max: 7999 },
+  { id: '8k_11999', label: '8,000–11,999 บาท', min: 8000, max: 11999 },
+  { id: '12k_19999', label: '12,000–19,999 บาท', min: 12000, max: 19999 },
+  { id: '20k_up', label: '20,000 บาทขึ้นไป', min: 20000, max: Infinity },
+  { id: 'inquire', label: 'สอบถามราคา', min: -1, max: 0 },
+];
 
 export default function CustomerCatalogPage({ params }: { params: { token: string } }) {
   const [loading, setLoading] = useState(true);
@@ -38,6 +54,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   const [search, setSearch] = useState('');
   const [catalogTab, setCatalogTab] = useState<'all' | 'tuulo' | 'knockdown'>('all');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedPriceRange, setSelectedPriceRange] = useState<string>('all');
+  const [isPriceRangeExpanded, setIsPriceRangeExpanded] = useState<boolean>(false);
+  const [showSocialChannels, setShowSocialChannels] = useState<boolean>(false);
   const [selectedProductModal, setSelectedProductModal] = useState<any | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<'graphic' | 'ref'>('graphic');
 
@@ -81,10 +100,10 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   useEffect(() => {
     fetchCustomerCatalog();
 
-    // LIVE PRICING POLLING: Poll every 8 seconds to ensure live price updates
+    // LIVE REALTIME POLLING: Poll every 4 seconds to ensure live price & product updates
     const interval = setInterval(() => {
       fetchCustomerCatalog();
-    }, 8000);
+    }, 4000);
 
     // Multi-tab real-time sync via BroadcastChannel
     let bc: BroadcastChannel | null = null;
@@ -271,9 +290,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   };
 
   // Pre-filled LINE OA inquiry URL for single product
-  const getLineInquiryUrl = (prod: any) => {
-    const text = `สวัสดีครับ/ค่ะ สนใจสอบถามสินค้า\nรหัส: ${prod.sku}\nชื่อ: ${prod.name}\n${prod.sizeText ? 'ขนาด: ' + prod.sizeText + '\n' : ''}(จากแคตตาล็อกออนไลน์ ไทยอุดรเฟอร์นิเจอร์)`;
-    return `https://line.me/ti/p/~0930494178?text=${encodeURIComponent(text)}`;
+  const getLineInquiryUrl = (_prod?: any) => {
+    return 'https://line.me/ti/p/~0930494178';
   };
 
   // Cart total calculations
@@ -375,13 +393,24 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
       )
     : products;
 
-  // Filter products by search, catalogTab (tuulo/knockdown/all), and category
+  // Filter products by search (including price), catalogTab (tuulo/knockdown/all), and category
   const filtered = baseProducts.filter((p) => {
+    const rawSearch = search.trim();
+    const cleanDigits = rawSearch.replace(/[,฿\s\.\-]/g, '');
+    const priceNum = Number(p.price) || 0;
+    const priceStr = priceNum > 0 ? String(priceNum) : '';
+    const formattedPriceStr = priceNum > 0 ? priceNum.toLocaleString() : '';
+    const matchPrice =
+      Boolean(cleanDigits) &&
+      priceNum > 0 &&
+      (priceStr.includes(cleanDigits) || formattedPriceStr.includes(rawSearch) || priceStr === cleanDigits);
+
     const matchSearch =
       !search ||
       p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.sku?.toLowerCase().includes(search.toLowerCase()) ||
-      p.sizeText?.toLowerCase().includes(search.toLowerCase());
+      p.sizeText?.toLowerCase().includes(search.toLowerCase()) ||
+      matchPrice;
 
     const matchCatalog =
       isSharedCartView ||
@@ -391,7 +420,20 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
     const matchCat = isSharedCartView || !selectedCategory || p.category_name === selectedCategory;
 
-    return matchSearch && matchCatalog && matchCat;
+    let matchPriceRange = true;
+    if (selectedPriceRange === 'all') {
+      matchPriceRange = true;
+    } else if (selectedPriceRange === 'inquire') {
+      // หมายเหตุ : ส่วนสินค้าที่ราคาเป็น 0 หรือไม่มีราคา (-) ให้แยกเป็น “สอบถามราคา” ไม่รวมในช่วง “ต่ำกว่า 2,000 บาท”
+      matchPriceRange = priceNum <= 0;
+    } else {
+      const currentRange = PRICE_RANGES.find((r) => r.id === selectedPriceRange);
+      if (currentRange) {
+        matchPriceRange = priceNum >= currentRange.min && priceNum <= currentRange.max;
+      }
+    }
+
+    return matchSearch && matchCatalog && matchCat && matchPriceRange;
   });
 
   // Calculate available categories based on current catalog tab
@@ -410,6 +452,24 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   });
 
   const availableCategories = Object.keys(categoryCounts);
+
+  // Calculate price range counts based on tabProducts
+  const priceRangeCounts: Record<string, number> = {};
+  PRICE_RANGES.forEach((range) => {
+    if (range.id === 'all') {
+      priceRangeCounts['all'] = tabProducts.length;
+    } else if (range.id === 'inquire') {
+      priceRangeCounts['inquire'] = tabProducts.filter((p) => {
+        const price = Number(p.price) || 0;
+        return price <= 0;
+      }).length;
+    } else {
+      priceRangeCounts[range.id] = tabProducts.filter((p) => {
+        const price = Number(p.price) || 0;
+        return price >= range.min && price <= range.max;
+      }).length;
+    }
+  });
 
   // Modal navigation
   const currentModalIndex = selectedProductModal
@@ -472,6 +532,26 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
           {/* Header Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* Social Channels Header Toggle */}
+            <button
+              onClick={() => setShowSocialChannels(!showSocialChannels)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs cursor-pointer ${
+                showSocialChannels
+                  ? 'bg-red-50 text-red-700 border-red-300 ring-2 ring-red-200'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
+              title="ช่องทางอื่นๆและติดตามผลงาน"
+            >
+              <Share2 className="w-4 h-4 text-red-600" />
+              <span className="hidden lg:inline">ช่องทางอื่นๆและติดตามผลงาน</span>
+              <span className="lg:hidden">ช่องทางอื่น</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                  showSocialChannels ? 'rotate-180 text-red-600' : 'text-slate-400'
+                }`}
+              />
+            </button>
+
             {/* Guide Help Button */}
             <button
               onClick={() => setShowCartGuide(true)}
@@ -513,6 +593,132 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
       {/* 3. MAIN CATALOG CONTAINER */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6 space-y-6">
+        {/* TOP TAB: ช่องทางอื่นๆและติดตามผลงาน (รูปแบบย่อและแตกย่อยได้) */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowSocialChannels(!showSocialChannels)}
+            className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-50 transition cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#161B40] to-red-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <Share2 className="w-4 h-4 text-amber-300" />
+              </div>
+              <div>
+                <div className="text-xs sm:text-sm font-extrabold text-[#161B40]">
+                  ช่องทางอื่นๆและติดตามผลงาน
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition shrink-0">
+              <span>{showSocialChannels ? 'ย่อเก็บ' : 'ดูช่องทางทั้งหมด'}</span>
+              <ChevronDown
+                className={`w-4 h-4 transition-transform duration-200 ${
+                  showSocialChannels ? 'rotate-180 text-red-600' : 'text-slate-400'
+                }`}
+              />
+            </div>
+          </button>
+
+          {/* Sub-channels Grid (แตกย่อยได้) */}
+          {showSocialChannels && (
+            <div className="p-4 pt-2 border-t border-slate-100 bg-slate-50/70 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* 1. Facebook Thai Udon Furniture */}
+                <a
+                  href="https://www.facebook.com/ThaiUdonfurniture/?locale=th_TH"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white hover:bg-red-50/40 rounded-xl border border-slate-200 hover:border-red-300 transition shadow-2xs flex items-center gap-3 group"
+                >
+                  <img
+                    src="/images/social/thaiudon-fb.png"
+                    alt="ไทยอุดรเฟอร์นิเจอร์"
+                    className="w-11 h-11 rounded-xl object-contain bg-white p-0.5 border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-xs text-[#161B40] group-hover:text-red-600 transition truncate">
+                      ไทยอุดรเฟอร์นิเจอร์
+                    </div>
+                    <span className="text-[11px] text-blue-600 font-bold inline-flex items-center gap-0.5 mt-1">
+                      <span>เปิด Facebook</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </span>
+                  </div>
+                </a>
+
+                {/* 2. Built-In Thai Design */}
+                <a
+                  href="https://www.facebook.com/p/Built-In-Thai-Design-%E0%B8%9A%E0%B8%B4%E0%B9%89%E0%B8%A7%E0%B8%AD%E0%B8%B4%E0%B8%99%E0%B9%80%E0%B8%9F%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%99%E0%B8%B4%E0%B9%80%E0%B8%88%E0%B8%AD%E0%B8%A3%E0%B9%8C-%E0%B8%AD%E0%B8%B8%E0%B8%94%E0%B8%A3%E0%B8%98%E0%B8%B2%E0%B8%99%E0%B8%B5-61550839135598/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white hover:bg-amber-50/40 rounded-xl border border-slate-200 hover:border-amber-300 transition shadow-2xs flex items-center gap-3 group"
+                >
+                  <img
+                    src="/images/social/builtin-fb.jpg"
+                    alt="Built-In Thai Design"
+                    className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-xs text-[#161B40] group-hover:text-amber-700 transition truncate">
+                      Built-In Thai Design
+                    </div>
+                    <span className="text-[11px] text-blue-600 font-bold inline-flex items-center gap-0.5 mt-1">
+                      <span>เปิด Facebook</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </span>
+                  </div>
+                </a>
+
+                {/* 3. FurArii */}
+                <a
+                  href="https://www.facebook.com/people/FurArii-%E0%B9%82%E0%B8%A3%E0%B8%87%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%9C%E0%B8%A5%E0%B8%B4%E0%B8%95%E0%B9%80%E0%B8%9F%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%99%E0%B8%B4%E0%B9%80%E0%B8%88%E0%B8%AD%E0%B8%A3%E0%B9%8C-%E0%B8%8A%E0%B8%B8%E0%B8%94%E0%B8%AB%E0%B9%89%E0%B8%AD%E0%B8%87%E0%B8%99%E0%B8%AD%E0%B8%99-%E0%B9%82%E0%B8%8A%E0%B8%A7%E0%B9%8C%E0%B8%97%E0%B8%B5%E0%B8%A7%E0%B8%B5-%E0%B9%82%E0%B8%94%E0%B8%A2-%E0%B9%84%E0%B8%97%E0%B8%A2%E0%B8%AD%E0%B8%B8%E0%B8%94%E0%B8%A3%E0%B9%80%E0%B8%9F%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%99%E0%B8%B4%E0%B9%80%E0%B8%88%E0%B8%AD%E0%B8%A3%E0%B9%8C/100083401898084/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white hover:bg-blue-50/40 rounded-xl border border-slate-200 hover:border-blue-300 transition shadow-2xs flex items-center gap-3 group"
+                >
+                  <img
+                    src="/images/social/furarii-fb.jpg"
+                    alt="FurArii โรงงานผลิตเฟอร์นิเจอร์"
+                    className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-xs text-[#161B40] group-hover:text-blue-700 transition truncate">
+                      FurArii เฟอร์นิเจอร์
+                    </div>
+                    <span className="text-[11px] text-blue-600 font-bold inline-flex items-center gap-0.5 mt-1">
+                      <span>เปิด Facebook</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </span>
+                  </div>
+                </a>
+
+                {/* 4. TikTok @thaiudon_furniture */}
+                <a
+                  href="https://www.tiktok.com/@thaiudon_furniture"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 hover:border-slate-400 transition shadow-2xs flex items-center gap-3 group"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-black text-white flex items-center justify-center shrink-0 group-hover:scale-105 transition shadow-2xs">
+                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 3 15.69a6.34 6.34 0 0 0 6.34 6.34 6.33 6.33 0 0 0 6.33-6.34V9.05a8.28 8.28 0 0 0 4.92 1.6V7.2a4.83 4.83 0 0 1-1-.51z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-extrabold text-xs text-[#161B40] group-hover:text-black transition truncate">
+                      TikTok: @thaiudon_furniture
+                    </div>
+                    <span className="text-[11px] text-slate-800 font-bold inline-flex items-center gap-0.5 mt-1">
+                      <span>ชมคลิปผลงานจริง</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </span>
+                  </div>
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
         {/* SHARED CART BANNER (When viewing a shared cart link) */}
         {isSharedCartView && (
           <div className="bg-gradient-to-r from-[#161B40] to-blue-900 text-white p-4 sm:p-5 rounded-3xl shadow-md border-2 border-amber-400 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -634,7 +840,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <span className="text-slate-500 text-[10px] block">สี / วัสดุ</span>
                       <span className="font-bold text-[#161B40]">
-                        {singleProduct.color || 'ตามภาพมาตรฐาน'}
+                        {singleProduct.catalogType === 'tuulo' ? 'ตามภาพ' : (singleProduct.color || 'ตามภาพมาตรฐาน')}
                       </span>
                     </div>
                   </div>
@@ -693,7 +899,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   className="w-full py-3.5 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm"
                 >
                   <MessageCircle className="w-5 h-5" />
-                  <span>สอบถาม/สั่งซื้อสินค้านี้ทาง LINE</span>
+                  <span>สอบถามทาง Line : 0930494178</span>
                 </a>
               </div>
             </div>
@@ -705,7 +911,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
             {!isSharedCartView && catalogData?.catalogFilter === 'all' && (
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <button
-                  onClick={() => { setCatalogTab('all'); setSelectedCategory(''); }}
+                  onClick={() => { setCatalogTab('all'); setSelectedCategory(''); setSelectedPriceRange('all'); setIsPriceRangeExpanded(false); }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
                     catalogTab === 'all'
                       ? 'bg-[#161B40] text-white'
@@ -716,7 +922,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <span>ทั้งหมด ({products.length})</span>
                 </button>
                 <button
-                  onClick={() => { setCatalogTab('tuulo'); setSelectedCategory(''); }}
+                  onClick={() => { setCatalogTab('tuulo'); setSelectedCategory(''); setSelectedPriceRange('all'); setIsPriceRangeExpanded(false); }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
                     catalogTab === 'tuulo'
                       ? 'bg-[#161B40] text-white'
@@ -727,7 +933,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <span>ตู้โลอลูมิเนียม ({products.filter((p) => p.catalogType === 'tuulo').length})</span>
                 </button>
                 <button
-                  onClick={() => { setCatalogTab('knockdown'); setSelectedCategory(''); }}
+                  onClick={() => { setCatalogTab('knockdown'); setSelectedCategory(''); setSelectedPriceRange('all'); setIsPriceRangeExpanded(false); }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
                     catalogTab === 'knockdown'
                       ? 'bg-[#161B40] text-white'
@@ -746,7 +952,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="ค้นหารหัสสินค้า, ชื่อรุ่น, ขนาด (เช่น WU, ตู้กับข้าว, 120 ซม.)..."
+                  placeholder="ค้นหารหัสสินค้า, ชื่อรุ่น, ขนาด หรือค้นหาด้วยราคา (เช่น WU, ตู้กับข้าว, 2500)..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-red-500 focus:outline-hidden transition"
@@ -760,6 +966,73 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   </button>
                 )}
               </div>
+
+              {/* Collapsible Price Range Filter (ปุ่มย่อช่วงราคา กดแล้วค่อยแสดงแต่ละช่วง โดยไม่แสดงจำนวนสินค้า) */}
+              {!isSharedCartView && (
+                <div className="space-y-2 pt-0.5">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPriceRangeExpanded(!isPriceRangeExpanded)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs cursor-pointer ${
+                        selectedPriceRange !== 'all'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 ring-2 ring-amber-300 font-black'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      }`}
+                      title="กดเพื่อเปิด/ย่อตัวกรองช่วงราคา"
+                    >
+                      <Coins className="w-3.5 h-3.5 text-amber-600" />
+                      <span>
+                        {selectedPriceRange !== 'all'
+                          ? `ช่วงราคา: ${PRICE_RANGES.find((r) => r.id === selectedPriceRange)?.label}`
+                          : 'ช่วงราคา'}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          isPriceRangeExpanded ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {selectedPriceRange !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPriceRange('all')}
+                        className="text-[11px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition"
+                        title="ล้างตัวกรองช่วงราคา"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>รีเซ็ตราคา</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expanded Price Range Buttons (ไม่แสดงจำนวนสินค้าต่อท้าย) */}
+                  {isPriceRangeExpanded && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-xs animate-in fade-in slide-in-from-top-1 duration-150">
+                      {PRICE_RANGES.map((range) => {
+                        const isSelected = selectedPriceRange === range.id;
+                        return (
+                          <button
+                            key={range.id}
+                            type="button"
+                            onClick={() => setSelectedPriceRange(range.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs transition shrink-0 whitespace-nowrap cursor-pointer ${
+                              isSelected
+                                ? range.id === 'inquire'
+                                  ? 'bg-slate-800 text-white shadow-xs font-bold ring-2 ring-slate-400'
+                                  : 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-xs font-black ring-2 ring-amber-300'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 font-medium'
+                            }`}
+                          >
+                            {range.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Category Pills (Hide if in shared cart mode with few items) */}
               {availableCategories.length > 0 && !isSharedCartView && (
@@ -918,6 +1191,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                           {/* Size & Page */}
                           <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
                             <div>ขนาด: {prod.sizeText || `${prod.width || '-'} x ${prod.height || '-'} x ${prod.depth || '-'} ซม.`}</div>
+                            <div>
+                              สี: <span className="font-semibold text-slate-700">{prod.catalogType === 'tuulo' ? 'ตามภาพ' : (prod.color || 'ตามภาพ')}</span>
+                            </div>
                             <small className="text-[10px] text-slate-400 block">แคตตาล็อกหน้า {prod.pageNum || 1}</small>
                           </div>
                         </div>
@@ -970,16 +1246,18 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                             )}
                           </button>
 
-                          {/* LINE Order Button */}
-                          <a
-                            href={getLineInquiryUrl(prod)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="w-full py-2 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span>สอบถามทาง Line : 0930494178</span>
-                          </a>
+                          {/* LINE Order Button & QR Code Button */}
+                          <div className="pt-1">
+                            <a
+                              href={getLineInquiryUrl(prod)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full py-2 px-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>สอบถามทาง Line : 0930494178</span>
+                            </a>
+                          </div>
                         </div>
                       </div>
                     </article>
@@ -1112,7 +1390,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
                       <div className="text-[10px] font-bold text-slate-500">สี / ลวดลาย</div>
-                      <div className="font-semibold text-[#161B40]">{selectedProductModal.color || 'ตามภาพมาตรฐาน'}</div>
+                      <div className="font-semibold text-[#161B40]">
+                        {selectedProductModal.catalogType === 'tuulo' ? 'ตามภาพ' : (selectedProductModal.color || 'ตามภาพมาตรฐาน')}
+                      </div>
                     </div>
 
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
@@ -1170,7 +1450,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     className="w-full py-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-sm"
                   >
                     <MessageCircle className="w-4 h-4" />
-                    <span>สอบถามทาง LINE : 0930494178</span>
+                    <span>สอบถามทาง Line : 0930494178</span>
                   </a>
 
                   {/* Prev / Next navigation inside modal */}
@@ -1536,7 +1816,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         </div>
       )}
 
-      {/* 8. SITE FOOTER */}
+      {/* 9. SITE FOOTER */}
       <footer className="bg-[#161B40] text-slate-300 py-10 px-4 mt-12 border-t-2 border-red-600">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-xs">
           <div className="space-y-3">

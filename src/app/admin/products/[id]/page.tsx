@@ -26,6 +26,9 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [deletingRef, setDeletingRef] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
+  const [remoteUpdated, setRemoteUpdated] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
   // Form states
   const [sku, setSku] = useState('');
@@ -86,59 +89,107 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     });
   };
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [catRes, prodRes] = await Promise.all([
-          fetch('/api/categories'),
-          fetch(`/api/products/${params.id}`),
-        ]);
+  const loadProductData = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const [catRes, prodRes] = await Promise.all([
+        fetch('/api/categories'),
+        fetch(`/api/products/${params.id}?t=${Date.now()}`),
+      ]);
 
-        const catData = await catRes.json();
-        const prodData = await prodRes.json();
+      const catData = await catRes.json();
+      const prodData = await prodRes.json();
 
-        if (catData.success) setCategories(catData.categories || []);
-        if (prodData.success) {
-          const p = prodData.product;
-          setSku(p.sku);
-          setName(p.name);
-          setDescription(p.description || '');
-          setCategoryId(p.category_id || '');
-          setWidth(p.width ? String(p.width) : '');
-          setHeight(p.height ? String(p.height) : '');
-          setDepth(p.depth ? String(p.depth) : '');
-          setColor(p.color || '');
-          setStatus(p.status || 'Published');
-
-          // Reference Image
-          setRefImageUrl(p.ref_image_url || '');
-          setRefFilename(p.ref_filename || '');
-
-          // Primary and Additional Images
-          const mainImg = p.primary_image_url || (p.images && p.images[0]) || '';
-          setPrimaryImageUrl(mainImg);
-
-          if (p.images && p.images.length > 1) {
-            const second = p.images.find((img: string) => img !== mainImg && img !== p.ref_image_url);
-            setSecondaryImageUrl(second || '');
-          }
-
-          if (p.prices) {
-            setSalePrice(p.prices.SALE_PRICE !== undefined ? String(p.prices.SALE_PRICE) : '');
-            setRetailPrice(p.prices.RETAIL_PRICE !== undefined ? String(p.prices.RETAIL_PRICE) : '');
-            setVipPrice(p.prices.VIP_PRICE !== undefined ? String(p.prices.VIP_PRICE) : '');
-            setGeneralPrice(p.prices.GENERAL_PRICE !== undefined ? String(p.prices.GENERAL_PRICE) : '');
-          }
-        } else {
-          setError(prodData.error || 'ไม่พบสินค้า');
+      if (catData.success) setCategories(catData.categories || []);
+      if (prodData.success) {
+        const p = prodData.product;
+        // If silent and user is currently typing, alert them without overwriting their form
+        if (silent && isDirty) {
+          setRemoteUpdated(true);
+          return;
         }
-      } catch (e) {
-        setError('เกิดข้อผิดพลาดในการโหลดข้อมูล');
-      } finally {
-        setLoading(false);
+
+        setSku(p.sku || '');
+        setName(p.name || '');
+        setDescription(p.description || '');
+        setCategoryId(p.category_id || '');
+        setWidth(p.width ? String(p.width) : '');
+        setHeight(p.height ? String(p.height) : '');
+        setDepth(p.depth ? String(p.depth) : '');
+        setColor(p.color || '');
+        setStatus(p.status || 'Published');
+
+        // Reference Image
+        setRefImageUrl(p.ref_image_url || '');
+        setRefFilename(p.ref_filename || '');
+
+        // Primary and Additional Images
+        const mainImg = p.primary_image_url || (p.images && p.images[0]) || '';
+        setPrimaryImageUrl(mainImg);
+
+        if (p.images && p.images.length > 1) {
+          const second = p.images.find((img: string) => img !== mainImg && img !== p.ref_image_url);
+          setSecondaryImageUrl(second || '');
+        }
+
+        if (p.prices) {
+          setSalePrice(p.prices.SALE_PRICE !== undefined ? String(p.prices.SALE_PRICE) : '');
+          setRetailPrice(p.prices.RETAIL_PRICE !== undefined ? String(p.prices.RETAIL_PRICE) : '');
+          setVipPrice(p.prices.VIP_PRICE !== undefined ? String(p.prices.VIP_PRICE) : '');
+          setGeneralPrice(p.prices.GENERAL_PRICE !== undefined ? String(p.prices.GENERAL_PRICE) : '');
+        }
+
+        setRemoteUpdated(false);
+        setIsDirty(false);
+        setLastSyncTime(new Date().toLocaleTimeString('th-TH'));
+      } else {
+        setError(prodData.error || 'ไม่พบสินค้า');
       }
+    } catch (e) {
+      if (!silent) setError('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+    } finally {
+      if (!silent) setLoading(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadProductData(false);
+
+    // Multi-channel Real-time Broadcast Listener
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('thaiudon_sync_channel');
+      bc.onmessage = (e) => {
+        if (!e.data || e.data.productId === params.id || !e.data.productId) {
+          loadProductData(true);
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'thaiudon_product_sync' || e.key === 'thaiudon_last_sync') {
+        loadProductData(true);
+      }
+    };
+    const handleSyncEvent = () => loadProductData(true);
+    const handleFocus = () => loadProductData(true);
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('thaiudon_catalog_sync', handleSyncEvent);
+    window.addEventListener('focus', handleFocus);
+
+    // Fallback Polling every 4 seconds to guarantee zero-delay sync
+    const interval = setInterval(() => {
+      loadProductData(true);
+    }, 4000);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('thaiudon_catalog_sync', handleSyncEvent);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, [params.id]);
 
   // Handle immediate deletion of Reference Image
@@ -153,11 +204,15 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       if (res.ok) {
         setRefImageUrl('');
         setRefFilename('');
-        setSuccess('ลบภาพอ้างอิงเรียบร้อยแล้ว');
-        // Broadcast change
+        setSuccess('ลบภาพอ้างอิงเรียบร้อยแล้ว (Real-time)');
+        // Multi-channel Real-time broadcast
         if (typeof window !== 'undefined') {
-          const channel = new BroadcastChannel('products_channel');
-          channel.postMessage({ type: 'REF_IMAGE_DELETED', productId: params.id });
+          try {
+            const channel = new BroadcastChannel('thaiudon_sync_channel');
+            channel.postMessage({ type: 'PRODUCTS_UPDATED', productId: params.id, timestamp: Date.now() });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
         }
       } else {
         setError(data.error || 'ไม่สามารถลบภาพอ้างอิงได้');
@@ -215,11 +270,19 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       if (!res.ok) {
         setError(data.error || 'แก้ไขสินค้าไม่สำเร็จ');
       } else {
-        setSuccess('บันทึกข้อมูลสินค้า รูปภาพ และราคาทั้ง 4 ระดับสำเร็จเรียบร้อยแล้ว');
-        // Notify other tabs via BroadcastChannel
+        setSuccess('✅ บันทึกและอัปเดตข้อมูลสินค้าเป็นปัจจุบันแบบ Real-time เรียบร้อยแล้ว (อัปเดตทันทีทั้งในระบบและลิงก์แชร์ลูกค้า)');
+        setIsDirty(false);
+        setRemoteUpdated(false);
+        setLastSyncTime(new Date().toLocaleTimeString('th-TH'));
+        // Multi-channel Real-time broadcast across all tabs and views
         if (typeof window !== 'undefined') {
-          const channel = new BroadcastChannel('products_channel');
-          channel.postMessage({ type: 'PRODUCT_UPDATED', productId: params.id });
+          try {
+            const channel = new BroadcastChannel('thaiudon_sync_channel');
+            channel.postMessage({ type: 'PRODUCTS_UPDATED', productId: params.id, timestamp: Date.now() });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            localStorage.setItem('thaiudon_product_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
         }
       }
     } catch {
@@ -241,7 +304,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link
             href="/admin/products"
@@ -258,10 +321,45 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 {status}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">จัดการรายละเอียด สเปก รูปภาพสินค้าหลัก ภาพอ้างอิง และราคากลาง 4 ระดับ</p>
+            <p className="text-xs text-slate-500 mt-0.5">จัดการรายละเอียด สเปก รูปภาพสินค้าหลัก ภาพอ้างอิง และราคากลาง 4 ระดับ (Real-time)</p>
           </div>
         </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Real-time Active {lastSyncTime ? `(${lastSyncTime})` : ''}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadProductData(false)}
+            className="px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-full text-xs font-semibold shadow-2xs transition"
+          >
+            รีเฟรชข้อมูล
+          </button>
+        </div>
       </div>
+
+      {remoteUpdated && isDirty && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>มีข้อมูลสินค้านี้อัปเดตล่าสุดจากระบบภายนอก (คุณกำลังแก้ไขฟอร์มอยู่)</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm('ต้องการโหลดข้อมูลล่าสุดจากระบบและแทนที่ข้อมูลที่กำลังพิมพ์หรือไม่?')) {
+                setIsDirty(false);
+                loadProductData(false);
+              }
+            }}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold transition whitespace-nowrap"
+          >
+            โหลดข้อมูลล่าสุดทันที
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
@@ -283,7 +381,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} onChange={() => setIsDirty(true)} className="space-y-6">
         {/* CARD 1: Basic Info */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
