@@ -52,6 +52,10 @@ export default function ProductsPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState('');
 
+  // PAGINATION: 30 items per page by default to eliminate table lag & cut bandwidth
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(30);
+
   // 1. Image Preview Modal state
   const [previewProduct, setPreviewProduct] = useState<any | null>(null);
   const [previewActiveImgIdx, setPreviewActiveImgIdx] = useState(0);
@@ -91,6 +95,11 @@ export default function ProductsPage() {
     tuulo: 121,
     knockdown: 189,
   });
+
+  // Reset pagination to page 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, selectedCategory, selectedStatus, catalogTypeFilter, pageSize]);
 
   // 5. Real-time Synchronization States
   const [realtimeUpdatedTime, setRealtimeUpdatedTime] = useState<string>('');
@@ -606,7 +615,7 @@ export default function ProductsPage() {
     };
     window.addEventListener('focus', handleFocus);
 
-    // 5. Lightweight Polling (every 12 seconds when tab is visible)
+    // 5. Lightweight Polling relaxed to 45s (Supabase Realtime WebSocket handles instantaneous 0.5s updates)
     let currentToken = '';
     const checkSyncToken = async () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
@@ -625,7 +634,7 @@ export default function ProductsPage() {
       } catch {}
     };
 
-    const interval = setInterval(checkSyncToken, 12000);
+    const interval = setInterval(checkSyncToken, 45000);
 
     // 6. Supabase Realtime WebSocket (Instant live sync across all devices/sessions)
     let realtimeChannel: any = null;
@@ -799,6 +808,12 @@ export default function ProductsPage() {
     }
     return true;
   });
+
+  // Calculate Pagination Slices
+  const totalPages = Math.max(1, Math.ceil(displayedProducts.length / (pageSize || 1)));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * (pageSize || displayedProducts.length);
+  const paginatedProducts = pageSize === 0 ? displayedProducts : displayedProducts.slice(startIndex, startIndex + pageSize);
 
   // Open Complete Product Details Modal (พร้อมแท็บสลับรูปทีละรูป)
   const openProductDetailsModal = (prod: any, tab: 'primary' | 'ref' = 'primary') => {
@@ -1308,7 +1323,7 @@ export default function ProductsPage() {
                   </td>
                 </tr>
               ) : (
-                displayedProducts.map((prod) => {
+                paginatedProducts.map((prod) => {
                   const isChecked = selectedProductIds.has(prod.id);
                   return (
                     <tr
@@ -1547,6 +1562,79 @@ export default function ProductsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Toolbar */}
+        {displayedProducts.length > 0 && (
+          <div className="px-5 py-3.5 bg-[#FFFAF3]/60 border-t border-[#D2B681]/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#705E4F]">
+            <div className="flex items-center gap-2">
+              <span>
+                แสดง <strong className="text-[#402E20]">{startIndex + 1}</strong> ถึง{' '}
+                <strong className="text-[#402E20]">{Math.min(startIndex + (pageSize || displayedProducts.length), displayedProducts.length)}</strong>{' '}
+                จากทั้งหมด <strong className="text-[#402E20]">{displayedProducts.length}</strong> รายการ
+              </span>
+              <span className="text-[#D2B681]">|</span>
+              <div className="flex items-center gap-1.5">
+                <span>หน้าละ:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="px-2 py-1 bg-white border border-[#D2B681] rounded-lg text-xs font-semibold text-[#402E20] focus:outline-none focus:ring-1 focus:ring-[#C5A059] cursor-pointer"
+                >
+                  <option value={30}>30 รายการ</option>
+                  <option value={50}>50 รายการ</option>
+                  <option value={100}>100 รายการ</option>
+                  <option value={0}>แสดงทั้งหมด ({displayedProducts.length})</option>
+                </select>
+              </div>
+            </div>
+
+            {pageSize > 0 && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  className="px-2.5 py-1.5 bg-white border border-[#D2B681]/60 rounded-lg hover:bg-[#FFFAF3] text-[#402E20] disabled:opacity-40 disabled:pointer-events-none transition font-medium"
+                  title="หน้าแรก"
+                >
+                  « หน้าแรก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="p-1.5 bg-white border border-[#D2B681]/60 rounded-lg hover:bg-[#FFFAF3] text-[#402E20] disabled:opacity-40 disabled:pointer-events-none transition"
+                  title="หน้าก่อนหน้า"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="px-3 py-1 font-bold text-[#402E20]">
+                  หน้า {safeCurrentPage} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="p-1.5 bg-white border border-[#D2B681]/60 rounded-lg hover:bg-[#FFFAF3] text-[#402E20] disabled:opacity-40 disabled:pointer-events-none transition"
+                  title="หน้าถัดไป"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage === totalPages}
+                  className="px-2.5 py-1.5 bg-white border border-[#D2B681]/60 rounded-lg hover:bg-[#FFFAF3] text-[#402E20] disabled:opacity-40 disabled:pointer-events-none transition font-medium"
+                  title="หน้าสุดท้าย"
+                >
+                  หน้าสุดท้าย »
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* FLOATING ACTION BAR FOR MULTI-SELECTION (Sticky Bottom Bar) */}

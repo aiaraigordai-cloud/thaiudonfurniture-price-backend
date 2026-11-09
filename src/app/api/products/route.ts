@@ -18,6 +18,8 @@ export async function GET(request: Request) {
     const category = searchParams.get('category') || '';
     const catalogType = searchParams.get('catalog_type') || '';
     const status = searchParams.get('status') || '';
+    const mode = searchParams.get('mode') || '';
+    const isPricingMode = mode === 'pricing';
     const limitParam = parseInt(searchParams.get('limit') || '0', 10);
 
     const db = getDb();
@@ -68,9 +70,11 @@ export async function GET(request: Request) {
     // Execute batch queries instead of 620 N+1 queries
     const products = (await db.prepare(query).all(...params)) as any[];
     const tierRows = (await db.prepare('SELECT id, code, name_th FROM price_tiers ORDER BY display_order').all()) as any[];
-    const allImages = (await db
-      .prepare('SELECT product_id, image_url, display_order, is_primary FROM product_images ORDER BY display_order ASC')
-      .all()) as any[];
+    const allImages = isPricingMode
+      ? []
+      : ((await db
+          .prepare('SELECT product_id, image_url, display_order, is_primary FROM product_images ORDER BY display_order ASC')
+          .all()) as any[]);
     const allPrices = (await db
       .prepare(`
         SELECT pp.product_id, pp.price, pt.code
@@ -158,12 +162,14 @@ export async function GET(request: Request) {
       console.warn('Supabase price overlay error:', err);
     }
 
-    // Convert all images to high-speed Cloudflare R2 CDN URLs
-    for (const p of finalProducts) {
-      if (p.ref_image_url) p.ref_image_url = formatImageUrlToR2(p.ref_image_url);
-      if (p.primary_image_url) p.primary_image_url = formatImageUrlToR2(p.primary_image_url);
-      if (Array.isArray(p.images)) {
-        p.images = p.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+    // Convert all images to high-speed Cloudflare R2 CDN URLs (skipped if pricing mode)
+    if (!isPricingMode) {
+      for (const p of finalProducts) {
+        if (p.ref_image_url) p.ref_image_url = formatImageUrlToR2(p.ref_image_url);
+        if (p.primary_image_url) p.primary_image_url = formatImageUrlToR2(p.primary_image_url);
+        if (Array.isArray(p.images)) {
+          p.images = p.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+        }
       }
     }
 
@@ -172,7 +178,20 @@ export async function GET(request: Request) {
     const tuuloCount = finalProducts.filter((p) => p.catalog_type === 'tuulo').length;
     const knockdownCount = finalProducts.filter((p) => p.catalog_type === 'knockdown').length;
 
-    const outputProducts = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
+    const sliced = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
+    const outputProducts = isPricingMode
+      ? sliced.map((p) => ({
+          id: p.id,
+          sku: p.sku,
+          name: p.name,
+          category_id: p.category_id,
+          category_name: p.category_name,
+          catalog_type: p.catalog_type,
+          page_num: p.page_num,
+          status: p.status,
+          prices: p.prices,
+        }))
+      : sliced;
 
     return NextResponse.json(
       {

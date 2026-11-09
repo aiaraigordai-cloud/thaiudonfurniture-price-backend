@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Check,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function PricesPage() {
@@ -38,6 +40,15 @@ export default function PricesPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [priceStatusFilter, setPriceStatusFilter] = useState<'all' | 'has_price' | 'no_price' | 'has_partial'>('all');
+
+  // PAGINATION: 30 items per page by default to eliminate DOM input lag & cut bandwidth
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(30);
+
+  // Reset pagination to page 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, catalogTypeFilter, selectedCategory, priceStatusFilter, pageSize]);
 
   // Helper to determine price status ("มีราคา" กับ "ไม่มีราคา")
   const getProductPriceStatus = (prod: any) => {
@@ -68,6 +79,12 @@ export default function PricesPage() {
     return ps === priceStatusFilter;
   });
 
+  // Calculate Pagination Slices
+  const totalPages = Math.max(1, Math.ceil(displayedProducts.length / (pageSize || 1)));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safeCurrentPage - 1) * (pageSize || displayedProducts.length);
+  const paginatedProducts = pageSize === 0 ? displayedProducts : displayedProducts.slice(startIndex, startIndex + pageSize);
+
   const syncTokenRef = useRef<string>('');
   const dirtyCellsRef = useRef<Set<string>>(new Set());
 
@@ -77,6 +94,7 @@ export default function PricesPage() {
 
     try {
       const params = new URLSearchParams();
+      params.append('mode', 'pricing');
       if (search) params.append('q', search);
       if (catalogTypeFilter !== 'all') params.append('catalog_type', catalogTypeFilter);
       if (selectedCategory) params.append('category', selectedCategory);
@@ -159,7 +177,7 @@ export default function PricesPage() {
     };
     window.addEventListener('focus', handleFocus);
 
-    // Heartbeat Polling every 12 seconds when tab is visible
+    // Heartbeat Polling relaxed to 45 seconds to conserve background network bandwidth
     const intervalId = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       try {
@@ -174,7 +192,7 @@ export default function PricesPage() {
           }
         }
       } catch {}
-    }, 12000);
+    }, 45000);
 
     return () => {
       if (bc) bc.close();
@@ -249,8 +267,23 @@ export default function PricesPage() {
           });
         }, 3000);
 
+        // Optimistically update product price in local state (eliminating heavy full-catalog refetch)
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === prodId) {
+              return {
+                ...p,
+                prices: {
+                  ...p.prices,
+                  [tier]: currentVal !== '' && currentVal !== null ? Number(currentVal) : null,
+                },
+              };
+            }
+            return p;
+          })
+        );
+
         broadcastPriceSync(prodId);
-        loadProducts(true);
       }
     } catch {
       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
@@ -301,8 +334,24 @@ export default function PricesPage() {
           });
         }, 3000);
 
+        // Optimistically update all 4 prices for this product locally
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === prodId) {
+              const updated = { ...p.prices };
+              for (const [k, v] of Object.entries(pricesToSave || {})) {
+                updated[k] = v !== '' && v !== null ? Number(v) : null;
+              }
+              return {
+                ...p,
+                prices: updated,
+              };
+            }
+            return p;
+          })
+        );
+
         broadcastPriceSync(prodId);
-        loadProducts(true);
       }
     } catch {
       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
@@ -543,7 +592,7 @@ export default function PricesPage() {
                   </td>
                 </tr>
               ) : (
-                displayedProducts.map((prod) => {
+                paginatedProducts.map((prod) => {
                   const pPrices = editingPrices[prod.id] || {};
                   const isSavingRow = savingId === prod.id;
 
@@ -724,6 +773,79 @@ export default function PricesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Toolbar */}
+        {displayedProducts.length > 0 && (
+          <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+            <div className="flex items-center gap-2">
+              <span>
+                แสดง <strong className="text-slate-900">{startIndex + 1}</strong> ถึง{' '}
+                <strong className="text-slate-900">{Math.min(startIndex + (pageSize || displayedProducts.length), displayedProducts.length)}</strong>{' '}
+                จากทั้งหมด <strong className="text-slate-900">{displayedProducts.length}</strong> รายการ
+              </span>
+              <span className="text-slate-300">|</span>
+              <div className="flex items-center gap-1.5">
+                <span>หน้าละ:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value={30}>30 รายการ</option>
+                  <option value={50}>50 รายการ</option>
+                  <option value={100}>100 รายการ</option>
+                  <option value={0}>แสดงทั้งหมด ({displayedProducts.length})</option>
+                </select>
+              </div>
+            </div>
+
+            {pageSize > 0 && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage === 1}
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition font-medium"
+                  title="หน้าแรก"
+                >
+                  « หน้าแรก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition"
+                  title="หน้าก่อนหน้า"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="px-3 py-1 font-bold text-slate-800">
+                  หน้า {safeCurrentPage} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="p-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition"
+                  title="หน้าถัดไป"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage === totalPages}
+                  className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition font-medium"
+                  title="หน้าสุดท้าย"
+                >
+                  หน้าสุดท้าย »
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
