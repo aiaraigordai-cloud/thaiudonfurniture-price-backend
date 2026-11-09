@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { getCachedSupabasePriceHistory } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, getSupabase } from '@/lib/supabase';
 import { loadProductOverrides } from '@/lib/product-store';
 import { findShareLinkByToken } from '@/lib/share-store';
+import { formatImageUrlToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -172,7 +173,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
       };
     });
 
-    // 1. Overlay persistent product overrides (for realtime name, category, image, sizes, fallback prices)
+    // 1. Overlay persistent product overrides (for realtime name, category, image, sizes, fallback prices, and deletions)
+    const deletedIndices = new Set<number>();
     try {
       const overrides = await loadProductOverrides();
       if (overrides && Object.keys(overrides).length > 0) {
@@ -189,6 +191,10 @@ export async function GET(request: Request, { params }: { params: { token: strin
           const skuKey = prod.sku ? prod.sku.trim().toUpperCase() : '';
           const ovr = overrides[prod.id] || (skuKey ? overrides[skuKey] : null);
           if (ovr) {
+            if (ovr.deleted) {
+              deletedIndices.add(i);
+              continue;
+            }
             if (ovr.sku) prod.sku = ovr.sku;
             if (ovr.name) prod.name = ovr.name;
             if (ovr.description !== undefined) prod.description = ovr.description;
@@ -219,43 +225,31 @@ export async function GET(request: Request, { params }: { params: { token: strin
       console.warn('Customer catalog overrides overlay error:', e);
     }
 
-    // 2. Overlay latest real-time prices from cached Supabase price_change_history (Authoritative Price Layer)
+    const activeProducts = deletedIndices.size > 0
+      ? products.filter((_, idx) => !deletedIndices.has(idx))
+      : products;
+
+    // 2. Overlay latest real-time prices from Supabase PostgreSQL (Authoritative Price Layer)
     if (link.price_tier_id && !isNoPriceTier) {
       try {
-        const supaHistory = await getCachedSupabasePriceHistory();
-        if (supaHistory && supaHistory.length > 0) {
-          const latestPriceMap = new Map<string, number>();
-          for (const item of supaHistory) {
-            if (!item.product_id || item.price_tier_id !== link.price_tier_id) continue;
-            if (item.new_price === null || item.new_price === undefined) continue;
-            const rawId = String(item.product_id).trim();
-            const keyUpper = rawId.toUpperCase();
-            const keyClean = keyUpper.replace(/[-_\s.]/g, '');
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data: supaPrices } = await supabase
+            .from('product_prices')
+            .select('product_id, price')
+            .eq('price_tier_id', link.price_tier_id);
 
-            if (!latestPriceMap.has(keyUpper)) {
-              latestPriceMap.set(keyUpper, Number(item.new_price));
+          if (supaPrices && supaPrices.length > 0) {
+            const priceMap = new Map<string, number>();
+            for (const sp of supaPrices) {
+              if (sp.product_id && sp.price !== null && sp.price !== undefined) {
+                priceMap.set(sp.product_id, Number(sp.price));
+              }
             }
-            if (!latestPriceMap.has(keyClean)) {
-              latestPriceMap.set(keyClean, Number(item.new_price));
-            }
-            if (!latestPriceMap.has(rawId)) {
-              latestPriceMap.set(rawId, Number(item.new_price));
-            }
-          }
-
-          for (const prod of products) {
-            const skuUpper = (prod.sku || '').trim().toUpperCase();
-            const skuClean = skuUpper.replace(/[-_\s.]/g, '');
-            let resolvedPrice: number | null = null;
-            if (latestPriceMap.has(skuUpper)) {
-              resolvedPrice = latestPriceMap.get(skuUpper)!;
-            } else if (latestPriceMap.has(skuClean)) {
-              resolvedPrice = latestPriceMap.get(skuClean)!;
-            } else if (latestPriceMap.has(prod.id)) {
-              resolvedPrice = latestPriceMap.get(prod.id)!;
-            }
-            if (resolvedPrice !== null && resolvedPrice > 0) {
-              prod.price = resolvedPrice;
+            for (const prod of activeProducts) {
+              if (priceMap.has(prod.id)) {
+                prod.price = priceMap.get(prod.id)!;
+              }
             }
           }
         }
@@ -265,8 +259,16 @@ export async function GET(request: Request, { params }: { params: { token: strin
     }
 
     if (isNoPriceTier) {
-      for (const prod of products) {
+      for (const prod of activeProducts) {
         prod.price = null;
+      }
+    }
+
+    // Convert all images to high-speed Cloudflare R2 CDN URLs
+    for (const prod of activeProducts) {
+      if (prod.refImageUrl) prod.refImageUrl = formatImageUrlToR2(prod.refImageUrl);
+      if (Array.isArray(prod.images)) {
+        prod.images = prod.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
       }
     }
 
@@ -274,15 +276,48 @@ export async function GET(request: Request, { params }: { params: { token: strin
     let sanitizedCustomerName = link.customer_name ? link.customer_name.replace(/\s*\(?\bVIP\b\)?/gi, '').trim() : '';
     if (!sanitizedCustomerName) sanitizedCustomerName = 'แคตตาล็อกสินค้าทางการ';
 
+    // Strategy 4: Data Trimming - Strip internal database IDs and unused heavy fields
+    const trimmedProducts = activeProducts.map((p) => {
+      const item: any = {
+        sku: p.sku,
+        name: p.name,
+        catalogType: p.catalogType,
+        category_name: p.category_name,
+        category_slug: p.category_slug,
+        sizeText: p.sizeText,
+        refImageUrl: p.refImageUrl,
+        refFilename: p.refFilename,
+        graphicFilename: p.graphicFilename,
+        pageNum: p.pageNum,
+        color: p.color,
+        images: p.images,
+        price: p.price,
+      };
+      if (link.sharing_mode === 'SINGLE_PRODUCT' && p.description) {
+        item.description = p.description;
+      }
+      return item;
+    });
+
+    // Strategy 3: Netlify Edge CDN Caching
+    const urlObj = new URL(request.url);
+    const forceRefresh = urlObj.searchParams.get('refresh') === '1' || urlObj.searchParams.has('nocache');
+
+    const cacheHeader = forceRefresh
+      ? 'no-store, no-cache, must-revalidate, max-age=0'
+      : 'public, max-age=60, s-maxage=180, stale-while-revalidate=86400';
+
     return NextResponse.json({
       success: true,
       customerName: sanitizedCustomerName,
       sharingMode: link.sharing_mode,
       catalogFilter: link.catalog_filter || 'all',
-      products,
+      products: trimmedProducts,
     }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Cache-Control': cacheHeader,
+        'CDN-Cache-Control': cacheHeader,
+        'Netlify-CDN-Cache-Control': cacheHeader,
       },
     });
   } catch (error) {

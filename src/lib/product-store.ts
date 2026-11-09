@@ -19,6 +19,7 @@ export interface ProductOverride {
   primary_image_url?: string | null;
   images?: string[];
   prices?: Record<string, number>;
+  deleted?: boolean;
   updated_at: string;
 }
 
@@ -69,17 +70,55 @@ export async function loadProductOverrides(forceRefresh = false): Promise<Record
     return inMemoryOverrides;
   }
 
-  // 1. Try Netlify Blobs if in serverless (with strict 800ms timeout to prevent 30s Lambda hang)
+  // 1. Read baseline from local file (data/products_persistent.json)
+  let localRecord: Record<string, ProductOverride> = {};
+  const localPath = getLocalStorePath();
+  try {
+    if (fs.existsSync(localPath)) {
+      const content = fs.readFileSync(localPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') {
+        localRecord = parsed as Record<string, ProductOverride>;
+      }
+    }
+  } catch (err) {
+    console.warn('[product-store] Local read error:', err);
+  }
+
+  // 2. Try Netlify Blobs if in serverless (with strict 800ms timeout) and merge with baseline
   try {
     const netlifyStore = await getNetlifyProductStore();
     if (netlifyStore) {
       const blobData = await withTimeout(netlifyStore.get('products_overrides', { type: 'json' }), 800);
       if (blobData && typeof blobData === 'object') {
-        inMemoryOverrides = blobData as Record<string, ProductOverride>;
+        const remoteRecord = blobData as Record<string, ProductOverride>;
+        const mergedRecord: Record<string, ProductOverride> = { ...localRecord };
+
+        for (const [key, remoteVal] of Object.entries(remoteRecord)) {
+          if (!remoteVal || typeof remoteVal !== 'object') continue;
+          const localVal = mergedRecord[key];
+          if (!localVal) {
+            mergedRecord[key] = remoteVal;
+            continue;
+          }
+          const remoteTime = remoteVal.updated_at ? new Date(remoteVal.updated_at).getTime() : 0;
+          const localTime = localVal.updated_at ? new Date(localVal.updated_at).getTime() : 0;
+
+          if (remoteTime >= localTime) {
+            mergedRecord[key] = { ...localVal, ...remoteVal };
+          } else {
+            // Local file has newer baseline migration (e.g. WxHxD dimensions), keep local WxHxD but preserve remote runtime prices/deleted/images if set
+            mergedRecord[key] = {
+              ...remoteVal,
+              ...localVal,
+              prices: remoteVal.prices ? { ...(localVal.prices || {}), ...remoteVal.prices } : localVal.prices,
+              deleted: remoteVal.deleted !== undefined ? remoteVal.deleted : localVal.deleted,
+            };
+          }
+        }
+
+        inMemoryOverrides = mergedRecord;
         lastCacheReadTime = Date.now();
-        try {
-          fs.writeFileSync(getLocalStorePath(), JSON.stringify(inMemoryOverrides, null, 2), 'utf-8');
-        } catch {}
         return inMemoryOverrides;
       }
     }
@@ -87,24 +126,7 @@ export async function loadProductOverrides(forceRefresh = false): Promise<Record
     console.warn('[product-store] Netlify blob read warning:', err);
   }
 
-  // 2. Read from local file
-  const localPath = getLocalStorePath();
-  try {
-    if (fs.existsSync(localPath)) {
-      const content = fs.readFileSync(localPath, 'utf-8');
-      const parsed = JSON.parse(content);
-      if (parsed && typeof parsed === 'object') {
-        const record = parsed as Record<string, ProductOverride>;
-        inMemoryOverrides = record;
-        lastCacheReadTime = Date.now();
-        return record;
-      }
-    }
-  } catch (err) {
-    console.warn('[product-store] Local read error:', err);
-  }
-
-  inMemoryOverrides = {};
+  inMemoryOverrides = localRecord;
   lastCacheReadTime = Date.now();
   return inMemoryOverrides;
 }
@@ -115,6 +137,8 @@ export async function saveProductOverride(
 ): Promise<void> {
   const overrides = await loadProductOverrides();
   const existing = overrides[productId] || { id: productId, updated_at: new Date().toISOString() };
+
+  const oldSkuKey = existing.sku ? existing.sku.trim().toUpperCase() : null;
 
   const merged: ProductOverride = {
     ...existing,
@@ -128,6 +152,9 @@ export async function saveProductOverride(
   if (merged.sku) {
     const skuKey = merged.sku.trim().toUpperCase();
     overrides[skuKey] = merged;
+    if (oldSkuKey && oldSkuKey !== skuKey) {
+      overrides[oldSkuKey] = merged;
+    }
   }
 
   inMemoryOverrides = overrides;
@@ -210,6 +237,7 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
 
   const override = overrides[keyById] || (keyBySku ? overrides[keyBySku] : null);
   if (!override) return product;
+  if (override.deleted) return null;
 
   const res = { ...product };
 
@@ -245,5 +273,5 @@ export function applyProductOverrides(products: any[], overrides: Record<string,
   if (!Array.isArray(products) || !overrides || Object.keys(overrides).length === 0) {
     return products;
   }
-  return products.map((p) => applyProductOverrideSingle(p, overrides));
+  return products.map((p) => applyProductOverrideSingle(p, overrides)).filter(Boolean);
 }

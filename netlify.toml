@@ -6,11 +6,29 @@
   NODE_VERSION = "22"
   AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
   APP_SECRET = "274a72d73315ec030e462bbcb0bca3ba8e85d4f134bb561bbd5c317f2bc2fcbe"
+  NEXT_PUBLIC_SUPABASE_URL = "https://cuosamownevzackoqskk.supabase.co"
+  SUPABASE_URL = "https://cuosamownevzackoqskk.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_ACj0d0FXpW3C2KgotmiCIQ_OWRsP2cG"
+  SUPABASE_ANON_KEY = "sb_publishable_ACj0d0FXpW3C2KgotmiCIQ_OWRsP2cG"
+  R2_ENDPOINT = "https://2e08aadee95dd14849c427492e72af2f.r2.cloudflarestorage.com"
+  R2_BUCKET = "thaiudon-catalogs"
+  R2_ACCESS_KEY_ID = "cb8cc0e29cf672e5f7143dd44e048c45"
+  R2_SECRET_ACCESS_KEY = "e7496f76f38ba804e6b3ff8c904a16f19d574c315ab208c72155710eddb40c64"
+  NEXT_PUBLIC_R2_PUBLIC_URL = "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev"
 
 [environment]
   NODE_VERSION = "22"
   AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
   APP_SECRET = "274a72d73315ec030e462bbcb0bca3ba8e85d4f134bb561bbd5c317f2bc2fcbe"
+  NEXT_PUBLIC_SUPABASE_URL = "https://cuosamownevzackoqskk.supabase.co"
+  SUPABASE_URL = "https://cuosamownevzackoqskk.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_ACj0d0FXpW3C2KgotmiCIQ_OWRsP2cG"
+  SUPABASE_ANON_KEY = "sb_publishable_ACj0d0FXpW3C2KgotmiCIQ_OWRsP2cG"
+  R2_ENDPOINT = "https://2e08aadee95dd14849c427492e72af2f.r2.cloudflarestorage.com"
+  R2_BUCKET = "thaiudon-catalogs"
+  R2_ACCESS_KEY_ID = "cb8cc0e29cf672e5f7143dd44e048c45"
+  R2_SECRET_ACCESS_KEY = "e7496f76f38ba804e6b3ff8c904a16f19d574c315ab208c72155710eddb40c64"
+  NEXT_PUBLIC_R2_PUBLIC_URL = "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev"
 
 [functions]
   included_files = ["data/**"]

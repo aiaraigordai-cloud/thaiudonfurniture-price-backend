@@ -79,7 +79,7 @@ export default function AuthPage() {
         <div className="bg-[#161B40] p-6 text-center text-white relative border-b border-red-600">
           <div className="mb-3">
             <img
-              src="/images/logo-red.png"
+              src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png"
               alt="ไทยอุดรเฟอร์นิเจอร์"
               className="w-16 h-16 rounded-full bg-white p-1 object-contain mx-auto shadow-lg border-2 border-red-500"
             />

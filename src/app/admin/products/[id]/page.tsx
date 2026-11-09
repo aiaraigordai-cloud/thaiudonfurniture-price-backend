@@ -17,6 +17,7 @@ import {
   Eye,
   Layers,
 } from 'lucide-react';
+import { uploadDirectToR2 } from '@/lib/client-upload';
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -576,9 +577,10 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const dataUrl = await compressImageToDataUrl(file);
-                          setPrimaryImageUrl(dataUrl);
-                          setSuccess('โหลดรูปภาพหลักเข้าสู่แบบฟอร์มแล้ว');
+                          setSuccess('กำลังอัปโหลดรูปภาพหลักขึ้น Cloudflare R2...');
+                          const r2Url = await uploadDirectToR2(file, 'primary');
+                          setPrimaryImageUrl(r2Url);
+                          setSuccess('อัปโหลดรูปภาพหลักขึ้น Cloudflare R2 สำเร็จ');
                         }
                       }}
                     />
@@ -656,10 +658,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const dataUrl = await compressImageToDataUrl(file);
-                          setRefImageUrl(dataUrl);
+                          setSuccess('กำลังอัปโหลดภาพอ้างอิงขึ้น Cloudflare R2...');
+                          const r2Url = await uploadDirectToR2(file, 'ref');
+                          setRefImageUrl(r2Url);
                           setRefFilename(file.name || `ref_${sku}_${Date.now()}.jpg`);
-                          setSuccess('โหลดภาพอ้างอิงเข้าสู่แบบฟอร์มแล้ว');
+                          setSuccess('อัปโหลดภาพอ้างอิงขึ้น Cloudflare R2 สำเร็จ');
                         }
                       }}
                     />
@@ -708,8 +711,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const dataUrl = await compressImageToDataUrl(file);
-                      setSecondaryImageUrl(dataUrl);
+                      const r2Url = await uploadDirectToR2(file, 'secondary');
+                      setSecondaryImageUrl(r2Url);
                     }
                   }}
                 />

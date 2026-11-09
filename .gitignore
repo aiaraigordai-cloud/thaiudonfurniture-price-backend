@@ -28,6 +28,7 @@ yarn-error.log*
 
 # local application data and databases
 /data/*.sqlite
+!data/catalog_a.sqlite
 /data/*.sqlite-*
 /data/*.db
 /data/*.db-*
@@ -43,3 +44,8 @@ next-env.d.ts
 # Local Netlify folder
 .netlify
 *.traineddata
+
+# Local generated image conversions
+public/catalogs/tuulo/images/*.jpg
+public/catalogs/tuulo/ref/*.jpg
+scripts/convert_and_upload*.js

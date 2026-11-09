@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import { saveProductOverride } from '@/lib/product-store';
+import { getSupabase } from '@/lib/supabase';
+import { uploadBufferToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +33,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const cleanFilename = filename || `ref_${product.sku}_${Date.now()}.jpg`;
 
+    // Upload to Cloudflare R2 if it's base64 or relative
+    let finalImageUrl = imageUrl;
+    if (imageUrl.startsWith('data:image')) {
+      try {
+        const base64Clean = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Clean, 'base64');
+        const key = `catalogs/ref/${Date.now()}_${cleanFilename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        finalImageUrl = await uploadBufferToR2(key, buffer, 'image/jpeg');
+      } catch (r2Err) {
+        console.warn('[R2 Upload] Fallback error, using original imageUrl:', r2Err);
+      }
+    }
+
     await db.exec('BEGIN TRANSACTION;');
     try {
       // 1. Update ref_image_url and ref_filename in products table
@@ -38,7 +53,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         UPDATE products
         SET ref_image_url = ?, ref_filename = ?, updated_at = datetime('now')
         WHERE id = ?
-      `).run(imageUrl, cleanFilename, params.id);
+      `).run(finalImageUrl, cleanFilename, params.id);
 
       // 2. Remove existing ref images from product_images table to avoid duplication
       await db.prepare(`
@@ -50,7 +65,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       await db.prepare(`
         INSERT INTO product_images (id, product_id, image_url, display_order, is_primary, created_at)
         VALUES (?, ?, ?, 1, 0, datetime('now'))
-      `).run(imgId, params.id, imageUrl);
+      `).run(imgId, params.id, finalImageUrl);
 
       await db.exec('COMMIT;');
     } catch (err) {
@@ -60,9 +75,19 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     try {
       await saveProductOverride(params.id, {
-        ref_image_url: imageUrl,
+        ref_image_url: finalImageUrl,
         ref_filename: cleanFilename,
       });
+
+      // Sync to Supabase PostgreSQL for persistence and Realtime broadcast
+      const supabase = getSupabase();
+      if (supabase) {
+        await supabase.from('products').update({
+          ref_image_url: finalImageUrl,
+          ref_filename: cleanFilename,
+          updated_at: new Date().toISOString(),
+        }).eq('id', params.id);
+      }
     } catch {}
 
     await logAudit('UPLOAD_REF_IMAGE', 'PRODUCT', params.id, user.id, user.username, {
@@ -72,8 +97,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     return NextResponse.json({
       success: true,
-      message: `อัปโหลดภาพอ้างอิงสำหรับ ${product.sku} สำเร็จ (Real-time)`,
-      ref_image_url: imageUrl,
+      message: `อัปโหลดภาพอ้างอิงสำหรับ ${product.sku} สำเร็จ (Cloudflare R2 + Real-time)`,
+      ref_image_url: finalImageUrl,
       ref_filename: cleanFilename,
     });
   } catch (error: any) {

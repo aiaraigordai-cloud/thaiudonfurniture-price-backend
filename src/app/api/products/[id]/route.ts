@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase, invalidateSupabasePriceCache } from '@/lib/supabase';
+import { getSupabase, invalidateSupabasePriceCache, syncProductToSupabasePostgres } from '@/lib/supabase';
 import { loadProductOverrides, saveProductOverride, applyProductOverrideSingle } from '@/lib/product-store';
+import { formatImageUrlToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
@@ -94,6 +95,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const overrides = await loadProductOverrides();
     const finalProduct = applyProductOverrideSingle(baseProduct, overrides);
 
+    if (finalProduct) {
+      if (finalProduct.ref_image_url) finalProduct.ref_image_url = formatImageUrlToR2(finalProduct.ref_image_url);
+      if (finalProduct.primary_image_url) finalProduct.primary_image_url = formatImageUrlToR2(finalProduct.primary_image_url);
+      if (Array.isArray(finalProduct.images)) {
+        finalProduct.images = finalProduct.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       product: finalProduct,
@@ -134,7 +143,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const db = getDb();
 
     // Check existing product
-    const existing = await db.prepare('SELECT id, sku, name, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+    const existing = await db.prepare('SELECT id, sku, name, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
     if (!existing) {
       return NextResponse.json({ error: 'ไม่พบสินค้ารายการนี้' }, { status: 404 });
     }
@@ -158,6 +167,21 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       }
     }
 
+    // Compute updated size_text in "กว้าง W x สูง H x ลึก D ซม." format while preserving ฟุต if not editing dimensions
+    const parsedW = width ? parseFloat(width) : null;
+    const parsedH = height ? parseFloat(height) : null;
+    const parsedD = depth ? parseFloat(depth) : null;
+    let finalSizeText = existing.size_text || null;
+    if (body.size_text !== undefined && body.size_text !== null && String(body.size_text).trim()) {
+      finalSizeText = String(body.size_text).trim();
+    } else if (parsedW || parsedH || parsedD) {
+      // Only overwrite size_text if existing size_text does NOT contain 'ฟุต', OR if all 3 W/H/D are explicitly set
+      const existingHasFeet = String(existing.size_text || '').includes('ฟุต');
+      if (!existingHasFeet) {
+        finalSizeText = `กว้าง ${parsedW || '-'} x สูง ${parsedH || '-'} x ลึก ${parsedD || '-'} ซม.`;
+      }
+    }
+
     const supaHistoryToSync: any[] = [];
     await db.exec('BEGIN TRANSACTION;');
 
@@ -165,7 +189,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       await db.prepare(`
         UPDATE products
         SET sku = ?, name = ?, description = ?, category_id = ?,
-            width = ?, height = ?, depth = ?, color = ?, status = ?,
+            width = ?, height = ?, depth = ?, size_text = ?, color = ?, status = ?,
             ref_image_url = ?,
             ref_filename = ?,
             updated_at = datetime('now')
@@ -175,9 +199,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         name.trim(),
         description || '',
         category_id || null,
-        width ? parseFloat(width) : null,
-        height ? parseFloat(height) : null,
-        depth ? parseFloat(depth) : null,
+        parsedW,
+        parsedH,
+        parsedD,
+        finalSizeText,
         color || null,
         status || 'Published',
         finalRefImageUrl,
@@ -275,14 +300,33 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           description: description || '',
           category_id: category_id || null,
           category_name: resolvedCategoryName,
-          width: width ? parseFloat(width) : null,
-          height: height ? parseFloat(height) : null,
-          depth: depth ? parseFloat(depth) : null,
+          size_text: finalSizeText,
+          width: parsedW,
+          height: parsedH,
+          depth: parsedD,
           color: color || null,
           status: status || 'Published',
           ref_image_url: finalRefImageUrl,
           ref_filename: finalRefFilename,
           primary_image_url: Array.isArray(images) && images.length > 0 ? images[0] : null,
+          images: Array.isArray(images) ? images : undefined,
+          prices: prices || undefined,
+        });
+
+        // Sync to Supabase PostgreSQL for permanence and Realtime WebSocket trigger
+        await syncProductToSupabasePostgres(params.id, {
+          sku: sku.trim(),
+          name: name.trim(),
+          description: description || '',
+          category_id: category_id || null,
+          size_text: finalSizeText,
+          width: parsedW,
+          height: parsedH,
+          depth: parsedD,
+          color: color || null,
+          status: status || 'Published',
+          ref_image_url: finalRefImageUrl,
+          ref_filename: finalRefFilename,
           images: Array.isArray(images) ? images : undefined,
           prices: prices || undefined,
         });
@@ -296,7 +340,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     await logAudit('UPDATE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, { sku, name });
 
-    return NextResponse.json({ success: true, message: 'บันทึกข้อมูลสินค้าสำเร็จ' });
+    return NextResponse.json({
+      success: true,
+      message: 'บันทึกข้อมูลสินค้าสำเร็จ',
+      size_text: finalSizeText,
+      width: parsedW,
+      height: parsedH,
+      depth: parsedD,
+    });
   } catch (error: any) {
     console.error('Update product error:', error);
     return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการแก้ไขสินค้า' }, { status: 500 });
@@ -315,12 +366,46 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     }
 
     const db = getDb();
-    await db.prepare('DELETE FROM products WHERE id = ?').run(params.id);
+    const existing = (await db.prepare('SELECT id, sku, name FROM products WHERE id = ?').get(params.id)) as any;
 
-    await logAudit('DELETE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, {});
+    await db.exec('BEGIN TRANSACTION;');
+    try {
+      await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
+      await db.prepare('DELETE FROM product_prices WHERE product_id = ?').run(params.id);
+      await db.prepare('DELETE FROM share_link_products WHERE product_id = ?').run(params.id);
+      await db.prepare('DELETE FROM price_change_history WHERE product_id = ?').run(params.id);
+      await db.prepare('DELETE FROM products WHERE id = ?').run(params.id);
+      await db.exec('COMMIT;');
+    } catch (txErr) {
+      await db.exec('ROLLBACK;');
+      throw txErr;
+    }
+
+    // Mark as deleted in persistent store so serverless instances also hide it immediately
+    try {
+      await saveProductOverride(params.id, {
+        sku: existing?.sku || undefined,
+        deleted: true,
+      });
+
+      const supabase = getSupabase();
+      if (supabase) {
+        await supabase.from('products').delete().eq('id', params.id);
+      }
+    } catch (storeErr) {
+      console.warn('Persistent store delete mark error:', storeErr);
+    }
+
+    invalidateSupabasePriceCache();
+
+    await logAudit('DELETE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, {
+      sku: existing?.sku,
+      name: existing?.name,
+    });
 
     return NextResponse.json({ success: true, message: 'ลบสินค้าเรียบร้อยแล้ว' });
-  } catch (error) {
-    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการลบสินค้า' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Delete product error:', error);
+    return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการลบสินค้า' }, { status: 500 });
   }
 }

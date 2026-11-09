@@ -94,11 +94,27 @@ export async function POST(request: Request) {
 
       await db.exec('COMMIT;');
 
-      // Sync history to Supabase if configured
+      // Sync prices and history to Supabase for persistence and Realtime WebSocket trigger
       const supabase = getSupabase();
-      if (supabase && supaHistoryToSync.length > 0) {
+      if (supabase) {
         try {
-          await supabase.from('price_change_history').insert(supaHistoryToSync);
+          for (const tier of tiers) {
+            if (prices[tier.code] !== undefined && prices[tier.code] !== null && prices[tier.code] !== '') {
+              const newPrice = parseFloat(prices[tier.code]);
+              if (!isNaN(newPrice) && newPrice >= 0) {
+                await supabase.from('product_prices').upsert({
+                  id: `pp_${product.id}_${tier.id}`,
+                  product_id: product.id,
+                  price_tier_id: tier.id,
+                  price: newPrice,
+                  updated_at: new Date().toISOString(),
+                });
+              }
+            }
+          }
+          if (supaHistoryToSync.length > 0) {
+            await supabase.from('price_change_history').insert(supaHistoryToSync);
+          }
         } catch (supaErr) {
           console.warn('Supabase sync error (update-single):', supaErr);
         }

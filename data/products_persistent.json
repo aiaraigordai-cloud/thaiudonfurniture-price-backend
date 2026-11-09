@@ -7,8 +7,8 @@
     "description": "ตู้กับข้าวและตู้ครัวอลูมิเนียม โครงสร้างแข็งแรง มาตรฐานไทยอุดรเฟอร์นิเจอร์ รหัส TD-76",
     "category_id": "cat_tuulo_food",
     "width": 80,
-    "height": 40,
-    "depth": 150,
+    "height": 150,
+    "depth": 40,
     "color": "อลูมิเนียมอบขาว / ลายหินอ่อน / ชา",
     "status": "Published",
     "ref_image_url": "/catalogs/tuulo/ref/TD-76_ตู้กับข้าว 80 กลาง.png",
@@ -23,7 +23,8 @@
       "VIP_PRICE": 1250,
       "GENERAL_PRICE": 1300
     },
-    "category_name": "ตู้กับข้าวและตู้อาหาร"
+    "category_name": "ตู้กับข้าวและตู้อาหาร",
+    "size_text": "กว้าง 80 x สูง 150 x ลึก 40 ซม."
   },
   "TD-76": {
     "id": "prod_f3930680-0a16-42c5-a6ad-3e7d2952806e",
@@ -33,8 +34,8 @@
     "description": "ตู้กับข้าวและตู้ครัวอลูมิเนียม โครงสร้างแข็งแรง มาตรฐานไทยอุดรเฟอร์นิเจอร์ รหัส TD-76",
     "category_id": "cat_tuulo_food",
     "width": 80,
-    "height": 40,
-    "depth": 150,
+    "height": 150,
+    "depth": 40,
     "color": "อลูมิเนียมอบขาว / ลายหินอ่อน / ชา",
     "status": "Published",
     "ref_image_url": "/catalogs/tuulo/ref/TD-76_ตู้กับข้าว 80 กลาง.png",
@@ -49,6 +50,7 @@
       "VIP_PRICE": 1250,
       "GENERAL_PRICE": 1300
     },
-    "category_name": "ตู้กับข้าวและตู้อาหาร"
+    "category_name": "ตู้กับข้าวและตู้อาหาร",
+    "size_text": "กว้าง 80 x สูง 150 x ลึก 40 ซม."
   }
 }

@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-let supabaseInstance: SupabaseClient | null = null;
+let supabaseServerInstance: SupabaseClient | null = null;
+let supabaseBrowserInstance: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient | null {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,8 +14,8 @@ export function getSupabase(): SupabaseClient | null {
     return null;
   }
 
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+  if (!supabaseServerInstance) {
+    supabaseServerInstance = createClient(supabaseUrl, supabaseKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -22,7 +23,19 @@ export function getSupabase(): SupabaseClient | null {
     });
   }
 
-  return supabaseInstance;
+  return supabaseServerInstance;
+}
+
+export function getBrowserSupabase(): SupabaseClient | null {
+  if (typeof window === 'undefined') return null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return null;
+
+  if (!supabaseBrowserInstance) {
+    supabaseBrowserInstance = createClient(supabaseUrl, supabaseKey);
+  }
+  return supabaseBrowserInstance;
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -44,7 +57,7 @@ export interface CachedPriceHistoryRow {
 let cachedPriceHistory: CachedPriceHistoryRow[] | null = null;
 let cachedPriceHistoryTime = 0;
 let inFlightPriceHistoryPromise: Promise<CachedPriceHistoryRow[]> | null = null;
-const PRICE_CACHE_TTL_MS = 15000; // 15 seconds TTL (invalidated immediately on local writes)
+const PRICE_CACHE_TTL_MS = 15000;
 
 export function invalidateSupabasePriceCache(): void {
   cachedPriceHistory = null;
@@ -96,4 +109,70 @@ export async function getCachedSupabasePriceHistory(
   })();
 
   return inFlightPriceHistoryPromise;
+}
+
+/**
+ * Sync product update to Supabase PostgreSQL for persistence and Realtime trigger
+ */
+export async function syncProductToSupabasePostgres(productId: string, data: Record<string, any>): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  try {
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.sku !== undefined) updatePayload.sku = data.sku.trim();
+    if (data.name !== undefined) updatePayload.name = data.name.trim();
+    if (data.description !== undefined) updatePayload.description = data.description;
+    if (data.category_id !== undefined) updatePayload.category_id = data.category_id;
+    if (data.width !== undefined) updatePayload.width = data.width;
+    if (data.height !== undefined) updatePayload.height = data.height;
+    if (data.depth !== undefined) updatePayload.depth = data.depth;
+    if (data.size_text !== undefined) updatePayload.size_text = data.size_text;
+    if (data.color !== undefined) updatePayload.color = data.color;
+    if (data.status !== undefined) updatePayload.status = data.status;
+    if (data.ref_image_url !== undefined) updatePayload.ref_image_url = data.ref_image_url;
+    if (data.ref_filename !== undefined) updatePayload.ref_filename = data.ref_filename;
+
+    await supabase.from('products').update(updatePayload).eq('id', productId);
+
+    // Sync product images if provided
+    if (Array.isArray(data.images) && data.images.length > 0) {
+      await supabase.from('product_images').delete().eq('product_id', productId);
+      const imgRows = data.images.map((url: string, idx: number) => ({
+        id: `img_${productId}_${idx}_${Date.now()}`,
+        product_id: productId,
+        image_url: url,
+        display_order: idx + 1,
+        is_primary: idx === 0 ? 1 : 0,
+      }));
+      await supabase.from('product_images').insert(imgRows);
+    }
+
+    // Sync prices if provided
+    if (data.prices && typeof data.prices === 'object') {
+      const tierMap: Record<string, string> = {
+        SALE_PRICE: 'tier_sale',
+        RETAIL_PRICE: 'tier_retail',
+        VIP_PRICE: 'tier_vip',
+        GENERAL_PRICE: 'tier_general',
+      };
+      for (const [code, val] of Object.entries(data.prices)) {
+        const tierId = tierMap[code];
+        if (tierId && typeof val === 'number') {
+          await supabase.from('product_prices').upsert({
+            id: `pp_${productId}_${tierId}`,
+            product_id: productId,
+            price_tier_id: tierId,
+            price: val,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[supabase] syncProductToSupabasePostgres warning:', err);
+  }
 }

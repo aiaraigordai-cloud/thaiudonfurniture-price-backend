@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getCachedSupabasePriceHistory, invalidateSupabasePriceCache } from '@/lib/supabase';
-import { loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
+import { getCachedSupabasePriceHistory, invalidateSupabasePriceCache, getSupabase, syncProductToSupabasePostgres } from '@/lib/supabase';
+import { loadProductOverrides, applyProductOverrides, saveProductOverride } from '@/lib/product-store';
+import { formatImageUrlToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
 
 export async function GET(request: Request) {
@@ -124,61 +125,32 @@ export async function GET(request: Request) {
       console.warn('Failed to apply product overrides:', e);
     }
 
-    // 2. Overlay latest real-time prices from cached Supabase price_change_history (Authoritative Price Layer)
+    // 2. Overlay latest real-time prices from Supabase PostgreSQL (Authoritative Price Layer)
     try {
-      const supaHistory = await getCachedSupabasePriceHistory();
-      if (supaHistory && supaHistory.length > 0) {
-        const tierCodeById: Record<string, string> = {
-          tier_sale: 'SALE_PRICE',
-          tier_retail: 'RETAIL_PRICE',
-          tier_vip: 'VIP_PRICE',
-          tier_general: 'GENERAL_PRICE',
-        };
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: supaPrices } = await supabase
+          .from('product_prices')
+          .select('product_id, price_tier_id, price');
 
-        const latestPriceMap = new Map<string, number>();
-        for (const item of supaHistory) {
-          if (!item.product_id || item.price_tier_id === 'PRODUCT_INFO_ONLY') continue;
-          if (item.new_price === null || item.new_price === undefined) continue;
-          const rawId = String(item.product_id).trim();
-          const keyUpper = `${rawId.toUpperCase()}_${item.price_tier_id}`;
-          const keyClean = `${rawId.toUpperCase().replace(/[-_\s.]/g, '')}_${item.price_tier_id}`;
-          const keyRaw = `${rawId}_${item.price_tier_id}`;
-
-          if (!latestPriceMap.has(keyUpper)) {
-            latestPriceMap.set(keyUpper, Number(item.new_price));
+        if (supaPrices && supaPrices.length > 0) {
+          const tierCodeById: Record<string, string> = {
+            tier_sale: 'SALE_PRICE',
+            tier_retail: 'RETAIL_PRICE',
+            tier_vip: 'VIP_PRICE',
+            tier_general: 'GENERAL_PRICE',
+          };
+          const priceMap = new Map<string, number>();
+          for (const sp of supaPrices) {
+            priceMap.set(`${sp.product_id}_${sp.price_tier_id}`, Number(sp.price));
           }
-          if (!latestPriceMap.has(keyClean)) {
-            latestPriceMap.set(keyClean, Number(item.new_price));
-          }
-          if (!latestPriceMap.has(keyRaw)) {
-            latestPriceMap.set(keyRaw, Number(item.new_price));
-          }
-        }
-
-        for (const p of finalProducts) {
-          const skuUpper = (p.sku || '').trim().toUpperCase();
-          const skuClean = skuUpper.replace(/[-_\s.]/g, '');
-          for (const [tierId, tierCode] of Object.entries(tierCodeById)) {
-            const kUpper = `${skuUpper}_${tierId}`;
-            const kClean = `${skuClean}_${tierId}`;
-            const kId = `${p.id}_${tierId}`;
-
-            if (latestPriceMap.has(kUpper)) {
-              p.prices[tierCode] = latestPriceMap.get(kUpper)!;
-            } else if (latestPriceMap.has(kClean)) {
-              p.prices[tierCode] = latestPriceMap.get(kClean)!;
-            } else if (latestPriceMap.has(kId)) {
-              p.prices[tierCode] = latestPriceMap.get(kId)!;
+          for (const p of finalProducts) {
+            for (const [tierId, tierCode] of Object.entries(tierCodeById)) {
+              const k = `${p.id}_${tierId}`;
+              if (priceMap.has(k)) {
+                p.prices[tierCode] = priceMap.get(k)!;
+              }
             }
-          }
-          if (p.catalog_type === 'tuulo') {
-            p.color = 'ตามภาพ';
-          }
-        }
-      } else {
-        for (const p of finalProducts) {
-          if (p.catalog_type === 'tuulo') {
-            p.color = 'ตามภาพ';
           }
         }
       }
@@ -186,15 +158,19 @@ export async function GET(request: Request) {
       console.warn('Supabase price overlay error:', err);
     }
 
-    // Dynamic catalog counts
-    const countsRow = (await db
-      .prepare(`
-      SELECT 
-        (SELECT COUNT(*) FROM products) as all_count,
-        (SELECT COUNT(*) FROM products WHERE catalog_type = 'tuulo') as tuulo_count,
-        (SELECT COUNT(*) FROM products WHERE catalog_type = 'knockdown') as knockdown_count
-    `)
-      .get()) as any;
+    // Convert all images to high-speed Cloudflare R2 CDN URLs
+    for (const p of finalProducts) {
+      if (p.ref_image_url) p.ref_image_url = formatImageUrlToR2(p.ref_image_url);
+      if (p.primary_image_url) p.primary_image_url = formatImageUrlToR2(p.primary_image_url);
+      if (Array.isArray(p.images)) {
+        p.images = p.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+      }
+    }
+
+    // Dynamic catalog counts computed from finalProducts (reflects persistent deletions & additions in real-time)
+    const allCount = finalProducts.length;
+    const tuuloCount = finalProducts.filter((p) => p.catalog_type === 'tuulo').length;
+    const knockdownCount = finalProducts.filter((p) => p.catalog_type === 'knockdown').length;
 
     const outputProducts = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
 
@@ -205,9 +181,9 @@ export async function GET(request: Request) {
         totalCount: finalProducts.length,
         priceTiers: tierRows,
         counts: {
-          all: countsRow?.all_count || 0,
-          tuulo: countsRow?.tuulo_count || 0,
-          knockdown: countsRow?.knockdown_count || 0,
+          all: catalogType || category || search || status ? (await db.prepare('SELECT COUNT(*) as c FROM products').get() as any)?.c || allCount : allCount,
+          tuulo: catalogType || category || search || status ? (await db.prepare("SELECT COUNT(*) as c FROM products WHERE catalog_type = 'tuulo'").get() as any)?.c || tuuloCount : tuuloCount,
+          knockdown: catalogType || category || search || status ? (await db.prepare("SELECT COUNT(*) as c FROM products WHERE catalog_type = 'knockdown'").get() as any)?.c || knockdownCount : knockdownCount,
         },
       },
       {
@@ -249,24 +225,48 @@ export async function POST(request: Request) {
     }
 
     const productId = 'prod_' + crypto.randomUUID();
+    const parsedW = width ? parseFloat(width) : null;
+    const parsedH = height ? parseFloat(height) : null;
+    const parsedD = depth ? parseFloat(depth) : null;
+    const computedSizeText = body.size_text
+      ? String(body.size_text).trim()
+      : (parsedW || parsedH || parsedD)
+        ? `กว้าง ${parsedW || '-'} x สูง ${parsedH || '-'} x ลึก ${parsedD || '-'} ซม.`
+        : null;
+
+    const catalogType = body.catalog_type || 'knockdown';
+    const refImageUrl = body.ref_image_url || null;
+    const refFilename = body.ref_filename || null;
+    const graphicFilename = body.graphic_filename || null;
+    const pageNum = body.page_num ? parseInt(body.page_num, 10) : 1;
 
     await db.exec('BEGIN TRANSACTION;');
 
     try {
       await db.prepare(`
-        INSERT INTO products (id, sku, name, description, category_id, width, height, depth, color, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO products (
+          id, sku, name, description, category_id, catalog_type,
+          width, height, depth, size_text, color, status,
+          ref_image_url, ref_filename, graphic_filename, page_num,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(
         productId,
         sku.trim(),
         name.trim(),
         description || '',
         category_id || null,
-        width ? parseFloat(width) : null,
-        height ? parseFloat(height) : null,
-        depth ? parseFloat(depth) : null,
+        catalogType,
+        parsedW,
+        parsedH,
+        parsedD,
+        computedSizeText,
         color || null,
-        status || 'Published'
+        status || 'Published',
+        refImageUrl,
+        refFilename,
+        graphicFilename,
+        pageNum
       );
 
       // Insert images
@@ -298,6 +298,56 @@ export async function POST(request: Request) {
 
       await db.exec('COMMIT;');
       invalidateSupabasePriceCache();
+
+      // Persist product override and sync to Supabase PostgreSQL for persistence & Realtime trigger
+      try {
+        let resolvedCategoryName: string | null = null;
+        if (category_id) {
+          const cat = await db.prepare('SELECT name FROM categories WHERE id = ?').get(category_id) as any;
+          if (cat) resolvedCategoryName = cat.name;
+        }
+
+        await saveProductOverride(productId, {
+          sku: sku.trim(),
+          name: name.trim(),
+          description: description || '',
+          category_id: category_id || null,
+          category_name: resolvedCategoryName,
+          size_text: computedSizeText,
+          width: parsedW,
+          height: parsedH,
+          depth: parsedD,
+          color: color || null,
+          status: status || 'Published',
+          ref_image_url: refImageUrl,
+          ref_filename: refFilename,
+          primary_image_url: Array.isArray(images) && images.length > 0 ? images[0] : null,
+          images: Array.isArray(images) ? images : undefined,
+          prices: prices || undefined,
+        });
+
+        await syncProductToSupabasePostgres(productId, {
+          sku: sku.trim(),
+          name: name.trim(),
+          description: description || '',
+          category_id: category_id || null,
+          catalog_type: catalogType,
+          width: parsedW,
+          height: parsedH,
+          depth: parsedD,
+          size_text: computedSizeText,
+          color: color || null,
+          status: status || 'Published',
+          ref_image_url: refImageUrl,
+          ref_filename: refFilename,
+          graphic_filename: graphicFilename,
+          page_num: pageNum,
+          images: Array.isArray(images) ? images : undefined,
+          prices: prices || undefined,
+        });
+      } catch (syncErr) {
+        console.warn('Sync new product to Supabase/Overrides warning:', syncErr);
+      }
     } catch (txErr) {
       await db.exec('ROLLBACK;');
       throw txErr;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import {
   Package,
   Search,
@@ -78,9 +79,24 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   // PREVIEW GUIDE MODAL: Shown every visit on initial page load as requested (except when viewing a shared cart link)
   const [showCartGuide, setShowCartGuide] = useState(true);
 
-  const fetchCustomerCatalog = async () => {
+  // Format product size in "กว้าง x สูง x ลึก" while strictly preserving "ฟุต"
+  const formatCustomerProductSize = (prod: any) => {
+    const rawSizeText = String(prod?.sizeText || prod?.size_text || '').trim();
+    if (rawSizeText && rawSizeText.includes('ฟุต')) {
+      return rawSizeText;
+    }
+    if (prod?.width || prod?.height || prod?.depth) {
+      return `กว้าง ${prod.width || '-'} x สูง ${prod.height || '-'} x ลึก ${prod.depth || '-'} ซม.`;
+    }
+    return rawSizeText || 'ขนาดมาตรฐาน';
+  };
+
+  const fetchCustomerCatalog = async (forceRefresh = false) => {
     try {
-      const res = await fetch(`/api/customer/${params.token}?t=${Date.now()}`);
+      const url = forceRefresh
+        ? `/api/customer/${params.token}?refresh=1&t=${Date.now()}`
+        : `/api/customer/${params.token}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'ไม่สามารถเปิดแคตตาล็อกได้');
@@ -100,10 +116,10 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   useEffect(() => {
     fetchCustomerCatalog();
 
-    // LIVE REALTIME POLLING: Poll every 4 seconds to ensure live price & product updates
+    // Bandwidth Optimization: Relax passive polling to 60s while relying on instant WebSocket (0.5s)
     const interval = setInterval(() => {
       fetchCustomerCatalog();
-    }, 4000);
+    }, 60000);
 
     // Multi-tab real-time sync via BroadcastChannel
     let bc: BroadcastChannel | null = null;
@@ -116,26 +132,51 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
           event.data?.type === 'CATALOG_UPDATED' ||
           event.data?.type === 'PRODUCTS_UPDATED'
         ) {
-          fetchCustomerCatalog();
+          fetchCustomerCatalog(true);
         }
       };
     } catch {}
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'thaiudon_last_sync' || e.key === 'thaiudon_batch_sync' || e.key === 'thaiudon_price_sync') {
-        fetchCustomerCatalog();
+        fetchCustomerCatalog(true);
       }
     };
     window.addEventListener('storage', handleStorage);
 
     const handleFocus = () => {
-      fetchCustomerCatalog();
+      fetchCustomerCatalog(false);
     };
     window.addEventListener('focus', handleFocus);
+
+    // Supabase Realtime WebSocket (Instant 0.5s updates when admin changes prices or images)
+    let realtimeChannel: any = null;
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        realtimeChannel = supabase
+          .channel(`customer-catalog-realtime-${params.token}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+            fetchCustomerCatalog(true);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'product_prices' }, () => {
+            fetchCustomerCatalog(true);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'price_change_history' }, () => {
+            fetchCustomerCatalog(true);
+          })
+          .subscribe();
+      }
+    } catch (e) {
+      console.warn('Customer Supabase Realtime error:', e);
+    }
 
     return () => {
       clearInterval(interval);
       if (bc) bc.close();
+      if (realtimeChannel) realtimeChannel.unsubscribe();
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleFocus);
     };
@@ -272,9 +313,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   };
 
   const clearCart = () => {
-    if (window.confirm('คุณต้องการล้างสินค้าทั้งหมดในตะกร้าใช่หรือไม่?')) {
+    if (window.confirm('คุณต้องการเคลียร์สินค้าในตะกร้าทั้งหมดใช่หรือไม่?')) {
       saveCart([]);
-      showToast('ล้างตะกร้าสินค้าเรียบร้อยแล้ว');
+      showToast('เคลียร์สินค้าในตะกร้าเรียบร้อยแล้ว');
     }
   };
 
@@ -316,17 +357,23 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     const shareUrl = getCartShareUrl();
     const hasName = Boolean(customerNameInput.trim());
     const lines = [
+      ...(hasName ? [
+        `==============================`,
+        `👤 ชื่อลูกค้า: คุณ${customerNameInput.trim()}`,
+        `==============================`,
+      ] : []),
       `🛒 *สรุปรายการสินค้าที่เลือกไว้ในตะกร้า* (${cart.length} รายการ)`,
-      ...(hasName ? [`👤 *ชื่อลูกค้า:* คุณ${customerNameInput.trim()}`] : []),
       `โชว์รูมและโรงงาน: ไทยอุดรเฟอร์นิเจอร์`,
       `-------------------------------------------`,
       ...cart.map((p, idx) => {
         const priceStr = p.price && p.price > 0 ? `฿${p.price.toLocaleString()} บาท` : 'รอฝ่ายขายประเมินราคา';
-        const sizeStr = p.sizeText ? ` (ขนาด: ${p.sizeText})` : '';
+        const resolvedSize = formatCustomerProductSize(p);
+        const sizeStr = resolvedSize ? ` (ขนาด: ${resolvedSize})` : '';
         return `${idx + 1}. [${p.sku}] ${p.name}\n   - ราคา: ${priceStr}${sizeStr}`;
       }),
       `-------------------------------------------`,
       `💰 *ยอดรวมสินค้าโดยประมาณ: ฿${cartTotalAmount.toLocaleString()} บาท*`,
+      ...(hasName ? [`👤 *ผู้สั่งซื้อ/ติดต่อ: คุณ${customerNameInput.trim()}*`] : []),
       ``,
       `🔗 *ลิงก์ดูเฉพาะสินค้าที่เลือกในตะกร้า:*`,
       `${shareUrl}`,
@@ -334,6 +381,51 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
       `(ต้องการสอบถามค่าจัดส่ง หรือสั่งซื้อสินค้า กรุณาส่งข้อความนี้ต่อให้ฝ่ายขายได้ทันที)`
     ];
     return lines.join('\n');
+  };
+
+  // Universal LINE Direct Share Handler (Works on both Mobile & Notebook/PC Desktop)
+  const handleDirectLineShare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (cart.length === 0) return;
+
+    const summaryText = getCartSummaryText();
+    const shareUrl = getCartShareUrl();
+
+    // 1. Always copy full summary + link to clipboard so PC/Notebook users can also paste (Ctrl+V) immediately in LINE PC
+    try {
+      navigator.clipboard.writeText(summaryText);
+      setCartCopied(true);
+      setTimeout(() => setCartCopied(false), 3500);
+    } catch {}
+
+    // 2. Detect Mobile vs Notebook/Desktop PC
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+
+    if (isMobile) {
+      // On Mobile: open LINE app directly with pre-filled message
+      window.location.href = `https://line.me/R/msg/text/?${encodeURIComponent(summaryText)}`;
+    } else {
+      // On Notebook / PC Desktop:
+      // 1) Trigger LINE Desktop native URI scheme (if LINE PC is installed, opens chat picker with full text)
+      try {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = `line://msg/text/?${encodeURIComponent(summaryText)}`;
+        document.body.appendChild(iframe);
+        setTimeout(() => {
+          try {
+            document.body.removeChild(iframe);
+          } catch {}
+        }, 2500);
+      } catch {}
+
+      // 2) Open Official LINE Web Share Plugin popup window (works in any browser on Notebook/PC even without LINE app)
+      const lineWebShareUrl = `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(summaryText)}`;
+      window.open(lineWebShareUrl, 'line_share_popup', 'width=620,height=680,menubar=no,toolbar=no,resizable=yes,scrollbars=yes');
+
+      showToast('✅ คัดลอกข้อความและเปิดหน้าต่างแชร์ LINE สำหรับโน้ตบุ๊ก/PC แล้ว (กด Ctrl+V วางในแชท LINE ได้ทันที)');
+    }
   };
 
   // Copy Cart Summary Text
@@ -511,9 +603,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/images/logo-red.png"
+              src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png"
               alt="ไทยอุดรเฟอร์นิเจอร์"
               className="w-12 h-12 object-contain rounded-full shadow-sm p-0.5 bg-white border border-slate-200"
+              loading="eager"
+              decoding="async"
             />
             <div>
               <div className="text-base sm:text-lg font-extrabold text-[#161B40] tracking-tight leading-tight flex items-center gap-2">
@@ -523,9 +617,13 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 </span>
               </div>
               <div className="text-xs text-slate-500 font-medium mt-0.5">
-                {sharedCustomerName
-                  ? `รายการสินค้าในตะกร้าของ: คุณ${sharedCustomerName}`
-                  : ((catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ').replace(/\s*\(?\bVIP\b\)?/gi, '').trim() || 'แคตตาล็อกสินค้าทางการ')}
+                {sharedCustomerName ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm sm:text-base font-black text-[#161B40] bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-lg">
+                    👤 ลูกค้า: คุณ{sharedCustomerName}
+                  </span>
+                ) : (
+                  (catalogData?.customerName || 'แคตตาล็อกสินค้าทางการ').replace(/\s*\(?\bVIP\b\)?/gi, '').trim() || 'แคตตาล็อกสินค้าทางการ'
+                )}
               </div>
             </div>
           </div>
@@ -632,9 +730,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   className="p-3 bg-white hover:bg-red-50/40 rounded-xl border border-slate-200 hover:border-red-300 transition shadow-2xs flex items-center gap-3 group"
                 >
                   <img
-                    src="/images/social/thaiudon-fb.png"
+                    src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/social/thaiudon-fb.png"
                     alt="ไทยอุดรเฟอร์นิเจอร์"
                     className="w-11 h-11 rounded-xl object-contain bg-white p-0.5 border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-xs text-[#161B40] group-hover:text-red-600 transition truncate">
@@ -655,9 +755,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   className="p-3 bg-white hover:bg-amber-50/40 rounded-xl border border-slate-200 hover:border-amber-300 transition shadow-2xs flex items-center gap-3 group"
                 >
                   <img
-                    src="/images/social/builtin-fb.jpg"
+                    src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/social/builtin-fb.jpg"
                     alt="Built-In Thai Design"
                     className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-xs text-[#161B40] group-hover:text-amber-700 transition truncate">
@@ -678,9 +780,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   className="p-3 bg-white hover:bg-blue-50/40 rounded-xl border border-slate-200 hover:border-blue-300 transition shadow-2xs flex items-center gap-3 group"
                 >
                   <img
-                    src="/images/social/furarii-fb.jpg"
+                    src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/social/furarii-fb.jpg"
                     alt="FurArii โรงงานผลิตเฟอร์นิเจอร์"
                     className="w-11 h-11 rounded-xl object-cover bg-white border border-slate-200 shrink-0 group-hover:scale-105 transition"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-xs text-[#161B40] group-hover:text-blue-700 transition truncate">
@@ -721,21 +825,31 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         </div>
         {/* SHARED CART BANNER (When viewing a shared cart link) */}
         {isSharedCartView && (
-          <div className="bg-gradient-to-r from-[#161B40] to-blue-900 text-white p-4 sm:p-5 rounded-3xl shadow-md border-2 border-amber-400 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
-                <ShoppingCart className="w-6 h-6" />
+          <div className="bg-gradient-to-r from-[#161B40] to-blue-900 text-white p-5 sm:p-6 rounded-3xl shadow-md border-2 border-amber-400 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                <ShoppingCart className="w-7 h-7" />
               </div>
               <div>
-                <div className="font-extrabold text-base flex flex-wrap items-center gap-2">
+                {sharedCustomerName && (
+                  <div className="mb-1.5 inline-flex items-center gap-2 bg-amber-400 text-[#161B40] px-4 py-1.5 rounded-2xl shadow-sm">
+                    <User className="w-5 h-5 text-[#161B40]" />
+                    <span className="text-lg sm:text-2xl font-black tracking-tight">
+                      ลูกค้า: คุณ{sharedCustomerName}
+                    </span>
+                  </div>
+                )}
+                <div className="font-extrabold text-base sm:text-lg flex flex-wrap items-center gap-2">
                   <span>
                     {sharedCustomerName
                       ? `รายการสินค้าของ "คุณ${sharedCustomerName}" ที่เลือกไว้ (${filtered.length} รายการ)`
                       : `รายการสินค้าที่ลูกค้าเลือกไว้ (${filtered.length} รายการ)`}
                   </span>
-                  <span className="bg-amber-400 text-[#161B40] text-[11px] px-2.5 py-0.5 rounded-full font-black">
-                    {sharedCustomerName ? `ลูกค้า: คุณ${sharedCustomerName}` : 'เฉพาะสินค้าในตะกร้า'}
-                  </span>
+                  {!sharedCustomerName && (
+                    <span className="bg-amber-400 text-[#161B40] text-[11px] px-2.5 py-0.5 rounded-full font-black">
+                      เฉพาะสินค้าในตะกร้า
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-slate-300 mt-1">
                   {sharedCustomerName
@@ -766,6 +880,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     src={singleProduct.images?.[0] || singleProduct.refImageUrl}
                     alt={singleProduct.name}
                     className="w-full h-full object-contain"
+                    loading="eager"
+                    decoding="async"
                   />
                   {singleProduct.category_name && (
                     <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-[#161B40] text-white text-xs font-semibold">
@@ -834,7 +950,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <span className="text-slate-500 text-[10px] block">ขนาด</span>
                       <span className="font-bold text-[#161B40]">
-                        {singleProduct.sizeText || `${singleProduct.width || '-'} x ${singleProduct.height || '-'} x ${singleProduct.depth || '-'} ซม.`}
+                        {formatCustomerProductSize(singleProduct)}
                       </span>
                     </div>
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -1117,7 +1233,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filtered.map((prod) => {
+                {filtered.map((prod, idx) => {
                   const displayImg = prod.images?.[0] || prod.refImageUrl;
                   const hasRef = Boolean(prod.refImageUrl);
                   const inCart = isInCart(prod.id);
@@ -1139,7 +1255,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                             src={displayImg}
                             alt={`${prod.sku} ${prod.name}`}
                             className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
+                            loading={idx < 4 ? "eager" : "lazy"}
+                            decoding="async"
                           />
                         ) : (
                           <Package className="w-16 h-16 text-slate-300" />
@@ -1190,7 +1307,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
                           {/* Size & Page */}
                           <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-                            <div>ขนาด: {prod.sizeText || `${prod.width || '-'} x ${prod.height || '-'} x ${prod.depth || '-'} ซม.`}</div>
+                            <div>ขนาด: {formatCustomerProductSize(prod)}</div>
                             <div>
                               สี: <span className="font-semibold text-slate-700">{prod.catalogType === 'tuulo' ? 'ตามภาพ' : (prod.color || 'ตามภาพ')}</span>
                             </div>
@@ -1334,6 +1451,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     }
                     alt={selectedProductModal.name}
                     className="w-full h-full object-contain p-2"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
 
@@ -1384,7 +1503,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
                       <div className="text-[10px] font-bold text-slate-500">ขนาดสินค้า</div>
                       <div className="font-semibold text-[#161B40]">
-                        {selectedProductModal.sizeText || `${selectedProductModal.width || '-'} x ${selectedProductModal.height || '-'} x ${selectedProductModal.depth || '-'} ซม.`}
+                        {formatCustomerProductSize(selectedProductModal)}
                       </div>
                     </div>
 
@@ -1511,7 +1630,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border border-slate-300 relative animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-[#161B40] text-white flex items-center justify-between">
+            <div className="px-6 py-4 bg-[#161B40] text-white flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
                   <ShoppingCart className="w-5 h-5" />
@@ -1526,13 +1645,25 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <p className="text-[11px] text-slate-300">ตรวจสอบรายการและกดส่งให้ฝ่ายขายทาง LINE ได้ทันที</p>
                 </div>
               </div>
-              <button
-                onClick={() => setIsCartOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
-                title="ปิด"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {cart.length > 0 && (
+                  <button
+                    onClick={clearCart}
+                    className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                    title="เคลียร์สินค้าในตะกร้าทั้งหมด"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>เคลียร์สินค้าในตะกร้า</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsCartOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+                  title="ปิด"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body: Cart Items */}
@@ -1556,13 +1687,13 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs text-slate-500 pb-2 border-b border-slate-200">
-                    <span>รายการสินค้าในตะกร้า</span>
+                    <span>รายการสินค้าในตะกร้า ({cart.length} ชิ้น)</span>
                     <button
                       onClick={clearCart}
-                      className="text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 hover:underline"
+                      className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 font-bold flex items-center gap-1 border border-red-200 transition cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>ล้างตะกร้าทั้งหมด</span>
+                      <span>เคลียร์สินค้าในตะกร้า</span>
                     </button>
                   </div>
 
@@ -1575,7 +1706,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                       >
                         <div className="w-16 h-16 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
                           {itemImg ? (
-                            <img src={itemImg} alt={item.name} className="w-full h-full object-contain" />
+                            <img src={itemImg} alt={item.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
                           ) : (
                             <Package className="w-6 h-6 text-slate-300" />
                           )}
@@ -1589,7 +1720,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                             {item.name}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5 truncate">
-                            {item.sizeText || 'ขนาดมาตรฐาน'}
+                            {formatCustomerProductSize(item)}
                           </div>
                           <div className="text-xs font-black text-[#DE1B23] font-mono mt-0.5">
                             {item.price && item.price > 0 ? `฿${item.price.toLocaleString()}` : 'สอบถามราคา'}
@@ -1613,21 +1744,34 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
             {/* Modal Footer: Action Buttons */}
             {cart.length > 0 && (
               <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 space-y-3">
-                {/* Customer Name Input Box before sharing or sending */}
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
-                  <label className="text-xs font-bold text-[#161B40] flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
+                {/* Customer Name Input Box before sharing or sending — EXTRA LARGE DISPLAY */}
+                <div className="bg-white p-4 rounded-2xl border-2 border-amber-300 shadow-2xs space-y-2">
+                  <label className="text-xs sm:text-sm font-extrabold text-[#161B40] flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-blue-600" />
                     <span>ชื่อลูกค้า / ผู้สั่งซื้อ (ระบุเพื่อให้ฝ่ายขายทราบ):</span>
                   </label>
                   <input
                     type="text"
                     value={customerNameInput}
                     onChange={(e) => handleCustomerNameChange(e.target.value)}
-                    placeholder="พิมพ์ชื่อลูกค้า เช่น คุณสมชาย หรือ ร้านเฟอร์นิเจอร์ (เว้นว่างได้)"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-amber-500 focus:outline-hidden transition placeholder:text-slate-400 bg-slate-50 focus:bg-white"
+                    placeholder="พิมพ์ชื่อลูกค้า เช่น คุณสมชาย หรือ ร้านเฟอร์นิเจอร์"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-lg font-extrabold text-[#161B40] rounded-xl border-2 border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-400 focus:outline-hidden transition placeholder:text-slate-400 placeholder:font-normal placeholder:text-xs bg-amber-50/30 focus:bg-white"
                   />
-                  <div className="text-[10px] text-slate-400">
-                    * หากระบุชื่อ ระบบจะแนบชื่อส่งให้ฝ่ายขายและแสดงบนลิงก์ที่แชร์ให้อัตโนมัติ (หากไม่ระบุจะไม่แสดง)
+                  {customerNameInput.trim() && (
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-[#161B40] to-blue-950 text-white flex items-center justify-between gap-2 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-400 text-[#161B40] text-[10px] font-black uppercase">
+                          ชื่อลูกค้า
+                        </span>
+                        <span className="text-lg sm:text-2xl font-black text-amber-300 tracking-tight">
+                          คุณ{customerNameInput.trim()}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-300 hidden sm:inline">พร้อมส่งให้ฝ่ายขาย</span>
+                    </div>
+                  )}
+                  <div className="text-[10px] text-slate-500">
+                    * เมื่อระบุชื่อ ระบบจะแสดงชื่อลูกค้าตัวใหญ่ชัดเจนบนลิงก์และข้อความที่ส่งให้ฝ่ายขายอัตโนมัติ
                   </div>
                 </div>
 
@@ -1636,11 +1780,14 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <div>
                     <div className="text-[10px] uppercase font-bold text-slate-400">
                       ยอดรวมสินค้าโดยประมาณ ({cart.length} รายการ)
-                      {customerNameInput.trim() && (
-                        <span className="ml-1 text-blue-600">ของ คุณ{customerNameInput.trim()}</span>
-                      )}
                     </div>
-                    <div className="text-xs text-slate-500">ค่าจัดส่งติดต่อฝ่ายขายผ่าน LINE</div>
+                    {customerNameInput.trim() ? (
+                      <div className="text-sm sm:text-base font-black text-blue-700 mt-0.5">
+                        👤 ลูกค้า: คุณ{customerNameInput.trim()}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500">ค่าจัดส่งติดต่อฝ่ายขายผ่าน LINE</div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-xl sm:text-2xl font-black text-[#DE1B23] font-mono">
@@ -1667,52 +1814,61 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <span>ติดต่อฝ่ายขายทาง LINE (0930494178)</span>
                 </a>
 
-                {/* Secondary Action: Direct LINE Share Link */}
-                <a
-                  href={`https://line.me/R/msg/text/?${encodeURIComponent(getCartSummaryText())}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition"
+                {/* Secondary Action: Direct LINE Share Link (Works on both Mobile & Notebook/PC) */}
+                <button
+                  type="button"
+                  onClick={handleDirectLineShare}
+                  className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
+                  title="รองรับทั้งมือถือ และโน้ตบุ๊ก/คอมพิวเตอร์ (เปิดแอป LINE หรือหน้าต่างแชร์ LINE พร้อมคัดลอกข้อความอัตโนมัติ)"
                 >
-                  <Send className="w-3.5 h-3.5 text-emerald-600" />
+                  <Send className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>แชร์ข้อความและลิงก์ตะกร้าเข้าแอป LINE โดยตรง</span>
-                </a>
+                </button>
 
-                {/* Secondary Actions: Copy & Share */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                {/* Secondary Actions: Copy, Share & Clear Cart */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     onClick={copyCartSummary}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition"
+                    className="py-2.5 px-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center gap-1 transition cursor-pointer"
                   >
                     {cartCopied ? (
                       <>
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span className="text-emerald-700">คัดลอกสรุปแล้ว!</span>
+                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-emerald-700 truncate">คัดลอกแล้ว!</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-4 h-4 text-slate-500" />
-                        <span>คัดลอกรายการสรุป</span>
+                        <Copy className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="truncate">คัดลอกสรุป</span>
                       </>
                     )}
                   </button>
 
                   <button
                     onClick={copyCartShareLink}
-                    className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5 transition"
+                    className="py-2.5 px-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center gap-1 transition cursor-pointer"
                     title="คัดลอกลิงก์ตะกร้าเพื่อส่งต่อ (จะแสดงเฉพาะสินค้าที่เลือกและชื่อลูกค้า)"
                   >
                     {shareLinkCopied ? (
                       <>
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span className="text-emerald-700">คัดลอกลิงก์แล้ว!</span>
+                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-emerald-700 truncate">คัดลอกแล้ว!</span>
                       </>
                     ) : (
                       <>
-                        <Share2 className="w-4 h-4 text-blue-600" />
-                        <span>แชร์ลิงก์ตะกร้านี้</span>
+                        <Share2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="truncate">แชร์ลิงก์ตะกร้า</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    onClick={clearCart}
+                    className="py-2.5 px-2.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-xs font-bold text-red-600 hover:text-red-700 flex items-center justify-center gap-1 transition cursor-pointer"
+                    title="เคลียร์สินค้าในตะกร้าทั้งหมด"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                    <span className="truncate">เคลียร์สินค้าในตะกร้า</span>
                   </button>
                 </div>
               </div>
@@ -1821,7 +1977,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-xs">
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <img src="/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-10 h-10 object-contain rounded-full bg-white p-0.5" />
+              <img src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-10 h-10 object-contain rounded-full bg-white p-0.5" loading="lazy" decoding="async" />
               <div>
                 <div className="font-bold text-white text-sm">ไทยอุดรเฟอร์นิเจอร์</div>
                 <div className="text-[10px] text-red-300">โรงงานและโชว์รูมเฟอร์นิเจอร์ครบวงจร</div>

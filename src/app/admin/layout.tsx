@@ -90,7 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile Top Header */}
       <div className="md:hidden bg-[#161B40] text-white px-4 py-3 flex items-center justify-between shadow border-b border-red-600">
         <div className="flex items-center gap-2">
-          <img src="/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-8 h-8 rounded-full bg-white p-0.5 object-contain" />
+          <img src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-8 h-8 rounded-full bg-white p-0.5 object-contain" />
           <span className="font-bold tracking-tight text-sm">ไทยอุดรเฟอร์นิเจอร์ (ระบบหลังบ้าน)</span>
         </div>
         <button
@@ -110,7 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Brand */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-11 h-11 rounded-full bg-white p-0.5 object-contain shadow-md" />
+            <img src="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" alt="ไทยอุดรเฟอร์นิเจอร์" className="w-11 h-11 rounded-full bg-white p-0.5 object-contain shadow-md" />
             <div>
               <div className="font-bold text-white text-sm tracking-tight leading-tight">
                 ไทยอุดรเฟอร์นิเจอร์
