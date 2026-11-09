@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
+import { getThumbnailUrl } from '@/lib/r2';
 import {
   Package,
   Plus,
@@ -1336,9 +1337,11 @@ export default function ProductsPage() {
                           >
                             {prod.images && prod.images[0] ? (
                               <img
-                                src={prod.images[0]}
+                                src={getThumbnailUrl(prod.images[0]) || prod.images[0]}
                                 alt={prod.name}
                                 className="w-full h-full object-cover group-hover/img:scale-110 transition duration-200"
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[#705E4F]">

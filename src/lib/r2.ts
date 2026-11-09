@@ -55,6 +55,25 @@ export function formatImageUrlToR2(url: string | null | undefined): string | nul
 }
 
 /**
+ * Returns a high-speed 450px thumbnail URL for grid listings (~25-40 KB).
+ * Full-resolution images are preserved for modal views and downloads.
+ */
+export function getThumbnailUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (typeof url !== 'string') return url;
+  const formatted = formatImageUrlToR2(url);
+  if (!formatted) return null;
+
+  if (formatted.includes('/catalogs/tuulo/images/')) {
+    return formatted.replace('/catalogs/tuulo/images/', '/catalogs/tuulo/thumbs/images/');
+  }
+  if (formatted.includes('/catalogs/tuulo/ref/')) {
+    return formatted.replace('/catalogs/tuulo/ref/', '/catalogs/tuulo/thumbs/ref/');
+  }
+  return formatted;
+}
+
+/**
  * Generates a presigned URL allowing the browser to upload directly to Cloudflare R2,
  * bypassing Netlify server bandwidth completely.
  */

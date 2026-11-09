@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { getThumbnailUrl } from '@/lib/r2';
 import {
   Package,
   Search,
@@ -78,6 +79,15 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
   // PREVIEW GUIDE MODAL: Shown every visit on initial page load as requested (except when viewing a shared cart link)
   const [showCartGuide, setShowCartGuide] = useState(true);
+
+  // BANDWIDTH OPTIMIZATION: Pagination / Incremental loading (24 items per batch)
+  const PAGE_SIZE = 24;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  // Reset pagination to first batch whenever search, catalog filter, category, price range, or sharedCart changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, catalogTab, selectedCategory, selectedPriceRange, isSharedCartView]);
 
   // Format product size in "กว้าง x สูง x ลึก" while strictly preserving "ฟุต"
   const formatCustomerProductSize = (prod: any) => {
@@ -319,15 +329,30 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     }
   };
 
-  // Helper to trigger file download with original filename & extension
-  const downloadFile = (url: string, filename?: string) => {
+  // Helper to trigger file download with original full-resolution filename & extension
+  const downloadFile = async (url: string, filename?: string) => {
     if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || url.split('/').pop() || 'furniture-image';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Fetch failed');
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || url.split('/').pop() || 'furniture-image.jpg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || url.split('/').pop() || 'furniture-image.jpg';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   // Pre-filled LINE OA inquiry URL for single product
@@ -1232,155 +1257,183 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filtered.map((prod, idx) => {
-                  const displayImg = prod.images?.[0] || prod.refImageUrl;
-                  const hasRef = Boolean(prod.refImageUrl);
-                  const inCart = isInCart(prod.id);
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filtered.slice(0, visibleCount).map((prod, idx) => {
+                    const fullImg = prod.images?.[0] || prod.refImageUrl;
+                    const thumbImg = getThumbnailUrl(fullImg);
+                    const displayImg = thumbImg || fullImg;
+                    const hasRef = Boolean(prod.refImageUrl);
+                    const inCart = isInCart(prod.id);
 
-                  return (
-                    <article
-                      key={prod.id}
-                      className={`bg-white rounded-2xl border overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group ${
-                        inCart ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {/* Image Click to Modal */}
-                      <div
-                        onClick={() => { setSelectedProductModal(prod); setModalActiveTab('graphic'); }}
-                        className="relative aspect-square bg-slate-50 overflow-hidden cursor-pointer flex items-center justify-center"
+                    return (
+                      <article
+                        key={prod.id}
+                        className={`bg-white rounded-2xl border overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group ${
+                          inCart ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-200 hover:border-slate-300'
+                        }`}
                       >
-                        {displayImg ? (
-                          <img
-                            src={displayImg}
-                            alt={`${prod.sku} ${prod.name}`}
-                            className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-                            loading={idx < 4 ? "eager" : "lazy"}
-                            decoding="async"
-                          />
-                        ) : (
-                          <Package className="w-16 h-16 text-slate-300" />
-                        )}
+                        {/* Image Click to Modal */}
+                        <div
+                          onClick={() => { setSelectedProductModal(prod); setModalActiveTab('graphic'); }}
+                          className="relative aspect-square bg-slate-50 overflow-hidden cursor-pointer flex items-center justify-center"
+                        >
+                          {displayImg ? (
+                            <img
+                              src={displayImg}
+                              alt={`${prod.sku} ${prod.name}`}
+                              className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                              loading={idx < 4 ? "eager" : "lazy"}
+                              decoding="async"
+                            />
+                          ) : (
+                            <Package className="w-16 h-16 text-slate-300" />
+                          )}
 
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                          <span className="px-3 py-1.5 rounded-full bg-white/95 text-slate-800 text-xs font-bold shadow-md flex items-center gap-1">
-                            <Eye className="w-3.5 h-3.5 text-red-600" />
-                            ดูภาพขยาย
-                          </span>
-                        </div>
-
-                        {prod.category_name && (
-                          <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-[#161B40]/90 text-white text-[10px] font-semibold backdrop-blur-xs">
-                            {prod.category_name}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <span className="px-3 py-1.5 rounded-full bg-white/95 text-slate-800 text-xs font-bold shadow-md flex items-center gap-1">
+                              <Eye className="w-3.5 h-3.5 text-red-600" />
+                              ดูภาพขยาย
+                            </span>
                           </div>
-                        )}
 
-                        {/* Cart Badge on Top-Right of Card Image */}
-                        {inCart && (
-                          <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold shadow-sm flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            <span>ในตะกร้า</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card Body */}
-                      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                        <div>
-                          <div className="font-mono text-xs font-bold text-red-600 tracking-wider">
-                            {prod.sku}
-                          </div>
-                          <h2
-                            onClick={() => { setSelectedProductModal(prod); setModalActiveTab('graphic'); }}
-                            className="font-bold text-sm text-[#161B40] mt-0.5 line-clamp-2 hover:text-red-600 transition cursor-pointer"
-                          >
-                            {prod.name}
-                          </h2>
-
-                          {/* Price — Rule 11: Display '-' if no price */}
-                          <p className="text-sm font-semibold text-slate-700 mt-2">
-                            ราคา{' '}
-                            <strong className="text-lg font-black text-[#DE1B23] font-mono">
-                              {prod.price && prod.price > 0 ? `฿${prod.price.toLocaleString()}` : '-'}
-                            </strong>
-                          </p>
-
-                          {/* Size & Page */}
-                          <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-                            <div>ขนาด: {formatCustomerProductSize(prod)}</div>
-                            <div>
-                              สี: <span className="font-semibold text-slate-700">{prod.catalogType === 'tuulo' ? 'ตามภาพ' : (prod.color || 'ตามภาพ')}</span>
+                          {prod.category_name && (
+                            <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-[#161B40]/90 text-white text-[10px] font-semibold backdrop-blur-xs">
+                              {prod.category_name}
                             </div>
-                            <small className="text-[10px] text-slate-400 block">แคตตาล็อกหน้า {prod.pageNum || 1}</small>
-                          </div>
+                          )}
+
+                          {/* Cart Badge on Top-Right of Card Image */}
+                          {inCart && (
+                            <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold shadow-sm flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              <span>ในตะกร้า</span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Action Nav Links */}
-                        <div className="pt-2 border-t border-slate-100 space-y-2">
-                          <div className="flex items-center gap-2">
-                            {/* Download Graphic Button */}
-                            <button
-                              onClick={() => downloadFile(prod.images?.[0] || displayImg, prod.graphicFilename)}
-                              className="flex-1 py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition flex items-center justify-center gap-1"
-                              title="ดาวน์โหลดภาพกราฟิกไฟล์เดิม"
+                        {/* Card Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                          <div>
+                            <div className="font-mono text-xs font-bold text-red-600 tracking-wider">
+                              {prod.sku}
+                            </div>
+                            <h2
+                              onClick={() => { setSelectedProductModal(prod); setModalActiveTab('graphic'); }}
+                              className="font-bold text-sm text-[#161B40] mt-0.5 line-clamp-2 hover:text-red-600 transition cursor-pointer"
                             >
-                              <Download className="w-3 h-3 text-red-600" />
-                              <span>ดาวน์โหลดภาพ</span>
+                              {prod.name}
+                            </h2>
+
+                            {/* Price — Rule 11: Display '-' if no price */}
+                            <p className="text-sm font-semibold text-slate-700 mt-2">
+                              ราคา{' '}
+                              <strong className="text-lg font-black text-[#DE1B23] font-mono">
+                                {prod.price && prod.price > 0 ? `฿${prod.price.toLocaleString()}` : '-'}
+                              </strong>
+                            </p>
+
+                            {/* Size & Page */}
+                            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+                              <div>ขนาด: {formatCustomerProductSize(prod)}</div>
+                              <div>
+                                สี: <span className="font-semibold text-slate-700">{prod.catalogType === 'tuulo' ? 'ตามภาพ' : (prod.color || 'ตามภาพ')}</span>
+                              </div>
+                              <small className="text-[10px] text-slate-400 block">แคตตาล็อกหน้า {prod.pageNum || 1}</small>
+                            </div>
+                          </div>
+
+                          {/* Action Nav Links */}
+                          <div className="pt-2 border-t border-slate-100 space-y-2">
+                            <div className="flex items-center gap-2">
+                              {/* Download Graphic Button — ALWAYS downloads full-res original JPG */}
+                              <button
+                                onClick={() => downloadFile(fullImg, prod.graphicFilename)}
+                                className="flex-1 py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold transition flex items-center justify-center gap-1"
+                                title="ดาวน์โหลดภาพกราฟิกไฟล์เดิม (ความละเอียดสูง)"
+                              >
+                                <Download className="w-3 h-3 text-red-600" />
+                                <span>ดาวน์โหลดภาพ</span>
+                              </button>
+
+                              {/* Reference Image Button */}
+                              {hasRef && (
+                                <button
+                                  onClick={() => { setSelectedProductModal(prod); setModalActiveTab('ref'); }}
+                                  className="flex-1 py-1.5 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold transition flex items-center justify-center gap-1"
+                                  title="ดูภาพอ้างอิงจริง"
+                                >
+                                  <Camera className="w-3 h-3 text-blue-600" />
+                                  <span>📸 ภาพอ้างอิง</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* 🛒 ADD TO CART BUTTON */}
+                            <button
+                              onClick={() => toggleCart(prod)}
+                              className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs ${
+                                inCart
+                                  ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
+                                  : 'bg-[#161B40] hover:bg-[#202758] text-white'
+                              }`}
+                            >
+                              {inCart ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>ใส่ตะกร้าแล้ว (กดเพื่อลบออก)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ShoppingCart className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>ใส่ตะกร้าสินค้า</span>
+                                </>
+                              )}
                             </button>
 
-                            {/* Reference Image Button */}
-                            {hasRef && (
-                              <button
-                                onClick={() => { setSelectedProductModal(prod); setModalActiveTab('ref'); }}
-                                className="flex-1 py-1.5 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold transition flex items-center justify-center gap-1"
-                                title="ดูภาพอ้างอิงจริง"
+                            {/* LINE Order Button & QR Code Button */}
+                            <div className="pt-1">
+                              <a
+                                href={getLineInquiryUrl(prod)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full py-2 px-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
                               >
-                                <Camera className="w-3 h-3 text-blue-600" />
-                                <span>📸 ภาพอ้างอิง</span>
-                              </button>
-                            )}
-                          </div>
-
-                          {/* 🛒 ADD TO CART BUTTON */}
-                          <button
-                            onClick={() => toggleCart(prod)}
-                            className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs ${
-                              inCart
-                                ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
-                                : 'bg-[#161B40] hover:bg-[#202758] text-white'
-                            }`}
-                          >
-                            {inCart ? (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>ใส่ตะกร้าแล้ว (กดเพื่อลบออก)</span>
-                              </>
-                            ) : (
-                              <>
-                                <ShoppingCart className="w-3.5 h-3.5 text-amber-300" />
-                                <span>ใส่ตะกร้าสินค้า</span>
-                              </>
-                            )}
-                          </button>
-
-                          {/* LINE Order Button & QR Code Button */}
-                          <div className="pt-1">
-                            <a
-                              href={getLineInquiryUrl(prod)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="w-full py-2 px-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-                              <span>สอบถามทาง Line : 0930494178</span>
-                            </a>
+                                <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                                <span>สอบถามทาง Line : 0930494178</span>
+                              </a>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination / Incremental Load More Bar */}
+                {visibleCount < filtered.length && (
+                  <div className="mt-8 flex flex-col items-center justify-center gap-3 py-6 px-4 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+                    <p className="text-xs text-slate-600 font-medium">
+                      กำลังแสดง <span className="font-bold text-[#161B40]">{Math.min(visibleCount, filtered.length)}</span> จากทั้งหมด <span className="font-bold text-[#161B40]">{filtered.length}</span> รายการ
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2.5">
+                      <button
+                        onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filtered.length))}
+                        className="px-6 py-2.5 bg-[#161B40] hover:bg-[#202758] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>โหลดสินค้าเพิ่มเติม (+{Math.min(PAGE_SIZE, filtered.length - visibleCount)} รายการ)</span>
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setVisibleCount(filtered.length)}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                      >
+                        แสดงทั้งหมด ({filtered.length} รายการ)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -1699,14 +1752,15 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
                   {cart.map((item, idx) => {
                     const itemImg = item.images?.[0] || item.refImageUrl;
+                    const itemThumb = getThumbnailUrl(itemImg) || itemImg;
                     return (
                       <div
                         key={item.id || idx}
                         className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition"
                       >
                         <div className="w-16 h-16 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
-                          {itemImg ? (
-                            <img src={itemImg} alt={item.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
+                          {itemThumb ? (
+                            <img src={itemThumb} alt={item.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
                           ) : (
                             <Package className="w-6 h-6 text-slate-300" />
                           )}
