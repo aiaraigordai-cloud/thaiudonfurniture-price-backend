@@ -119,24 +119,26 @@ export async function syncProductToSupabasePostgres(productId: string, data: Rec
   if (!supabase) return;
 
   try {
-    const updatePayload: Record<string, any> = {
+    const upsertPayload: Record<string, any> = {
+      id: productId,
       updated_at: new Date().toISOString(),
     };
 
-    if (data.sku !== undefined) updatePayload.sku = data.sku.trim();
-    if (data.name !== undefined) updatePayload.name = data.name.trim();
-    if (data.description !== undefined) updatePayload.description = data.description;
-    if (data.category_id !== undefined) updatePayload.category_id = data.category_id;
-    if (data.width !== undefined) updatePayload.width = data.width;
-    if (data.height !== undefined) updatePayload.height = data.height;
-    if (data.depth !== undefined) updatePayload.depth = data.depth;
-    if (data.size_text !== undefined) updatePayload.size_text = data.size_text;
-    if (data.color !== undefined) updatePayload.color = data.color;
-    if (data.status !== undefined) updatePayload.status = data.status;
-    if (data.ref_image_url !== undefined) updatePayload.ref_image_url = data.ref_image_url;
-    if (data.ref_filename !== undefined) updatePayload.ref_filename = data.ref_filename;
+    if (data.sku !== undefined) upsertPayload.sku = data.sku.trim();
+    if (data.name !== undefined) upsertPayload.name = data.name.trim();
+    if (data.description !== undefined) upsertPayload.description = data.description;
+    if (data.category_id !== undefined) upsertPayload.category_id = data.category_id;
+    if (data.catalog_type !== undefined) upsertPayload.catalog_type = data.catalog_type;
+    if (data.width !== undefined) upsertPayload.width = data.width;
+    if (data.height !== undefined) upsertPayload.height = data.height;
+    if (data.depth !== undefined) upsertPayload.depth = data.depth;
+    if (data.size_text !== undefined) upsertPayload.size_text = data.size_text;
+    if (data.color !== undefined) upsertPayload.color = data.color;
+    if (data.status !== undefined) upsertPayload.status = data.status;
+    if (data.ref_image_url !== undefined) upsertPayload.ref_image_url = data.ref_image_url;
+    if (data.ref_filename !== undefined) upsertPayload.ref_filename = data.ref_filename;
 
-    await supabase.from('products').update(updatePayload).eq('id', productId);
+    await supabase.from('products').upsert(upsertPayload);
 
     // Sync product images if provided
     if (Array.isArray(data.images) && data.images.length > 0) {

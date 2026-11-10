@@ -361,7 +361,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'SYSTEM_OWNER' && !user.permissions?.product_manage) {
+    if (user.role !== 'SYSTEM_OWNER' && !user.permissions?.product_manage && !user.permissions?.price_edit) {
       return NextResponse.json({ error: 'คุณไม่มีสิทธิ์ลบสินค้า' }, { status: 403 });
     }
 
@@ -390,6 +390,9 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
       const supabase = getSupabase();
       if (supabase) {
+        await supabase.from('product_images').delete().eq('product_id', params.id);
+        await supabase.from('product_prices').delete().eq('product_id', params.id);
+        await supabase.from('price_change_history').delete().eq('product_id', params.id);
         await supabase.from('products').delete().eq('id', params.id);
       }
     } catch (storeErr) {

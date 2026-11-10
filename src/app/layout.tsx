@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: 'ไทยอุดรเฟอร์นิเจอร์ | แคตตาล็อกสินค้าทางการและระบบจัดการราคากลาง',
   description: 'ระบบจัดการแคตตาล็อกสินค้าทางการ ไทยอุดรเฟอร์นิเจอร์ (ตู้โล และ น็อคดาวน์ Modern Luxury)',
   icons: {
-    icon: '/images/logo-red.png',
-    apple: '/images/logo-red.png',
+    icon: 'https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png',
+    apple: 'https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png',
   },
 };
 
@@ -18,9 +18,9 @@ export default function RootLayout({
   return (
     <html lang="th">
       <head>
-        <link rel="icon" href="/images/logo-red.png" type="image/png" />
-        <link rel="shortcut icon" href="/images/logo-red.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/images/logo-red.png" />
+        <link rel="icon" href="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" type="image/png" />
+        <link rel="shortcut icon" href="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" type="image/png" />
+        <link rel="apple-touch-icon" href="https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/assets/images/logo-red.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

@@ -16,6 +16,7 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 
 export default function PricesPage() {
@@ -29,6 +30,8 @@ export default function PricesPage() {
   const [savingTierKey, setSavingTierKey] = useState<string | null>(null);
   const [justSavedKeys, setJustSavedKeys] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Catalog and category filters
   const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
@@ -152,7 +155,8 @@ export default function PricesPage() {
         if (
           event.data?.type === 'PRICES_UPDATED' ||
           event.data?.type === 'PRICE_BATCH_UPDATED' ||
-          event.data?.type === 'CATALOG_UPDATED'
+          event.data?.type === 'CATALOG_UPDATED' ||
+          event.data?.type === 'PRODUCTS_UPDATED'
         ) {
           loadProducts(true);
         }
@@ -160,7 +164,11 @@ export default function PricesPage() {
     } catch {}
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'thaiudon_last_sync' || e.key === 'thaiudon_batch_sync') {
+      if (
+        e.key === 'thaiudon_last_sync' ||
+        e.key === 'thaiudon_batch_sync' ||
+        e.key === 'thaiudon_product_sync'
+      ) {
         loadProducts(true);
       }
     };
@@ -357,6 +365,67 @@ export default function PricesPage() {
       setMessage({ type: 'error', text: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
     } finally {
       setSavingId(null);
+    }
+  };
+
+  // 3. Delete product directly from prices management
+  const handleDeleteProduct = async (prod: any) => {
+    if (!prod) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/products/${prod.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        // Optimistic removal from state
+        setProducts((prev) => prev.filter((p) => p.id !== prod.id));
+        setCatalogCounts((prev) => {
+          const isTuulo = prod.catalog_type === 'tuulo';
+          const isKd = prod.catalog_type === 'knockdown';
+          return {
+            all: Math.max(0, prev.all - 1),
+            tuulo: isTuulo ? Math.max(0, prev.tuulo - 1) : prev.tuulo,
+            knockdown: isKd ? Math.max(0, prev.knockdown - 1) : prev.knockdown,
+          };
+        });
+        setEditingPrices((prev) => {
+          const next = { ...prev };
+          delete next[prod.id];
+          return next;
+        });
+        setMessage({
+          type: 'success',
+          text: `🗑️ ลบสินค้า ${prod.sku ? `(${prod.sku}) ` : ''}${prod.name || ''} ออกจากระบบเรียบร้อยแล้ว`,
+        });
+        setDeleteConfirmProduct(null);
+
+        // Multi-channel Real-time broadcast
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({
+              type: 'PRODUCTS_UPDATED',
+              action: 'DELETE_PRODUCT',
+              productId: prod.id,
+              timestamp: Date.now(),
+            });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            localStorage.setItem('thaiudon_product_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
+      } else {
+        setMessage({
+          type: 'error',
+          text: data.error || 'เกิดข้อผิดพลาดในการลบสินค้า',
+        });
+      }
+    } catch (err: any) {
+      setMessage({
+        type: 'error',
+        text: err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อลบสินค้า',
+      });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -574,7 +643,7 @@ export default function PricesPage() {
                 <th className="px-3 py-3.5 text-center text-purple-700">3. ราคา VIP (฿)</th>
                 <th className="px-3 py-3.5 text-center text-slate-700">4. ราคาทั่วไป (฿)</th>
                 <th className="px-3 py-3.5 text-center">สถานะราคา</th>
-                <th className="px-5 py-3.5 text-right">บันทึกทั้งแถว</th>
+                <th className="px-5 py-3.5 text-right">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -754,17 +823,28 @@ export default function PricesPage() {
                         })()}
                       </td>
 
-                      {/* Action */}
-                      <td className="px-5 py-3.5 text-right">
-                        <button
-                          onClick={() => handleSavePrice(prod.id)}
-                          disabled={isSavingRow}
-                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition disabled:opacity-50 inline-flex items-center gap-1.5"
-                          title="บันทึกราคาทั้ง 4 ระดับของสินค้านี้"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>{isSavingRow ? 'กำลังบันทึก...' : 'บันทึก'}</span>
-                        </button>
+                      {/* Actions: Save row and Delete product */}
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleSavePrice(prod.id)}
+                            disabled={isSavingRow || isDeleting}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition disabled:opacity-50 inline-flex items-center gap-1.5"
+                            title="บันทึกราคาทั้ง 4 ระดับของสินค้านี้"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{isSavingRow ? 'กำลังบันทึก...' : 'บันทึก'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmProduct(prod)}
+                            disabled={isSavingRow || isDeleting}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-40"
+                            title={`ลบสินค้า ${prod.sku || ''} ออกจากระบบ`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -847,6 +927,74 @@ export default function PricesPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-start gap-3.5 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">ยืนยันการลบสินค้าออกจากระบบ</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  คุณกำลังจะลบรายการสินค้านี้ออกจากระบบ ข้อมูลสินค้าและราคาทั้ง 4 ระดับจะถูกนำออกอย่างสมบูรณ์ และซิงค์ตรงกับหน้าจัดการสินค้าแบบ Real-time
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-5 text-xs space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">SKU:</span>
+                <span className="font-bold text-slate-900 font-mono">{deleteConfirmProduct.sku || '-'}</span>
+                {deleteConfirmProduct.catalog_type === 'tuulo' && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    ตู้โล่ง
+                  </span>
+                )}
+                {deleteConfirmProduct.catalog_type === 'knockdown' && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                    น็อคดาวน์
+                  </span>
+                )}
+              </div>
+              <div className="text-slate-700 font-medium truncate">
+                <span className="text-slate-500">ชื่อสินค้า:</span> {deleteConfirmProduct.name}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmProduct(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteProduct(deleteConfirmProduct)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs transition disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>กำลังลบ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>ยืนยันการลบ</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
