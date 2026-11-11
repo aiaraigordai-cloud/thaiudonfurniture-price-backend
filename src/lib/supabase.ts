@@ -140,17 +140,47 @@ export async function syncProductToSupabasePostgres(productId: string, data: Rec
 
     await supabase.from('products').upsert(upsertPayload);
 
-    // Sync product images if provided
-    if (Array.isArray(data.images) && data.images.length > 0) {
+    // Sync product images if provided (both main and reference)
+    if (Array.isArray(data.images) || Array.isArray(data.ref_images)) {
       await supabase.from('product_images').delete().eq('product_id', productId);
-      const imgRows = data.images.map((url: string, idx: number) => ({
-        id: `img_${productId}_${idx}_${Date.now()}`,
-        product_id: productId,
-        image_url: url,
-        display_order: idx + 1,
-        is_primary: idx === 0 ? 1 : 0,
-      }));
-      await supabase.from('product_images').insert(imgRows);
+      const imgRows: any[] = [];
+      if (Array.isArray(data.images)) {
+        data.images.forEach((url: string, idx: number) => {
+          if (url && typeof url === 'string' && url.trim()) {
+            imgRows.push({
+              id: `img_${productId}_${idx}_${Date.now()}`,
+              product_id: productId,
+              image_url: url.trim(),
+              display_order: idx + 1,
+              is_primary: idx === 0 ? 1 : 0,
+            });
+          }
+        });
+      }
+      if (Array.isArray(data.ref_images)) {
+        data.ref_images.forEach((url: string, idx: number) => {
+          if (url && typeof url === 'string' && url.trim()) {
+            imgRows.push({
+              id: `img_ref_${productId}_${idx}_${Date.now()}`,
+              product_id: productId,
+              image_url: url.trim(),
+              display_order: 100 + idx,
+              is_primary: 0,
+            });
+          }
+        });
+      } else if (data.ref_image_url && (!data.images || !data.images.includes(data.ref_image_url))) {
+        imgRows.push({
+          id: `img_ref_${productId}_0_${Date.now()}`,
+          product_id: productId,
+          image_url: data.ref_image_url,
+          display_order: 100,
+          is_primary: 0,
+        });
+      }
+      if (imgRows.length > 0) {
+        await supabase.from('product_images').insert(imgRows);
+      }
     }
 
     // Sync prices if provided

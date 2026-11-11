@@ -15,6 +15,7 @@ export interface ProductOverride {
   color?: string | null;
   status?: string;
   ref_image_url?: string | null;
+  ref_images?: string[];
   ref_filename?: string | null;
   primary_image_url?: string | null;
   images?: string[];
@@ -253,6 +254,9 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
   if (override.color !== undefined) res.color = override.color;
   if (override.status !== undefined && override.status !== null) res.status = override.status;
   if (override.ref_image_url !== undefined) res.ref_image_url = override.ref_image_url;
+  if (Array.isArray(override.ref_images)) {
+    res.ref_images = override.ref_images;
+  }
   if (override.ref_filename !== undefined) res.ref_filename = override.ref_filename;
 
   if (Array.isArray(override.images)) {

@@ -58,7 +58,8 @@ export default function ProductsPage() {
 
   // 1. Image Preview Modal state
   const [previewProduct, setPreviewProduct] = useState<any | null>(null);
-  const [previewActiveImgIdx, setPreviewActiveImgIdx] = useState(0);
+  const [previewPrimaryImgIdx, setPreviewPrimaryImgIdx] = useState(0);
+  const [previewRefImgIdx, setPreviewRefImgIdx] = useState(0);
   const [previewActiveTab, setPreviewActiveTab] = useState<'primary' | 'ref'>('primary');
 
   // 2. Single Share Modal state
@@ -124,8 +125,8 @@ export default function ProductsPage() {
   const [quickEditRetailPrice, setQuickEditRetailPrice] = useState('');
   const [quickEditVipPrice, setQuickEditVipPrice] = useState('');
   const [quickEditGeneralPrice, setQuickEditGeneralPrice] = useState('');
-  const [quickEditPrimaryImg, setQuickEditPrimaryImg] = useState('');
-  const [quickEditRefImg, setQuickEditRefImg] = useState('');
+  const [quickEditPrimaryImages, setQuickEditPrimaryImages] = useState<string[]>([]);
+  const [quickEditRefImages, setQuickEditRefImages] = useState<string[]>([]);
   const [quickEditSaving, setQuickEditSaving] = useState(false);
   const [quickEditError, setQuickEditError] = useState('');
   const [quickEditUploadingPrimary, setQuickEditUploadingPrimary] = useState(false);
@@ -225,11 +226,21 @@ export default function ProductsPage() {
     return await compressImageToDataUrl(file, 1200, 1200, 0.85);
   };
 
-  const handleUploadQuickEditPrimary = async (file: File) => {
+  const handleUploadQuickEditPrimaryFiles = async (files: FileList | File[]) => {
     try {
       setQuickEditUploadingPrimary(true);
-      const r2Url = await uploadDirectToR2(file, 'primary');
-      setQuickEditPrimaryImg(r2Url);
+      const newUrls: string[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          const r2Url = await uploadDirectToR2(file, 'primary');
+          if (r2Url) newUrls.push(r2Url);
+        } catch (err) {
+          console.warn('Upload primary file failed:', file.name, err);
+        }
+      }
+      if (newUrls.length > 0) {
+        setQuickEditPrimaryImages((prev) => [...prev, ...newUrls]);
+      }
     } catch {
       setQuickEditError('เกิดข้อผิดพลาดในการโหลดรูปภาพหลัก');
     } finally {
@@ -237,11 +248,21 @@ export default function ProductsPage() {
     }
   };
 
-  const handleUploadQuickEditRef = async (file: File) => {
+  const handleUploadQuickEditRefFiles = async (files: FileList | File[]) => {
     try {
       setQuickEditUploadingRef(true);
-      const r2Url = await uploadDirectToR2(file, 'ref');
-      setQuickEditRefImg(r2Url);
+      const newUrls: string[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          const r2Url = await uploadDirectToR2(file, 'ref');
+          if (r2Url) newUrls.push(r2Url);
+        } catch (err) {
+          console.warn('Upload ref file failed:', file.name, err);
+        }
+      }
+      if (newUrls.length > 0) {
+        setQuickEditRefImages((prev) => [...prev, ...newUrls]);
+      }
     } catch {
       setQuickEditError('เกิดข้อผิดพลาดในการโหลดภาพอ้างอิง');
     } finally {
@@ -249,12 +270,20 @@ export default function ProductsPage() {
     }
   };
 
-  const handleRemoveQuickEditPrimary = () => {
-    setQuickEditPrimaryImg('');
+  const handleRemoveQuickEditPrimaryAt = (idx: number) => {
+    setQuickEditPrimaryImages((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleRemoveQuickEditRef = () => {
-    setQuickEditRefImg('');
+  const handleRemoveQuickEditRefAt = (idx: number) => {
+    setQuickEditRefImages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleClearAllQuickEditPrimary = () => {
+    setQuickEditPrimaryImages([]);
+  };
+
+  const handleClearAllQuickEditRef = () => {
+    setQuickEditRefImages([]);
   };
 
   const openQuickEditModal = (prod: any) => {
@@ -276,9 +305,32 @@ export default function ProductsPage() {
     setQuickEditVipPrice(p.VIP_PRICE !== undefined && p.VIP_PRICE !== null ? String(p.VIP_PRICE) : '');
     setQuickEditGeneralPrice(p.GENERAL_PRICE !== undefined && p.GENERAL_PRICE !== null ? String(p.GENERAL_PRICE) : '');
 
-    const mainImg = prod.primary_image_url || (prod.images && prod.images[0]) || '';
-    setQuickEditPrimaryImg(mainImg);
-    setQuickEditRefImg(prod.ref_image_url || '');
+    // Extract all primary images
+    const mainImagesList: string[] = [];
+    if (Array.isArray(prod.images)) {
+      prod.images.forEach((img: string) => {
+        if (img && typeof img === 'string' && img.trim() && !mainImagesList.includes(img.trim())) {
+          mainImagesList.push(img.trim());
+        }
+      });
+    } else if (prod.primary_image_url) {
+      mainImagesList.push(prod.primary_image_url);
+    }
+    setQuickEditPrimaryImages(mainImagesList);
+
+    // Extract all ref images
+    const refImagesList: string[] = [];
+    if (Array.isArray(prod.ref_images)) {
+      prod.ref_images.forEach((img: string) => {
+        if (img && typeof img === 'string' && img.trim() && !refImagesList.includes(img.trim())) {
+          refImagesList.push(img.trim());
+        }
+      });
+    } else if (prod.ref_image_url) {
+      refImagesList.push(prod.ref_image_url);
+    }
+    setQuickEditRefImages(refImagesList);
+
     setQuickEditError('');
   };
 
@@ -299,7 +351,8 @@ export default function ProductsPage() {
       GENERAL_PRICE: quickEditGeneralPrice ? parseFloat(quickEditGeneralPrice) : 0,
     };
 
-    const images = quickEditPrimaryImg && quickEditPrimaryImg.trim() ? [quickEditPrimaryImg.trim()] : [];
+    const images = quickEditPrimaryImages.filter((img) => img && typeof img === 'string' && img.trim());
+    const ref_images = quickEditRefImages.filter((img) => img && typeof img === 'string' && img.trim());
 
     const isTuuloProduct = quickEditProduct.catalog_type === 'tuulo' || quickEditProduct.catalogType === 'tuulo';
     const finalProductColor = isTuuloProduct ? 'ตามภาพ' : (quickEditColor ? quickEditColor.trim() : null);
@@ -320,7 +373,8 @@ export default function ProductsPage() {
           color: finalProductColor,
           status: quickEditStatus,
           images,
-          ref_image_url: quickEditRefImg && quickEditRefImg.trim() ? quickEditRefImg.trim() : null,
+          ref_images,
+          ref_image_url: ref_images.length > 0 ? ref_images[0] : null,
           prices,
         }),
       });
@@ -358,9 +412,10 @@ export default function ProductsPage() {
               size_text: updatedSizeText,
               color: finalProductColor,
               status: quickEditStatus,
-              ref_image_url: quickEditRefImg || null,
+              ref_image_url: ref_images.length > 0 ? ref_images[0] : null,
+              ref_images,
               images,
-              primary_image_url: quickEditPrimaryImg || null,
+              primary_image_url: images.length > 0 ? images[0] : null,
               prices,
             };
           })
@@ -815,10 +870,12 @@ export default function ProductsPage() {
   const startIndex = (safeCurrentPage - 1) * (pageSize || displayedProducts.length);
   const paginatedProducts = pageSize === 0 ? displayedProducts : displayedProducts.slice(startIndex, startIndex + pageSize);
 
-  // Open Complete Product Details Modal (พร้อมแท็บสลับรูปทีละรูป)
+  // Open Complete Product Details Modal (พร้อมแท็บสลับรูปทีละรูป และปุ่มเลื่อน)
   const openProductDetailsModal = (prod: any, tab: 'primary' | 'ref' = 'primary') => {
     setPreviewProduct(prod);
     setPreviewActiveTab(tab);
+    setPreviewPrimaryImgIdx(0);
+    setPreviewRefImgIdx(0);
   };
 
   // Open Preview Modal (แสดงเฉพาะรูปภาพนั้นๆ ที่กดดูเท่านั้น)
@@ -1389,30 +1446,30 @@ export default function ProductsPage() {
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">
                               <button
-                                onClick={() => openSingleImagePreview(prod.images?.[0] || prod.primary_image_url, prod.sku, 'รูปภาพสินค้าหลัก')}
+                                onClick={() => openProductDetailsModal(prod, 'primary')}
                                 className="text-[10px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1"
                               >
                                 <Eye className="w-3 h-3 text-red-600" />
-                                ดูรูปภาพ
+                                <span>ดูรูปภาพ{prod.images && prod.images.length > 1 ? ` (${prod.images.length})` : ''}</span>
                               </button>
                               <span className="text-slate-300 text-[10px]">•</span>
                               <button
                                 onClick={() => {
-                                  if (prod.ref_image_url) {
-                                    openSingleImagePreview(prod.ref_image_url, prod.sku, 'ภาพอ้างอิงจริง (Reference / Dicut)');
+                                  if (prod.ref_image_url || (prod.ref_images && prod.ref_images.length > 0)) {
+                                    openProductDetailsModal(prod, 'ref');
                                   } else {
                                     alert('สินค้านี้ยังไม่มีภาพอ้างอิงจริง (สามารถเพิ่มได้ในปุ่ม "แก้ไขสินค้าแบบ Real-time")');
                                   }
                                 }}
                                 className={`text-[10px] font-bold flex items-center gap-1 transition ${
-                                  prod.ref_image_url
+                                  prod.ref_image_url || (prod.ref_images && prod.ref_images.length > 0)
                                     ? 'text-amber-700 hover:text-amber-800'
                                     : 'text-slate-400 hover:text-slate-500'
                                 }`}
-                                title={prod.ref_image_url ? 'คลิกเพื่อดูรูปภาพอ้างอิงจริง' : 'ยังไม่มีภาพอ้างอิงจริง'}
+                                title={prod.ref_image_url || (prod.ref_images && prod.ref_images.length > 0) ? 'คลิกเพื่อดูรูปภาพอ้างอิงจริง' : 'ยังไม่มีภาพอ้างอิงจริง'}
                               >
-                                <Eye className={`w-3 h-3 ${prod.ref_image_url ? 'text-amber-600' : 'text-slate-400'}`} />
-                                <span>ดูรูปภาพอ้างอิง</span>
+                                <Eye className={`w-3 h-3 ${prod.ref_image_url || (prod.ref_images && prod.ref_images.length > 0) ? 'text-amber-600' : 'text-slate-400'}`} />
+                                <span>ภาพอ้างอิง{prod.ref_images && prod.ref_images.length > 1 ? ` (${prod.ref_images.length})` : ''}</span>
                               </button>
                             </div>
                           </div>
@@ -1806,6 +1863,11 @@ export default function ProductsPage() {
                     >
                       <span className="w-2 h-2 rounded-full bg-blue-400"></span>
                       <span>1. รูปภาพสินค้าหลัก</span>
+                      {(Array.isArray(previewProduct.images) ? previewProduct.images.length : (previewProduct.primary_image_url ? 1 : 0)) > 1 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-500 text-white font-mono">
+                          {previewProduct.images.length}
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -1818,158 +1880,369 @@ export default function ProductsPage() {
                     >
                       <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                       <span>2. ภาพอ้างอิงจริง (Reference / Dicut)</span>
-                      {previewProduct.ref_image_url && (
+                      {(Array.isArray(previewProduct.ref_images) ? previewProduct.ref_images.length : (previewProduct.ref_image_url ? 1 : 0)) > 0 && (
                         <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${
                           previewActiveTab === 'ref' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800'
                         }`}>
-                          ✓
+                          {(Array.isArray(previewProduct.ref_images) && previewProduct.ref_images.length > 1) ? `${previewProduct.ref_images.length} รูป` : '✓'}
                         </span>
                       )}
                     </button>
                   </div>
                 </div>
 
-                {/* Main Prominent Image Viewer (SHOWS ONE IMAGE AT A TIME) */}
+                {/* Main Prominent Image Viewer (SHOWS ONE IMAGE AT A TIME WITH SLIDER CONTROLS) */}
                 <div className="space-y-3">
                   {previewActiveTab === 'primary' ? (
-                    /* TAB 1: PRIMARY PRODUCT IMAGE */
-                    <div className="space-y-3">
-                      <div
-                        onClick={() => {
-                          const img = previewProduct.images?.[0] || previewProduct.primary_image_url;
-                          if (img) openSingleImagePreview(img, previewProduct.sku, 'รูปภาพสินค้าหลัก');
-                        }}
-                        className="relative aspect-16/10 sm:aspect-2/1 bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center cursor-pointer group shadow-xs"
-                        title="คลิกเพื่อขยายดูภาพหลักขนาดเต็ม"
-                      >
-                        {previewProduct.images?.[0] || previewProduct.primary_image_url ? (
-                          <>
-                            <img
-                              src={previewProduct.images?.[0] || previewProduct.primary_image_url}
-                              alt={previewProduct.name}
-                              className="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-200"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-bold text-xs">
-                              <Eye className="w-5 h-5" />
-                              <span>คลิกเพื่อขยายดูภาพหลักขนาดเต็ม</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-slate-400 text-xs flex flex-col items-center gap-1.5 py-8">
-                            <Package className="w-12 h-12 stroke-1 text-slate-300" />
-                            <span>ไม่มีรูปภาพสินค้าหลัก</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Primary Image Action Footer */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                        <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                          🖼️ รูปภาพสินค้าหลัก (Graphic)
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {(previewProduct.images?.[0] || previewProduct.primary_image_url) && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openSingleImagePreview(previewProduct.images?.[0] || previewProduct.primary_image_url, previewProduct.sku, 'รูปภาพสินค้าหลัก')}
-                                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 transition"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>ดูภาพขยายเต็มจอ</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => downloadFile(previewProduct.images?.[0] || previewProduct.primary_image_url, `${previewProduct.sku}_primary.jpg`)}
-                                className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5 transition shadow-xs"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>ดาวน์โหลดภาพหลัก</span>
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    /* TAB 2: REFERENCE / DICUT IMAGE */
-                    <div className="space-y-3">
-                      <div
-                        onClick={() => {
-                          if (previewProduct.ref_image_url) {
-                            openSingleImagePreview(previewProduct.ref_image_url, previewProduct.sku, 'ภาพอ้างอิงจริง (Reference / Dicut)');
+                    /* TAB 1: PRIMARY PRODUCT IMAGES SLIDER */
+                    (() => {
+                      const primaryImgsList: string[] = [];
+                      if (Array.isArray(previewProduct.images)) {
+                        previewProduct.images.forEach((u: string) => {
+                          if (u && typeof u === 'string' && u.trim() && !primaryImgsList.includes(u.trim())) {
+                            primaryImgsList.push(u.trim());
                           }
-                        }}
-                        className={`relative aspect-16/10 sm:aspect-2/1 bg-white rounded-2xl border border-amber-200 overflow-hidden flex items-center justify-center shadow-xs ${
-                          previewProduct.ref_image_url ? 'cursor-pointer group' : ''
-                        }`}
-                        title={previewProduct.ref_image_url ? 'คลิกเพื่อขยายดูภาพอ้างอิงขนาดเต็ม' : 'ยังไม่มีภาพอ้างอิง'}
-                      >
-                        {previewProduct.ref_image_url ? (
-                          <>
-                            <img
-                              src={previewProduct.ref_image_url}
-                              alt="Reference"
-                              className="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-200"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-bold text-xs">
-                              <Eye className="w-5 h-5" />
-                              <span>คลิกเพื่อขยายดูภาพอ้างอิงขนาดเต็ม</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-amber-800/70 text-xs flex flex-col items-center gap-2 py-8 text-center px-4">
-                            <Camera className="w-12 h-12 stroke-1 text-amber-400" />
-                            <span className="font-bold">ยังไม่มีภาพอ้างอิงจริง (Reference / Dicut)</span>
-                            <span className="text-[11px] text-slate-500">
-                              สามารถเพิ่มภาพอ้างอิงได้ในเมนู "แก้ไขสินค้าแบบ Real-time"
-                            </span>
-                          </div>
-                        )}
-                      </div>
+                        });
+                      } else if (previewProduct.primary_image_url) {
+                        primaryImgsList.push(previewProduct.primary_image_url);
+                      }
 
-                      {/* Reference Image Action Footer */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                        <span className="text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                          📸 ภาพอ้างอิงจริง (Reference / Dicut)
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {previewProduct.ref_image_url ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openSingleImagePreview(previewProduct.ref_image_url, previewProduct.sku, 'ภาพอ้างอิงจริง (Reference / Dicut)')}
-                                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 transition"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>ดูภาพขยายเต็มจอ</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => downloadFile(previewProduct.ref_image_url, `${previewProduct.sku}_reference.jpg`)}
-                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 transition shadow-xs"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>ดาวน์โหลดภาพอ้างอิง</span>
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const prodToEdit = previewProduct;
-                                setPreviewProduct(null);
-                                openQuickEditModal(prodToEdit);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 transition text-xs shadow-xs"
-                            >
-                              <Camera className="w-3.5 h-3.5" />
-                              <span>เพิ่มภาพอ้างอิงในหน้านี้</span>
-                            </button>
+                      const totalPrimary = primaryImgsList.length;
+                      const currentPrimaryIdx = Math.min(Math.max(0, previewPrimaryImgIdx), Math.max(0, totalPrimary - 1));
+                      const currentImgUrl = primaryImgsList[currentPrimaryIdx] || null;
+
+                      const handlePrevPrimary = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setPreviewPrimaryImgIdx((prev) => (prev > 0 ? prev - 1 : totalPrimary - 1));
+                      };
+
+                      const handleNextPrimary = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setPreviewPrimaryImgIdx((prev) => (prev < totalPrimary - 1 ? prev + 1 : 0));
+                      };
+
+                      return (
+                        <div className="space-y-3">
+                          <div
+                            onClick={() => {
+                              if (currentImgUrl) {
+                                openSingleImagePreview(
+                                  currentImgUrl,
+                                  previewProduct.sku,
+                                  `รูปภาพสินค้าหลัก (ภาพที่ ${currentPrimaryIdx + 1}/${totalPrimary})`
+                                );
+                              }
+                            }}
+                            className="relative aspect-16/10 sm:aspect-2/1 bg-white rounded-2xl border border-slate-200 overflow-hidden flex items-center justify-center cursor-pointer group shadow-xs select-none"
+                            title={currentImgUrl ? 'คลิกเพื่อขยายดูภาพหลักขนาดเต็ม' : 'ไม่มีรูปภาพสินค้าหลัก'}
+                          >
+                            {currentImgUrl ? (
+                              <>
+                                <img
+                                  src={currentImgUrl}
+                                  alt={`${previewProduct.name} - ภาพที่ ${currentPrimaryIdx + 1}`}
+                                  className="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-200"
+                                />
+                                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-bold text-xs pointer-events-none">
+                                  <Eye className="w-5 h-5" />
+                                  <span>คลิกเพื่อขยายดูภาพหลักขนาดเต็ม</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-slate-400 text-xs flex flex-col items-center gap-1.5 py-8">
+                                <Package className="w-12 h-12 stroke-1 text-slate-300" />
+                                <span>ไม่มีรูปภาพสินค้าหลัก</span>
+                              </div>
+                            )}
+
+                            {/* Prominent Next / Prev Buttons if > 1 images */}
+                            {totalPrimary > 1 && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handlePrevPrimary}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-blue-600 shadow-xl border border-slate-200 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 z-10 cursor-pointer"
+                                  title="ภาพก่อนหน้า (Previous)"
+                                  aria-label="Previous main image"
+                                >
+                                  <ChevronLeft className="w-6 h-6 stroke-[2.5]" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleNextPrimary}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-blue-600 shadow-xl border border-slate-200 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 z-10 cursor-pointer"
+                                  title="ภาพถัดไป (Next)"
+                                  aria-label="Next main image"
+                                >
+                                  <ChevronRight className="w-6 h-6 stroke-[2.5]" />
+                                </button>
+
+                                {/* Floating Counter Badge */}
+                                <div className="absolute top-3 right-3 px-3 py-1 bg-black/70 backdrop-blur-xs text-white rounded-full text-xs font-bold tracking-wide shadow-md flex items-center gap-1.5 z-10">
+                                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+                                  <span>ภาพที่ {currentPrimaryIdx + 1} / {totalPrimary}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Thumbnail Strip if > 1 images */}
+                          {totalPrimary > 1 && (
+                            <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 custom-scrollbar">
+                              {primaryImgsList.map((thumbUrl, idx) => {
+                                const isCurrent = idx === currentPrimaryIdx;
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setPreviewPrimaryImgIdx(idx)}
+                                    className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${
+                                      isCurrent
+                                        ? 'border-blue-600 ring-2 ring-blue-400 scale-105 shadow-md'
+                                        : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
+                                    }`}
+                                  >
+                                    <img src={thumbUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                                    <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[9px] font-bold px-1 rounded-tl">
+                                      {idx + 1}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           )}
+
+                          {/* Primary Image Action Footer */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                            <span className="text-[11px] font-bold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 flex items-center gap-1.5">
+                              <span>🖼️ รูปภาพสินค้าหลัก (Graphic)</span>
+                              {totalPrimary > 1 && (
+                                <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                                  มีทั้งหมด {totalPrimary} รูป
+                                </span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {currentImgUrl && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openSingleImagePreview(
+                                        currentImgUrl,
+                                        previewProduct.sku,
+                                        `รูปภาพสินค้าหลัก (ภาพที่ ${currentPrimaryIdx + 1}/${totalPrimary})`
+                                      )
+                                    }
+                                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 transition"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>ดูภาพขยายเต็มจอ</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      downloadFile(
+                                        currentImgUrl,
+                                        `${previewProduct.sku}_primary_${currentPrimaryIdx + 1}.jpg`
+                                      )
+                                    }
+                                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold flex items-center gap-1.5 transition shadow-xs"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>ดาวน์โหลดภาพนี้</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()
+                  ) : (
+                    /* TAB 2: REFERENCE / DICUT IMAGES SLIDER */
+                    (() => {
+                      const refImgsList: string[] = [];
+                      if (Array.isArray(previewProduct.ref_images)) {
+                        previewProduct.ref_images.forEach((u: string) => {
+                          if (u && typeof u === 'string' && u.trim() && !refImgsList.includes(u.trim())) {
+                            refImgsList.push(u.trim());
+                          }
+                        });
+                      } else if (previewProduct.ref_image_url) {
+                        refImgsList.push(previewProduct.ref_image_url);
+                      }
+
+                      const totalRef = refImgsList.length;
+                      const currentRefIdx = Math.min(Math.max(0, previewRefImgIdx), Math.max(0, totalRef - 1));
+                      const currentRefUrl = refImgsList[currentRefIdx] || null;
+
+                      const handlePrevRef = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setPreviewRefImgIdx((prev) => (prev > 0 ? prev - 1 : totalRef - 1));
+                      };
+
+                      const handleNextRef = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setPreviewRefImgIdx((prev) => (prev < totalRef - 1 ? prev + 1 : 0));
+                      };
+
+                      return (
+                        <div className="space-y-3">
+                          <div
+                            onClick={() => {
+                              if (currentRefUrl) {
+                                openSingleImagePreview(
+                                  currentRefUrl,
+                                  previewProduct.sku,
+                                  `ภาพอ้างอิงจริง (ภาพที่ ${currentRefIdx + 1}/${totalRef})`
+                                );
+                              }
+                            }}
+                            className={`relative aspect-16/10 sm:aspect-2/1 bg-white rounded-2xl border border-amber-200 overflow-hidden flex items-center justify-center shadow-xs select-none ${
+                              currentRefUrl ? 'cursor-pointer group' : ''
+                            }`}
+                            title={currentRefUrl ? 'คลิกเพื่อขยายดูภาพอ้างอิงขนาดเต็ม' : 'ยังไม่มีภาพอ้างอิง'}
+                          >
+                            {currentRefUrl ? (
+                              <>
+                                <img
+                                  src={currentRefUrl}
+                                  alt={`Reference ${currentRefIdx + 1}`}
+                                  className="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-200"
+                                />
+                                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white gap-2 font-bold text-xs pointer-events-none">
+                                  <Eye className="w-5 h-5" />
+                                  <span>คลิกเพื่อขยายดูภาพอ้างอิงขนาดเต็ม</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-amber-800/70 text-xs flex flex-col items-center gap-2 py-8 text-center px-4">
+                                <Camera className="w-12 h-12 stroke-1 text-amber-400" />
+                                <span className="font-bold">ยังไม่มีภาพอ้างอิงจริง (Reference / Dicut)</span>
+                                <span className="text-[11px] text-slate-500">
+                                  สามารถเพิ่มภาพอ้างอิงได้ในเมนู "แก้ไขสินค้าแบบ Real-time"
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Prominent Next / Prev Buttons if > 1 ref images */}
+                            {totalRef > 1 && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={handlePrevRef}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-amber-600 shadow-xl border border-amber-200 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 z-10 cursor-pointer"
+                                  title="ภาพอ้างอิงก่อนหน้า (Previous)"
+                                  aria-label="Previous reference image"
+                                >
+                                  <ChevronLeft className="w-6 h-6 stroke-[2.5]" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleNextRef}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-amber-600 shadow-xl border border-amber-200 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 z-10 cursor-pointer"
+                                  title="ภาพอ้างอิงถัดไป (Next)"
+                                  aria-label="Next reference image"
+                                >
+                                  <ChevronRight className="w-6 h-6 stroke-[2.5]" />
+                                </button>
+
+                                {/* Floating Counter Badge */}
+                                <div className="absolute top-3 right-3 px-3 py-1 bg-black/70 backdrop-blur-xs text-white rounded-full text-xs font-bold tracking-wide shadow-md flex items-center gap-1.5 z-10">
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                  <span>ภาพอ้างอิง {currentRefIdx + 1} / {totalRef}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Thumbnail Strip if > 1 ref images */}
+                          {totalRef > 1 && (
+                            <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 custom-scrollbar">
+                              {refImgsList.map((thumbUrl, idx) => {
+                                const isCurrent = idx === currentRefIdx;
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => setPreviewRefImgIdx(idx)}
+                                    className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${
+                                      isCurrent
+                                        ? 'border-amber-600 ring-2 ring-amber-400 scale-105 shadow-md'
+                                        : 'border-amber-100 hover:border-amber-300 opacity-70 hover:opacity-100'
+                                    }`}
+                                  >
+                                    <img src={thumbUrl} alt={`Ref Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                                    <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[9px] font-bold px-1 rounded-tl">
+                                      {idx + 1}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Reference Image Action Footer */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                            <span className="text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1.5">
+                              <span>📸 ภาพอ้างอิงจริง (Reference / Dicut)</span>
+                              {totalRef > 1 && (
+                                <span className="bg-amber-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                                  มีทั้งหมด {totalRef} รูป
+                                </span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {currentRefUrl ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openSingleImagePreview(
+                                        currentRefUrl,
+                                        previewProduct.sku,
+                                        `ภาพอ้างอิงจริง (ภาพที่ ${currentRefIdx + 1}/${totalRef})`
+                                      )
+                                    }
+                                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center gap-1 transition"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>ดูภาพขยายเต็มจอ</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      downloadFile(
+                                        currentRefUrl,
+                                        `${previewProduct.sku}_reference_${currentRefIdx + 1}.jpg`
+                                      )
+                                    }
+                                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 transition shadow-xs"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>ดาวน์โหลดภาพนี้</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const prodToEdit = previewProduct;
+                                    setPreviewProduct(null);
+                                    openQuickEditModal(prodToEdit);
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 transition text-xs shadow-xs"
+                                >
+                                  <Camera className="w-3.5 h-3.5" />
+                                  <span>เพิ่มภาพอ้างอิงในหน้านี้</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
                   )}
 
                   {/* Thumbnail Switcher Below Image */}
@@ -2916,95 +3189,114 @@ export default function ProductsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* 1. Primary Product Image */}
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col justify-between space-y-2.5">
-                      <div className="flex items-start gap-3">
-                        <div
-                          onClick={() => {
-                            if (quickEditPrimaryImg) {
-                              openSingleImagePreview(quickEditPrimaryImg, quickEditProduct?.sku, 'รูปภาพสินค้าหลัก');
-                            }
-                          }}
-                          className={`relative w-16 h-16 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center ${
-                            quickEditPrimaryImg ? 'cursor-pointer hover:ring-2 hover:ring-blue-500 group shadow-2xs' : ''
-                          }`}
-                          title={quickEditPrimaryImg ? 'คลิกเพื่อดูพรีวิวรูปภาพหลัก' : 'ไม่มีรูปภาพหลัก'}
-                        >
-                          {quickEditPrimaryImg ? (
-                            <>
-                              <img
-                                src={quickEditPrimaryImg}
-                                alt="Primary"
-                                className="w-full h-full object-contain group-hover:scale-105 transition"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
-                                <Eye className="w-4 h-4" />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-slate-400 text-[10px] text-center">ไม่มีภาพ</div>
-                          )}
+                    {/* 1. Primary Product Images (Multiple Supported) */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            <span className="text-xs font-bold text-slate-800">รูปภาพสินค้าหลัก (Main Images)</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                            {quickEditPrimaryImages.length} รูป
+                          </span>
                         </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          ภาพกราฟิกหลักที่แสดงในแคตตาล็อก (สามารถเลือกเพิ่มได้หลายรูปพร้อมกัน)
+                        </p>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-slate-800">รูปภาพสินค้าหลัก</div>
-                          <p className="text-[10px] text-slate-500 mt-0.5">ภาพกราฟิกหลักที่แสดงในแคตตาล็อก</p>
-                          {quickEditPrimaryImg && (
-                            <button
-                              type="button"
-                              onClick={() => openSingleImagePreview(quickEditPrimaryImg, quickEditProduct?.sku, 'รูปภาพสินค้าหลัก')}
-                              className="text-[10px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 mt-1"
-                            >
-                              <Eye className="w-3 h-3 text-blue-600" />
-                              <span>ดูรูปภาพหลัก</span>
-                            </button>
+                        {/* Thumbnail Grid */}
+                        <div className="mt-2.5 min-h-[72px] p-2 bg-slate-50 rounded-xl border border-slate-200/80">
+                          {quickEditPrimaryImages.length > 0 ? (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                              {quickEditPrimaryImages.map((imgUrl, idx) => (
+                                <div
+                                  key={idx}
+                                  className="relative group aspect-square rounded-lg bg-white border border-slate-200 overflow-hidden shadow-2xs"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt={`Primary ${idx + 1}`}
+                                    className="w-full h-full object-cover cursor-pointer"
+                                    onClick={() =>
+                                      openSingleImagePreview(
+                                        imgUrl,
+                                        quickEditProduct?.sku,
+                                        `รูปภาพสินค้าหลัก (${idx + 1}/${quickEditPrimaryImages.length})`
+                                      )
+                                    }
+                                  />
+                                  <span className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1 rounded">
+                                    {idx === 0 ? 'หลัก' : idx + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveQuickEditPrimaryAt(idx)}
+                                    className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-md opacity-90 hover:opacity-100 transition shadow-xs cursor-pointer"
+                                    title="ลบภาพนี้"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="h-16 flex flex-col items-center justify-center text-slate-400 text-[11px] gap-1">
+                              <ImageIcon className="w-5 h-5 text-slate-300" />
+                              <span>ยังไม่มีรูปภาพสินค้าหลัก</span>
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Separate Buttons: เพิ่มภาพหลัก VS เปลี่ยนภาพเดิม */}
+                      {/* Action Buttons: เพิ่มหลายรูป / เปลี่ยนทั้งหมด / ลบทั้งหมด */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-                        {/* 1. ปุ่มเพิ่มภาพหลัก */}
-                        <label className="flex-1 min-w-[105px] py-1.5 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
+                        {/* 1. ปุ่มเพิ่มภาพ (รองรับหลายรูป) */}
+                        <label className="flex-1 min-w-[110px] py-2 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs">
                           <Plus className="w-3.5 h-3.5" />
-                          <span>{quickEditUploadingPrimary ? 'กำลังโหลด...' : 'เพิ่มภาพหลัก'}</span>
+                          <span>{quickEditUploadingPrimary ? 'กำลังอัปโหลด...' : '+ เพิ่มภาพหลัก'}</span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             disabled={quickEditUploadingPrimary}
                             onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadQuickEditPrimary(f);
+                              const files = e.target.files;
+                              if (files && files.length > 0) handleUploadQuickEditPrimaryFiles(files);
                               e.target.value = '';
                             }}
                           />
                         </label>
 
-                        {/* 2. ปุ่มเปลี่ยนภาพเดิม */}
-                        <label className="flex-1 min-w-[105px] py-1.5 px-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
+                        {/* 2. ปุ่มแทนที่ทั้งหมด */}
+                        <label className="py-2 px-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
                           <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{quickEditUploadingPrimary ? 'กำลังโหลด...' : 'เปลี่ยนภาพเดิม'}</span>
+                          <span>แทนที่ใหม่</span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             disabled={quickEditUploadingPrimary}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadQuickEditPrimary(f);
+                            onChange={async (e) => {
+                              const files = e.target.files;
+                              if (files && files.length > 0) {
+                                handleClearAllQuickEditPrimary();
+                                await handleUploadQuickEditPrimaryFiles(files);
+                              }
                               e.target.value = '';
                             }}
                           />
                         </label>
 
-                        {/* 3. ลบรูปภาพหลัก */}
-                        {quickEditPrimaryImg && (
+                        {/* 3. ลบภาพหลักทั้งหมด */}
+                        {quickEditPrimaryImages.length > 0 && (
                           <button
                             type="button"
-                            onClick={handleRemoveQuickEditPrimary}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="ลบรูปภาพหลัก"
+                            onClick={handleClearAllQuickEditPrimary}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                            title="ลบรูปภาพหลักทั้งหมด"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -3012,95 +3304,114 @@ export default function ProductsPage() {
                       </div>
                     </div>
 
-                    {/* 2. Reference Image */}
-                    <div className="p-3 bg-white rounded-xl border border-amber-200 flex flex-col justify-between space-y-2.5">
-                      <div className="flex items-start gap-3">
-                        <div
-                          onClick={() => {
-                            if (quickEditRefImg) {
-                              openSingleImagePreview(quickEditRefImg, quickEditProduct?.sku, 'ภาพอ้างอิงจริง (Reference / Dicut)');
-                            }
-                          }}
-                          className={`relative w-16 h-16 rounded-xl bg-amber-50/50 border border-amber-200 overflow-hidden flex-shrink-0 flex items-center justify-center ${
-                            quickEditRefImg ? 'cursor-pointer hover:ring-2 hover:ring-amber-500 group shadow-2xs' : ''
-                          }`}
-                          title={quickEditRefImg ? 'คลิกเพื่อดูพรีวิวภาพอ้างอิง' : 'ยังไม่มีภาพอ้างอิง'}
-                        >
-                          {quickEditRefImg ? (
-                            <>
-                              <img
-                                src={quickEditRefImg}
-                                alt="Ref"
-                                className="w-full h-full object-contain group-hover:scale-105 transition"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
-                                <Eye className="w-4 h-4" />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-amber-700/60 text-[10px] text-center">ไม่มีภาพ</div>
-                          )}
+                    {/* 2. Reference Images (Multiple Supported) */}
+                    <div className="p-3 bg-white rounded-xl border border-amber-200 flex flex-col justify-between space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                            <span className="text-xs font-bold text-amber-900">ภาพอ้างอิงจริง (Reference / Dicut)</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300">
+                            {quickEditRefImages.length} รูป
+                          </span>
                         </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          ภาพถ่ายจริงหรือภาพไดคัทของสินค้านี้ (สามารถเลือกเพิ่มได้หลายรูปพร้อมกัน)
+                        </p>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-amber-900">ภาพอ้างอิงจริง (Reference)</div>
-                          <p className="text-[10px] text-slate-500 mt-0.5">ภาพถ่ายจริงหรือภาพไดคัทของสินค้านี้</p>
-                          {quickEditRefImg && (
-                            <button
-                              type="button"
-                              onClick={() => openSingleImagePreview(quickEditRefImg, quickEditProduct?.sku, 'ภาพอ้างอิงจริง (Reference / Dicut)')}
-                              className="text-[10px] text-amber-700 hover:text-amber-800 font-bold flex items-center gap-1 mt-1"
-                            >
-                              <Eye className="w-3 h-3 text-amber-600" />
-                              <span>ดูภาพอ้างอิง</span>
-                            </button>
+                        {/* Thumbnail Grid */}
+                        <div className="mt-2.5 min-h-[72px] p-2 bg-amber-50/40 rounded-xl border border-amber-200/80">
+                          {quickEditRefImages.length > 0 ? (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                              {quickEditRefImages.map((imgUrl, idx) => (
+                                <div
+                                  key={idx}
+                                  className="relative group aspect-square rounded-lg bg-white border border-amber-200 overflow-hidden shadow-2xs"
+                                >
+                                  <img
+                                    src={imgUrl}
+                                    alt={`Ref ${idx + 1}`}
+                                    className="w-full h-full object-cover cursor-pointer"
+                                    onClick={() =>
+                                      openSingleImagePreview(
+                                        imgUrl,
+                                        quickEditProduct?.sku,
+                                        `ภาพอ้างอิงจริง (${idx + 1}/${quickEditRefImages.length})`
+                                      )
+                                    }
+                                  />
+                                  <span className="absolute top-1 left-1 bg-amber-900/80 text-white text-[9px] font-bold px-1 rounded">
+                                    {idx + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveQuickEditRefAt(idx)}
+                                    className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-md opacity-90 hover:opacity-100 transition shadow-xs cursor-pointer"
+                                    title="ลบภาพนี้"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="h-16 flex flex-col items-center justify-center text-amber-700/60 text-[11px] gap-1">
+                              <Camera className="w-5 h-5 text-amber-400" />
+                              <span>ยังไม่มีภาพอ้างอิงจริง</span>
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Separate Buttons: เพิ่มภาพอ้างอิง VS เปลี่ยนภาพเดิม */}
+                      {/* Action Buttons: เพิ่มหลายรูป / เปลี่ยนทั้งหมด / ลบทั้งหมด */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-amber-100">
-                        {/* 1. ปุ่มเพิ่มภาพอ้างอิง */}
-                        <label className="flex-1 min-w-[105px] py-1.5 px-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
+                        {/* 1. ปุ่มเพิ่มภาพอ้างอิง (รองรับหลายรูป) */}
+                        <label className="flex-1 min-w-[110px] py-2 px-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs">
                           <Plus className="w-3.5 h-3.5" />
-                          <span>{quickEditUploadingRef ? 'กำลังโหลด...' : 'เพิ่มภาพอ้างอิง'}</span>
+                          <span>{quickEditUploadingRef ? 'กำลังอัปโหลด...' : '+ เพิ่มภาพอ้างอิง'}</span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             disabled={quickEditUploadingRef}
                             onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadQuickEditRef(f);
+                              const files = e.target.files;
+                              if (files && files.length > 0) handleUploadQuickEditRefFiles(files);
                               e.target.value = '';
                             }}
                           />
                         </label>
 
-                        {/* 2. ปุ่มเปลี่ยนภาพเดิม */}
-                        <label className="flex-1 min-w-[105px] py-1.5 px-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
+                        {/* 2. ปุ่มแทนที่ทั้งหมด */}
+                        <label className="py-2 px-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs">
                           <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{quickEditUploadingRef ? 'กำลังโหลด...' : 'เปลี่ยนภาพเดิม'}</span>
+                          <span>แทนที่ใหม่</span>
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             disabled={quickEditUploadingRef}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleUploadQuickEditRef(f);
+                            onChange={async (e) => {
+                              const files = e.target.files;
+                              if (files && files.length > 0) {
+                                handleClearAllQuickEditRef();
+                                await handleUploadQuickEditRefFiles(files);
+                              }
                               e.target.value = '';
                             }}
                           />
                         </label>
 
-                        {/* 3. ลบภาพอ้างอิง */}
-                        {quickEditRefImg && (
+                        {/* 3. ลบภาพอ้างอิงทั้งหมด */}
+                        {quickEditRefImages.length > 0 && (
                           <button
                             type="button"
-                            onClick={handleRemoveQuickEditRef}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="ลบภาพอ้างอิง"
+                            onClick={handleClearAllQuickEditRef}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                            title="ลบภาพอ้างอิงทั้งหมด"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

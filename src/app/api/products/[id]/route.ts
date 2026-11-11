@@ -37,9 +37,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
       ORDER BY display_order ASC
     `).all(params.id) as any[];
 
-    // Filter out reference image from main images if ref_image_url matches or starts with img_ref_
+    // Separate main images and reference images
+    const refImagesFromDb = images
+      .filter((img) => img.id?.startsWith('img_ref_') || (product.ref_image_url && img.image_url === product.ref_image_url))
+      .map((img) => img.image_url);
+
+    // If no ref images in table but product has ref_image_url, include it
+    const finalRefImagesList = refImagesFromDb.length > 0
+      ? refImagesFromDb
+      : (product.ref_image_url ? [product.ref_image_url] : []);
+
     const mainImages = images
-      .filter((img) => !img.id?.startsWith('img_ref_') && img.image_url !== product.ref_image_url)
+      .filter((img) => !img.id?.startsWith('img_ref_') && (!product.ref_image_url || img.image_url !== product.ref_image_url))
       .map((img) => img.image_url);
 
     const pricesList = await db.prepare(`
@@ -86,7 +95,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const baseProduct = {
       ...product,
-      images: mainImages.length > 0 ? mainImages : images.map((img) => img.image_url),
+      images: mainImages.length > 0 ? mainImages : images.filter((img) => !img.id?.startsWith('img_ref_')).map((img) => img.image_url),
+      ref_images: finalRefImagesList,
       primary_image_url: mainImages[0] || images.find((i) => i.is_primary === 1)?.image_url || null,
       prices,
     };
@@ -100,6 +110,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
       if (finalProduct.primary_image_url) finalProduct.primary_image_url = formatImageUrlToR2(finalProduct.primary_image_url);
       if (Array.isArray(finalProduct.images)) {
         finalProduct.images = finalProduct.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+      }
+      if (Array.isArray(finalProduct.ref_images)) {
+        finalProduct.ref_images = finalProduct.ref_images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+      } else if (finalProduct.ref_image_url) {
+        finalProduct.ref_images = [finalProduct.ref_image_url];
       }
     }
 
@@ -135,6 +150,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       color,
       status,
       images,
+      ref_images,
       prices,
       ref_image_url,
       ref_filename,
@@ -154,16 +170,28 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: `รหัส SKU '${sku}' ซ้ำกับสินค้าอื่นในระบบ` }, { status: 400 });
     }
 
-    // Determine final ref_image_url and ref_filename (allow explicit clearing/deletion)
+    // Determine final ref_image_url and ref_filename (allow explicit clearing/deletion or multiple ref_images)
     let finalRefImageUrl = existing.ref_image_url;
     let finalRefFilename = existing.ref_filename;
-    if (ref_image_url !== undefined) {
-      if (ref_image_url === null || ref_image_url === '' || ref_image_url === false) {
+    let finalRefImages: string[] | undefined = Array.isArray(ref_images) ? ref_images.filter((r) => r && typeof r === 'string' && r.trim()) : undefined;
+
+    if (finalRefImages !== undefined) {
+      if (finalRefImages.length === 0) {
         finalRefImageUrl = null;
         finalRefFilename = null;
       } else {
+        finalRefImageUrl = finalRefImages[0];
+        finalRefFilename = ref_filename || existing.ref_filename || `ref_${sku.trim()}_${Date.now()}.jpg`;
+      }
+    } else if (ref_image_url !== undefined) {
+      if (ref_image_url === null || ref_image_url === '' || ref_image_url === false) {
+        finalRefImageUrl = null;
+        finalRefFilename = null;
+        finalRefImages = [];
+      } else {
         finalRefImageUrl = String(ref_image_url).trim();
         finalRefFilename = ref_filename || existing.ref_filename || `ref_${sku.trim()}_${Date.now()}.jpg`;
+        finalRefImages = [finalRefImageUrl];
       }
     }
 
@@ -210,23 +238,43 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         params.id
       );
 
-      if (Array.isArray(images)) {
-        await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
-        let order = 0;
-        for (const imgUrl of images) {
-          if (imgUrl && typeof imgUrl === 'string' && imgUrl.trim()) {
-            await db.prepare(`
-              INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
-              VALUES (?, ?, ?, ?, ?)
-            `).run('img_' + crypto.randomUUID(), params.id, imgUrl.trim(), order, order === 0 ? 1 : 0);
-            order++;
+      if (Array.isArray(images) || finalRefImages !== undefined) {
+        // If images or ref_images provided, update product_images table accordingly
+        if (Array.isArray(images)) {
+          await db.prepare("DELETE FROM product_images WHERE product_id = ? AND id NOT LIKE 'img_ref_%'").run(params.id);
+          let order = 0;
+          for (const imgUrl of images) {
+            if (imgUrl && typeof imgUrl === 'string' && imgUrl.trim()) {
+              await db.prepare(`
+                INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
+                VALUES (?, ?, ?, ?, ?)
+              `).run('img_' + crypto.randomUUID(), params.id, imgUrl.trim(), order, order === 0 ? 1 : 0);
+              order++;
+            }
           }
         }
-        if (finalRefImageUrl && !images.includes(finalRefImageUrl)) {
-          await db.prepare(`
-            INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
-            VALUES (?, ?, ?, ?, 0)
-          `).run('img_ref_' + crypto.randomUUID(), params.id, finalRefImageUrl, order);
+
+        if (finalRefImages !== undefined) {
+          await db.prepare("DELETE FROM product_images WHERE product_id = ? AND id LIKE 'img_ref_%'").run(params.id);
+          let refOrder = 0;
+          for (const rUrl of finalRefImages) {
+            if (rUrl && typeof rUrl === 'string' && rUrl.trim()) {
+              await db.prepare(`
+                INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
+                VALUES (?, ?, ?, ?, 0)
+              `).run('img_ref_' + crypto.randomUUID(), params.id, rUrl.trim(), 100 + refOrder);
+              refOrder++;
+            }
+          }
+        } else if (finalRefImageUrl && Array.isArray(images) && !images.includes(finalRefImageUrl)) {
+          // If only images was updated, maintain existing ref image if not in main
+          const existingRefImages = await db.prepare("SELECT count(*) as count FROM product_images WHERE product_id = ? AND id LIKE 'img_ref_%'").get(params.id) as any;
+          if (!existingRefImages || existingRefImages.count === 0) {
+            await db.prepare(`
+              INSERT INTO product_images (id, product_id, image_url, display_order, is_primary)
+              VALUES (?, ?, ?, ?, 0)
+            `).run('img_ref_' + crypto.randomUUID(), params.id, finalRefImageUrl, 100);
+          }
         }
       }
 
@@ -307,6 +355,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           color: color || null,
           status: status || 'Published',
           ref_image_url: finalRefImageUrl,
+          ref_images: finalRefImages,
           ref_filename: finalRefFilename,
           primary_image_url: Array.isArray(images) && images.length > 0 ? images[0] : null,
           images: Array.isArray(images) ? images : undefined,
@@ -326,6 +375,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           color: color || null,
           status: status || 'Published',
           ref_image_url: finalRefImageUrl,
+          ref_images: finalRefImages,
           ref_filename: finalRefFilename,
           images: Array.isArray(images) ? images : undefined,
           prices: prices || undefined,

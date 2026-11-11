@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     const allImages = isPricingMode
       ? []
       : ((await db
-          .prepare('SELECT product_id, image_url, display_order, is_primary FROM product_images ORDER BY display_order ASC')
+          .prepare('SELECT id, product_id, image_url, display_order, is_primary FROM product_images ORDER BY display_order ASC')
           .all()) as any[]);
     const allPrices = (await db
       .prepare(`
@@ -84,14 +84,26 @@ export async function GET(request: Request) {
       .all()) as any[];
 
     const imagesByProductId = new Map<string, string[]>();
+    const refImagesByProductId = new Map<string, string[]>();
+
     for (const img of allImages) {
       if (!img.product_id || !img.image_url) continue;
-      let list = imagesByProductId.get(img.product_id);
-      if (!list) {
-        list = [];
-        imagesByProductId.set(img.product_id, list);
+      const isRef = img.id?.startsWith('img_ref_');
+      if (isRef) {
+        let rList = refImagesByProductId.get(img.product_id);
+        if (!rList) {
+          rList = [];
+          refImagesByProductId.set(img.product_id, rList);
+        }
+        rList.push(img.image_url);
+      } else {
+        let list = imagesByProductId.get(img.product_id);
+        if (!list) {
+          list = [];
+          imagesByProductId.set(img.product_id, list);
+        }
+        list.push(img.image_url);
       }
-      list.push(img.image_url);
     }
 
     const pricesByProductId = new Map<string, Record<string, number>>();
@@ -107,8 +119,10 @@ export async function GET(request: Request) {
 
     const enrichedProducts = products.map((prod) => {
       const imgUrls = [...(imagesByProductId.get(prod.id) || [])];
-      if (prod.ref_image_url && !imgUrls.includes(prod.ref_image_url)) {
-        imgUrls.unshift(prod.ref_image_url);
+      let refImgUrls = [...(refImagesByProductId.get(prod.id) || [])];
+
+      if (prod.ref_image_url && !refImgUrls.includes(prod.ref_image_url)) {
+        refImgUrls.unshift(prod.ref_image_url);
       }
       const prices = { ...(pricesByProductId.get(prod.id) || {}) };
 
@@ -116,6 +130,7 @@ export async function GET(request: Request) {
         ...prod,
         color: prod.catalog_type === 'tuulo' ? 'ตามภาพ' : prod.color || null,
         images: imgUrls,
+        ref_images: refImgUrls,
         prices,
       };
     });
@@ -169,6 +184,11 @@ export async function GET(request: Request) {
         if (p.primary_image_url) p.primary_image_url = formatImageUrlToR2(p.primary_image_url);
         if (Array.isArray(p.images)) {
           p.images = p.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+        }
+        if (Array.isArray(p.ref_images)) {
+          p.ref_images = p.ref_images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+        } else if (p.ref_image_url) {
+          p.ref_images = [p.ref_image_url];
         }
       }
     }
