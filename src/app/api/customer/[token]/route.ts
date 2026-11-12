@@ -122,20 +122,36 @@ export async function GET(request: Request, { params }: { params: { token: strin
 
     const rawProducts = (await db.prepare(productsQuery).all(...queryParams)) as any[];
 
-    // Single batch query for all product images (eliminates 310 N+1 queries)
+    // Single batch query for all product images (strictly separating main images and ref images)
     const allImages = (await db
-      .prepare('SELECT product_id, image_url FROM product_images ORDER BY display_order ASC')
+      .prepare('SELECT id, product_id, image_url FROM product_images ORDER BY display_order ASC')
       .all()) as any[];
 
     const imagesByProductId = new Map<string, string[]>();
+    const refImagesByProductId = new Map<string, string[]>();
+
     for (const img of allImages) {
       if (!img.product_id || !img.image_url) continue;
-      let list = imagesByProductId.get(img.product_id);
-      if (!list) {
-        list = [];
-        imagesByProductId.set(img.product_id, list);
+      const isRef =
+        img.id?.startsWith('img_ref_') ||
+        String(img.image_url).includes('/ref/') ||
+        String(img.image_url).includes('catalogs/ref/');
+
+      if (isRef) {
+        let rList = refImagesByProductId.get(img.product_id);
+        if (!rList) {
+          rList = [];
+          refImagesByProductId.set(img.product_id, rList);
+        }
+        rList.push(img.image_url);
+      } else {
+        let list = imagesByProductId.get(img.product_id);
+        if (!list) {
+          list = [];
+          imagesByProductId.set(img.product_id, list);
+        }
+        list.push(img.image_url);
       }
-      list.push(img.image_url);
     }
 
     const isNoPriceTier =
@@ -146,6 +162,11 @@ export async function GET(request: Request, { params }: { params: { token: strin
     // Map base products
     const products = rawProducts.map((p) => {
       const imgs = imagesByProductId.get(p.id) || [];
+      let refImgs = [...(refImagesByProductId.get(p.id) || [])];
+      if (p.ref_image_url && !refImgs.includes(p.ref_image_url)) {
+        refImgs.unshift(p.ref_image_url);
+      }
+
       const basePrice =
         !isNoPriceTier && p.price !== null && p.price !== undefined && Number(p.price) > 0
           ? Number(p.price)
@@ -160,7 +181,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
         category_name: p.category_name,
         category_slug: p.category_slug,
         sizeText: p.size_text,
-        refImageUrl: p.ref_image_url,
+        refImageUrl: refImgs.length > 0 ? refImgs[0] : (p.ref_image_url || null),
+        refImages: refImgs,
         refFilename: p.ref_filename,
         graphicFilename: p.graphic_filename,
         pageNum: p.page_num || 1,
@@ -205,9 +227,16 @@ export async function GET(request: Request, { params }: { params: { token: strin
             if (ovr.depth !== undefined) prod.depth = ovr.depth;
             if (ovr.color !== undefined) prod.color = ovr.color;
             if (ovr.ref_image_url !== undefined) prod.refImageUrl = ovr.ref_image_url;
+            if (Array.isArray(ovr.ref_images) && ovr.ref_images.length > 0) {
+              prod.refImages = ovr.ref_images;
+              prod.refImageUrl = ovr.ref_images[0];
+            }
             if (ovr.ref_filename !== undefined) prod.refFilename = ovr.ref_filename;
             if (Array.isArray(ovr.images) && ovr.images.length > 0) {
-              prod.images = ovr.images;
+              // Ensure no ref images in main images array
+              prod.images = ovr.images.filter(
+                (img: string) => !String(img).includes('/ref/') && !String(img).includes('catalogs/ref/')
+              );
             }
             if (!isNoPriceTier && currentTierCode && ovr.prices && ovr.prices[currentTierCode] !== undefined) {
               const pVal = Number(ovr.prices[currentTierCode]);
@@ -264,11 +293,19 @@ export async function GET(request: Request, { params }: { params: { token: strin
       }
     }
 
-    // Convert all images to high-speed Cloudflare R2 CDN URLs
+    // Convert all images to high-speed Cloudflare R2 CDN URLs & sanitize separation
     for (const prod of activeProducts) {
       if (prod.refImageUrl) prod.refImageUrl = formatImageUrlToR2(prod.refImageUrl);
+      if (Array.isArray(prod.refImages)) {
+        prod.refImages = prod.refImages.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+      } else if (prod.refImageUrl) {
+        prod.refImages = [prod.refImageUrl];
+      }
       if (Array.isArray(prod.images)) {
-        prod.images = prod.images.map((img: string) => formatImageUrlToR2(img)).filter(Boolean);
+        prod.images = prod.images
+          .filter((img: string) => !String(img).includes('/ref/') && !String(img).includes('catalogs/ref/'))
+          .map((img: string) => formatImageUrlToR2(img))
+          .filter(Boolean);
       }
     }
 
@@ -286,6 +323,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
         category_slug: p.category_slug,
         sizeText: p.sizeText,
         refImageUrl: p.refImageUrl,
+        refImages: p.refImages || (p.refImageUrl ? [p.refImageUrl] : []),
         refFilename: p.refFilename,
         graphicFilename: p.graphicFilename,
         pageNum: p.pageNum,
@@ -299,13 +337,13 @@ export async function GET(request: Request, { params }: { params: { token: strin
       return item;
     });
 
-    // Strategy 3: Netlify Edge CDN Caching
+    // Strategy 3: Netlify Edge CDN Caching & Realtime Freshness
     const urlObj = new URL(request.url);
     const forceRefresh = urlObj.searchParams.get('refresh') === '1' || urlObj.searchParams.has('nocache');
 
     const cacheHeader = forceRefresh
       ? 'no-store, no-cache, must-revalidate, max-age=0'
-      : 'public, max-age=60, s-maxage=180, stale-while-revalidate=86400';
+      : 'public, max-age=0, s-maxage=5, stale-while-revalidate=10';
 
     return NextResponse.json({
       success: true,

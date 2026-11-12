@@ -61,6 +61,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   const [showSocialChannels, setShowSocialChannels] = useState<boolean>(false);
   const [selectedProductModal, setSelectedProductModal] = useState<any | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<'graphic' | 'ref'>('graphic');
+  const [modalMainImgIdx, setModalMainImgIdx] = useState<number>(0);
+  const [modalRefImgIdx, setModalRefImgIdx] = useState<number>(0);
 
   // CART STATES
   const [cart, setCart] = useState<any[]>([]);
@@ -1353,18 +1355,18 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                                 title="ดาวน์โหลดภาพกราฟิกไฟล์เดิม (ความละเอียดสูง)"
                               >
                                 <Download className="w-3 h-3 text-red-600" />
-                                <span>ดาวน์โหลดภาพ</span>
+                                <span>ดาวน์โหลดภาพ{prod.images && prod.images.length > 1 ? ` (${prod.images.length})` : ''}</span>
                               </button>
 
                               {/* Reference Image Button */}
                               {hasRef && (
                                 <button
-                                  onClick={() => { setSelectedProductModal(prod); setModalActiveTab('ref'); }}
+                                  onClick={() => { setSelectedProductModal(prod); setModalActiveTab('ref'); setModalRefImgIdx(0); }}
                                   className="flex-1 py-1.5 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-semibold transition flex items-center justify-center gap-1"
                                   title="ดูภาพอ้างอิงจริง"
                                 >
                                   <Camera className="w-3 h-3 text-blue-600" />
-                                  <span>📸 ภาพอ้างอิง</span>
+                                  <span>📸 ภาพอ้างอิง{prod.refImages && prod.refImages.length > 1 ? ` (${prod.refImages.length})` : ''}</span>
                                 </button>
                               )}
                             </div>
@@ -1463,12 +1465,12 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left Column: Image Viewer with Tabs */}
+              {/* Left Column: Image Viewer with Tabs and Slider Controls */}
               <div className="space-y-3">
                 {/* Tabs */}
                 <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200">
                   <button
-                    onClick={() => setModalActiveTab('graphic')}
+                    onClick={() => { setModalActiveTab('graphic'); setModalMainImgIdx(0); }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                       modalActiveTab === 'graphic'
                         ? 'bg-white text-red-600 shadow-xs'
@@ -1477,11 +1479,16 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   >
                     <ImageIcon className="w-3.5 h-3.5" />
                     <span>ภาพสินค้า (Graphic)</span>
+                    {Array.isArray(selectedProductModal.images) && selectedProductModal.images.length > 1 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-100 text-red-700 font-mono">
+                        {selectedProductModal.images.length}
+                      </span>
+                    )}
                   </button>
 
-                  {selectedProductModal.refImageUrl && (
+                  {(selectedProductModal.refImageUrl || (Array.isArray(selectedProductModal.refImages) && selectedProductModal.refImages.length > 0)) && (
                     <button
-                      onClick={() => setModalActiveTab('ref')}
+                      onClick={() => { setModalActiveTab('ref'); setModalRefImgIdx(0); }}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                         modalActiveTab === 'ref'
                           ? 'bg-white text-blue-600 shadow-xs'
@@ -1490,48 +1497,141 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     >
                       <Camera className="w-3.5 h-3.5" />
                       <span>📸 ภาพอ้างอิงจริง</span>
+                      {Array.isArray(selectedProductModal.refImages) && selectedProductModal.refImages.length > 1 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700 font-mono">
+                          {selectedProductModal.refImages.length}
+                        </span>
+                      )}
                     </button>
                   )}
                 </div>
 
-                {/* Displayed Image */}
-                <div className="relative aspect-square bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center">
-                  <img
-                    src={
-                      modalActiveTab === 'ref' && selectedProductModal.refImageUrl
-                        ? selectedProductModal.refImageUrl
-                        : (selectedProductModal.images?.[0] || selectedProductModal.refImageUrl)
+                {/* Main Image Slider View */}
+                {(() => {
+                  const isRefTab = modalActiveTab === 'ref';
+                  const currentImgs: string[] = isRefTab
+                    ? (Array.isArray(selectedProductModal.refImages) && selectedProductModal.refImages.length > 0
+                        ? selectedProductModal.refImages
+                        : (selectedProductModal.refImageUrl ? [selectedProductModal.refImageUrl] : []))
+                    : (Array.isArray(selectedProductModal.images) && selectedProductModal.images.length > 0
+                        ? selectedProductModal.images
+                        : (selectedProductModal.refImageUrl ? [selectedProductModal.refImageUrl] : []));
+
+                  const totalImgs = currentImgs.length;
+                  const currentIdx = isRefTab
+                    ? Math.min(Math.max(0, modalRefImgIdx), Math.max(0, totalImgs - 1))
+                    : Math.min(Math.max(0, modalMainImgIdx), Math.max(0, totalImgs - 1));
+                  const displayUrl = currentImgs[currentIdx] || null;
+
+                  const handlePrevImg = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (isRefTab) {
+                      setModalRefImgIdx((prev) => (prev > 0 ? prev - 1 : totalImgs - 1));
+                    } else {
+                      setModalMainImgIdx((prev) => (prev > 0 ? prev - 1 : totalImgs - 1));
                     }
-                    alt={selectedProductModal.name}
-                    className="w-full h-full object-contain p-2"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
+                  };
 
-                {/* Download Actions */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => downloadFile(
-                      selectedProductModal.images?.[0] || selectedProductModal.refImageUrl,
-                      selectedProductModal.graphicFilename
-                    )}
-                    className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition"
-                  >
-                    <Download className="w-3.5 h-3.5 text-red-600" />
-                    <span>เซฟภาพกราฟิก</span>
-                  </button>
+                  const handleNextImg = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (isRefTab) {
+                      setModalRefImgIdx((prev) => (prev < totalImgs - 1 ? prev + 1 : 0));
+                    } else {
+                      setModalMainImgIdx((prev) => (prev < totalImgs - 1 ? prev + 1 : 0));
+                    }
+                  };
 
-                  {selectedProductModal.refImageUrl && (
-                    <button
-                      onClick={() => downloadFile(selectedProductModal.refImageUrl, selectedProductModal.refFilename)}
-                      className="flex-1 py-2 px-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-xs font-semibold text-blue-700 flex items-center justify-center gap-1.5 transition"
-                    >
-                      <Download className="w-3.5 h-3.5 text-blue-600" />
-                      <span>เซฟภาพอ้างอิง</span>
-                    </button>
-                  )}
-                </div>
+                  return (
+                    <div className="space-y-3">
+                      <div className="relative aspect-square bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center select-none group">
+                        {displayUrl ? (
+                          <img
+                            src={displayUrl}
+                            alt={`${selectedProductModal.name} - รูปที่ ${currentIdx + 1}`}
+                            className="w-full h-full object-contain p-2"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <Package className="w-16 h-16 text-slate-300" />
+                        )}
+
+                        {/* Navigation Arrows if > 1 images */}
+                        {totalImgs > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handlePrevImg}
+                              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-red-600 shadow-lg border border-slate-200 flex items-center justify-center transition-all transform hover:scale-105 active:scale-95 z-10 cursor-pointer"
+                              title="รูปก่อนหน้า"
+                              aria-label="Previous image"
+                            >
+                              <ChevronLeft className="w-6 h-6 stroke-[2.5]" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleNextImg}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/95 hover:bg-white text-slate-800 hover:text-red-600 shadow-lg border border-slate-200 flex items-center justify-center transition-all transform hover:scale-105 active:scale-95 z-10 cursor-pointer"
+                              title="รูปถัดไป"
+                              aria-label="Next image"
+                            >
+                              <ChevronRight className="w-6 h-6 stroke-[2.5]" />
+                            </button>
+
+                            {/* Floating Counter Badge */}
+                            <div className="absolute top-3 right-3 px-3 py-1 bg-black/70 backdrop-blur-xs text-white rounded-full text-xs font-bold tracking-wide shadow-md flex items-center gap-1.5 z-10">
+                              <span className={`w-2 h-2 rounded-full animate-pulse ${isRefTab ? 'bg-blue-400' : 'bg-red-400'}`}></span>
+                              <span>{isRefTab ? 'ภาพอ้างอิง' : 'รูปที่'} {currentIdx + 1} / {totalImgs}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Thumbnail Strip if > 1 images */}
+                      {totalImgs > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 custom-scrollbar">
+                          {currentImgs.map((thumbUrl, idx) => {
+                            const isCurrent = idx === currentIdx;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  if (isRefTab) setModalRefImgIdx(idx);
+                                  else setModalMainImgIdx(idx);
+                                }}
+                                className={`relative w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition-all ${
+                                  isCurrent
+                                    ? (isRefTab ? 'border-blue-600 ring-2 ring-blue-300' : 'border-red-600 ring-2 ring-red-300')
+                                    : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
+                                }`}
+                              >
+                                <img src={thumbUrl} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                                <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[8px] font-bold px-1 rounded-tl">
+                                  {idx + 1}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Download Actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => downloadFile(
+                            displayUrl || selectedProductModal.images?.[0] || selectedProductModal.refImageUrl,
+                            `${selectedProductModal.sku}_${isRefTab ? 'ref' : 'graphic'}_${currentIdx + 1}.jpg`
+                          )}
+                          className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition"
+                        >
+                          <Download className="w-3.5 h-3.5 text-red-600" />
+                          <span>ดาวน์โหลดรูปนี้</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right Column: Specifications & Strict Pricing */}

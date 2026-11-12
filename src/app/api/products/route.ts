@@ -88,7 +88,7 @@ export async function GET(request: Request) {
 
     for (const img of allImages) {
       if (!img.product_id || !img.image_url) continue;
-      const isRef = img.id?.startsWith('img_ref_');
+      const isRef = img.id?.startsWith('img_ref_') || String(img.image_url).includes('/ref/') || String(img.image_url).includes('catalogs/ref/');
       if (isRef) {
         let rList = refImagesByProductId.get(img.product_id);
         if (!rList) {

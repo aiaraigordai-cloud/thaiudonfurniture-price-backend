@@ -37,9 +37,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
       ORDER BY display_order ASC
     `).all(params.id) as any[];
 
-    // Separate main images and reference images
+    // Separate main images and reference images (strictly isolate /ref/ paths)
     const refImagesFromDb = images
-      .filter((img) => img.id?.startsWith('img_ref_') || (product.ref_image_url && img.image_url === product.ref_image_url))
+      .filter((img) => img.id?.startsWith('img_ref_') || (product.ref_image_url && img.image_url === product.ref_image_url) || String(img.image_url).includes('/ref/') || String(img.image_url).includes('catalogs/ref/'))
       .map((img) => img.image_url);
 
     // If no ref images in table but product has ref_image_url, include it
@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       : (product.ref_image_url ? [product.ref_image_url] : []);
 
     const mainImages = images
-      .filter((img) => !img.id?.startsWith('img_ref_') && (!product.ref_image_url || img.image_url !== product.ref_image_url))
+      .filter((img) => !img.id?.startsWith('img_ref_') && (!product.ref_image_url || img.image_url !== product.ref_image_url) && !String(img.image_url).includes('/ref/') && !String(img.image_url).includes('catalogs/ref/'))
       .map((img) => img.image_url);
 
     const pricesList = await db.prepare(`
