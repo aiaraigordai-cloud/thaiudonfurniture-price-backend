@@ -569,18 +569,6 @@
     "deleted": true,
     "updated_at": "2026-11-12T03:06:07.135Z"
   },
-  "prod_tuulo_TD-995": {
-    "id": "prod_tuulo_TD-995",
-    "sku": "TD-995",
-    "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
-  },
-  "TD-995": {
-    "id": "prod_tuulo_TD-995",
-    "sku": "TD-995",
-    "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
-  },
   "prod_7e6d29f6-00ea-4033-aa86-2a6724973b2e": {
     "id": "prod_7e6d29f6-00ea-4033-aa86-2a6724973b2e",
     "sku": "TD-1784",

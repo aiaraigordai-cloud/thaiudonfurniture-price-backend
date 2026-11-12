@@ -57,12 +57,46 @@ export async function POST(request: Request) {
         const targetTier = item.price_tier || price_tier || 'SALE_PRICE';
 
         if (existing) {
-          // สินค้ามีอยู่แล้วในระบบ: ไม่ต้องเพิ่มเป็นสินค้าใหม่ อัปเดตเฉพาะเวลาซิงค์และเพิ่มเฉพาะราคาที่เลือกไว้เท่านั้น
+          // สินค้ามีอยู่แล้วในระบบ (หรือเคยถูกลบไว้): คืนสถานะกลับมาใช้งานใหม่อัตโนมัติ (Auto-Restore)
+          const resolvedCatId = item.category_id && validCatIds.has(item.category_id) ? item.category_id : null;
+
           await db.prepare(`
             UPDATE products
-            SET updated_at = datetime('now')
+            SET 
+              name = COALESCE(?, name),
+              description = CASE WHEN ? != '' THEN ? ELSE description END,
+              category_id = COALESCE(?, category_id),
+              status = 'Published',
+              ref_image_url = COALESCE(?, ref_image_url),
+              updated_at = datetime('now')
             WHERE id = ?
-          `).run(productId);
+          `).run(name, item.description || '', item.description || '', resolvedCatId, imageUrl, productId);
+
+          if (imageUrl) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO product_images (id, product_id, image_url, display_order, is_primary, created_at)
+              VALUES (
+                COALESCE((SELECT id FROM product_images WHERE product_id = ? AND display_order = 0), ?),
+                ?, ?, 0, 1, datetime('now')
+              )
+            `).run(productId, 'img_' + crypto.randomUUID(), productId, imageUrl);
+          }
+
+          // Un-delete explicitly in persistent store
+          const existingOverrideData: Partial<ProductOverride> = {
+            id: productId,
+            sku,
+            deleted: false,
+            status: 'Published',
+            updated_at: new Date().toISOString(),
+          };
+          if (name) existingOverrideData.name = name;
+          if (item.description) existingOverrideData.description = item.description;
+          if (resolvedCatId) existingOverrideData.category_id = resolvedCatId;
+          if (imageUrl) {
+            existingOverrideData.primary_image_url = imageUrl;
+            existingOverrideData.images = [imageUrl];
+          }
 
           const rawVal = item.prices?.[targetTier];
           const numVal = rawVal !== '' && rawVal !== null && rawVal !== undefined ? Number(rawVal) : NaN;
@@ -87,19 +121,16 @@ export async function POST(request: Request) {
               reason: `อัปเดตราคาจากการนำเข้ารูปภาพแคตตาล็อก (${sku})`,
             });
 
-            overridesToSave.push({
-              id: productId,
-              sku,
-              prices: { [targetTier]: numVal },
-              updated_at: new Date().toISOString(),
-            });
-
-            supaProductsToSync.push({
-              id: productId,
-              sku,
-              prices: { [targetTier]: numVal },
-            });
+            existingOverrideData.prices = { [targetTier]: numVal };
           }
+
+          overridesToSave.push(existingOverrideData);
+          supaProductsToSync.push({
+            id: productId,
+            sku,
+            status: 'Published',
+            ...(existingOverrideData.prices ? { prices: existingOverrideData.prices } : {}),
+          });
 
           updatedCount++;
         } else {
