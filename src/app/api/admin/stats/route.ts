@@ -15,17 +15,28 @@ export async function GET() {
 
     const db = getDb();
 
-    // 1. Single aggregate query for all KPI stats
+    // 1. Single aggregate query for other KPI stats
     const kpiRow = (await db
       .prepare(`
       SELECT 
-        (SELECT COUNT(*) FROM products) as total_products,
-        (SELECT COUNT(*) FROM products WHERE status = 'Published') as published_products,
         (SELECT COUNT(*) FROM categories) as categories_count,
         (SELECT COUNT(*) FROM share_links) as share_links_count,
         (SELECT COUNT(*) FROM price_import_batches) as total_batches
     `)
       .get()) as any;
+
+    // Calculate authoritative product counts matching /api/products exactly across entire system
+    const allBaseline = (await db.prepare('SELECT id, sku, catalog_type, status FROM products').all()) as any[];
+    let allActive = allBaseline;
+    try {
+      const overrides = await loadProductOverrides();
+      allActive = applyProductOverrides(allBaseline, overrides);
+    } catch {}
+
+    const totalActiveCount = allActive.length;
+    const publishedActiveCount = allActive.filter((p) => p.status === 'Published').length;
+    const tuuloActiveCount = allActive.filter((p) => p.catalog_type === 'tuulo').length;
+    const kdActiveCount = allActive.filter((p) => p.catalog_type === 'knockdown').length;
 
     // 2. Fetch only top 8 recent products for dashboard preview
     const recentRaw = (await db
@@ -139,11 +150,18 @@ export async function GET() {
       {
         success: true,
         stats: {
-          totalProducts: kpiRow?.total_products || 310,
-          publishedProducts: kpiRow?.published_products || 310,
+          totalProducts: totalActiveCount,
+          publishedProducts: publishedActiveCount,
+          tuuloProducts: tuuloActiveCount,
+          knockdownProducts: kdActiveCount,
           categoriesCount: kpiRow?.categories_count || 12,
           shareLinksCount: Math.max(kpiRow?.share_links_count || 15, 15),
           totalBatches: kpiRow?.total_batches || 0,
+        },
+        counts: {
+          all: totalActiveCount,
+          tuulo: tuuloActiveCount,
+          knockdown: kdActiveCount,
         },
         recentProducts,
         priceTiers: tierRows,

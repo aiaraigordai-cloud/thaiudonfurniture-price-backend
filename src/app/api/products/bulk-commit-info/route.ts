@@ -54,6 +54,7 @@ export async function POST(request: Request) {
       const updateProductStmt = db.prepare(`
         UPDATE products
         SET 
+          sku = COALESCE(?, sku),
           name = COALESCE(?, name),
           description = COALESCE(?, description),
           category_id = COALESCE(?, category_id),
@@ -118,7 +119,10 @@ export async function POST(request: Request) {
         const newPage = row.new_page_num ? parseInt(String(row.new_page_num)) : null;
         const newRefImg = row.new_ref_image_url ? String(row.new_ref_image_url).trim() : null;
 
+        const newSku = row.new_sku && String(row.new_sku).trim() ? String(row.new_sku).trim().toUpperCase() : null;
+
         updateProductStmt.run(
+          newSku,
           newName,
           newDesc,
           newCatId,
@@ -131,7 +135,7 @@ export async function POST(request: Request) {
 
         overridesToSave.push({
           id: prod.id,
-          sku: prod.sku,
+          sku: newSku || prod.sku,
           name: newName || prod.name,
           description: newDesc !== null ? newDesc : prod.description,
           category_id: newCatId || prod.category_id,

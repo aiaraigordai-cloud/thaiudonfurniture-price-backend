@@ -159,7 +159,7 @@ export default function BulkPriceUpdatePage() {
 
   const toggleRowSelect = (id: string, status: string) => {
     const row = rows.find((r) => r.id === id);
-    if (!row || row.new_price === null || row.new_price <= 0) {
+    if (!row || row.new_price === null || row.new_price < 0 || isNaN(row.new_price)) {
       alert('กรุณากรอกราคาใหม่ที่ถูกต้องก่อนเลือกอนุมัติรายการนี้');
       return;
     }
@@ -175,7 +175,7 @@ export default function BulkPriceUpdatePage() {
   const handleApproveSingleRow = (id: string) => {
     const target = rows.find((r) => r.id === id);
     if (!target) return;
-    if (target.new_price === null || target.new_price <= 0) {
+    if (target.new_price === null || target.new_price < 0 || isNaN(target.new_price)) {
       alert('กรุณากรอกราคาใหม่ที่ถูกต้องก่อนอนุมัติ');
       return;
     }
@@ -214,7 +214,7 @@ export default function BulkPriceUpdatePage() {
     let approvedCount = 0;
 
     const nextRows = rows.map((r) => {
-      if (r.new_price !== null && r.new_price > 0 && r.detected_sku) {
+      if (r.new_price !== null && r.new_price >= 0 && !isNaN(r.new_price) && r.detected_sku) {
         nextSelected.add(r.id);
         approvedCount++;
         return {
@@ -693,7 +693,7 @@ export default function BulkPriceUpdatePage() {
                   การอัปเดตหนึ่ง Batch จะเขียนข้อมูลเฉพาะ Price Tier ที่เลือกเท่านั้น
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
                   {priceTiers.map((tier) => (
                     <label
                       key={tier.id}
@@ -717,6 +717,32 @@ export default function BulkPriceUpdatePage() {
                       <div className="text-[11px] text-slate-600 mt-2">{tier.description || '-'}</div>
                     </label>
                   ))}
+
+                  {/* 5th Tier: ALL 4 TIERS */}
+                  <label
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                      selectedTierId === 'ALL_4_TIERS'
+                        ? 'border-emerald-600 bg-emerald-50/70 shadow-sm ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-xs text-emerald-950 flex items-center gap-1">
+                        <span>🔥 ทั้งหมด 4 ระดับ</span>
+                      </span>
+                      <input
+                        type="radio"
+                        name="tier_select"
+                        checked={selectedTierId === 'ALL_4_TIERS'}
+                        onChange={() => setSelectedTierId('ALL_4_TIERS')}
+                        className="text-emerald-600 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="text-[10px] font-mono text-emerald-700 font-bold uppercase">ALL_4_TIERS</div>
+                    <div className="text-[11px] text-slate-600 mt-2">
+                      อัปเดตทั้ง 4 ระดับพร้อมกัน (เซลล์, ปลีก, VIP, ทั่วไป) ในไฟล์เดียว
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -801,39 +827,163 @@ export default function BulkPriceUpdatePage() {
           {batchData && !commitResult && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
-                  <div className="text-[11px] text-slate-500">ข้อมูลทั้งหมดในไฟล์</div>
-                  <div className="text-xl font-bold text-slate-900 mt-1">{batchData.totalRows} แถว</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">{batchData.filename}</div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('ALL')}
+                  className={`text-left p-4 rounded-2xl border transition shadow-xs cursor-pointer ${
+                    filterTab === 'ALL'
+                      ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-900 ring-offset-2'
+                      : 'bg-white text-slate-900 border-slate-200/80 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className={`text-[11px] ${filterTab === 'ALL' ? 'text-slate-300' : 'text-slate-500'}`}>ข้อมูลทั้งหมดในไฟล์</div>
+                  <div className="text-xl font-bold mt-1">{batchData.totalRows} แถว</div>
+                  <div className={`text-[10px] truncate mt-0.5 ${filterTab === 'ALL' ? 'text-slate-400' : 'text-slate-400'}`}>
+                    {filterTab === 'ALL' ? '● กำลังแสดงทั้งหมด' : batchData.filename}
+                  </div>
+                </button>
 
-                <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
-                  <div className="text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('PASS')}
+                  className={`text-left p-4 rounded-2xl border transition shadow-xs cursor-pointer ${
+                    filterTab === 'PASS'
+                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500 ring-offset-2'
+                      : 'bg-emerald-50/60 text-emerald-950 border-emerald-200 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  <div className={`text-[11px] font-semibold flex items-center gap-1.5 ${filterTab === 'PASS' ? 'text-white' : 'text-emerald-800'}`}>
+                    <CheckCircle2 className={`w-4 h-4 ${filterTab === 'PASS' ? 'text-white' : 'text-emerald-600'}`} />
                     PASS (ตรงรหัส 100%)
                   </div>
-                  <div className="text-xl font-bold text-emerald-700 mt-1">{batchData.passedRows} รายการ</div>
-                  <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                    ✓ Auto-selected อัตโนมัติแล้ว
+                  <div className={`text-xl font-bold mt-1 ${filterTab === 'PASS' ? 'text-white' : 'text-emerald-700'}`}>{batchData.passedRows} รายการ</div>
+                  <div className={`text-[10px] font-semibold mt-0.5 ${filterTab === 'PASS' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+                    {filterTab === 'PASS' ? '● กำลังกรองเฉพาะตรงรหัส' : '✓ Auto-selected อัตโนมัติแล้ว'}
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
-                  <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('NEEDS_REVIEW')}
+                  className={`text-left p-4 rounded-2xl border transition shadow-xs cursor-pointer ${
+                    filterTab === 'NEEDS_REVIEW'
+                      ? 'bg-amber-600 text-white border-amber-600 ring-2 ring-amber-500 ring-offset-2'
+                      : 'bg-amber-50/60 text-amber-950 border-amber-200 hover:bg-amber-100/60'
+                  }`}
+                >
+                  <div className={`text-[11px] font-semibold flex items-center gap-1.5 ${filterTab === 'NEEDS_REVIEW' ? 'text-white' : 'text-amber-800'}`}>
+                    <AlertTriangle className={`w-4 h-4 ${filterTab === 'NEEDS_REVIEW' ? 'text-white' : 'text-amber-600'}`} />
                     NEEDS_REVIEW
                   </div>
-                  <div className="text-xl font-bold text-amber-700 mt-1">{batchData.reviewRows} รายการ</div>
-                  <div className="text-[10px] text-amber-600 mt-0.5">จับคู่ด้วยชื่อ/รหัสใกล้เคียง</div>
+                  <div className={`text-xl font-bold mt-1 ${filterTab === 'NEEDS_REVIEW' ? 'text-white' : 'text-amber-700'}`}>{batchData.reviewRows} รายการ</div>
+                  <div className={`text-[10px] mt-0.5 ${filterTab === 'NEEDS_REVIEW' ? 'text-amber-100' : 'text-amber-600'}`}>
+                    {filterTab === 'NEEDS_REVIEW' ? '● กำลังกรองต้องตรวจสอบ' : 'ราคาเปลี่ยน >60% / ตรงชื่อ'}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('FAILED')}
+                  className={`text-left p-4 rounded-2xl border transition shadow-xs cursor-pointer ${
+                    filterTab === 'FAILED'
+                      ? 'bg-red-600 text-white border-red-600 ring-2 ring-red-500 ring-offset-2'
+                      : 'bg-red-50/60 text-red-950 border-red-200 hover:bg-red-100/60'
+                  }`}
+                >
+                  <div className={`text-[11px] font-semibold flex items-center gap-1.5 ${filterTab === 'FAILED' ? 'text-white' : 'text-red-800'}`}>
+                    <XCircle className={`w-4 h-4 ${filterTab === 'FAILED' ? 'text-white' : 'text-red-600'}`} />
+                    FAILED (ไม่มีในระบบ)
+                  </div>
+                  <div className={`text-xl font-bold mt-1 ${filterTab === 'FAILED' ? 'text-white' : 'text-red-700'}`}>{batchData.failedRows} รายการ</div>
+                  <div className={`text-[10px] mt-0.5 ${filterTab === 'FAILED' ? 'text-red-100' : 'text-red-600'}`}>
+                    {filterTab === 'FAILED' ? '● กำลังกรองไม่มีในฐานข้อมูล' : 'ไม่มีรหัสในระบบหรือพิมพ์ผิด'}
+                  </div>
+                </button>
+              </div>
+
+              {/* Table Filter Tabs & Quick Action Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                  <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+                    <Filter className="w-3.5 h-3.5" /> ตัวกรอง:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('ALL')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                      filterTab === 'ALL'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    ทั้งหมด ({rows.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('PASS')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      filterTab === 'PASS'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                    ผ่านเกณฑ์ ({batchData.passedRows})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('NEEDS_REVIEW')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      filterTab === 'NEEDS_REVIEW'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    ต้องตรวจสอบ ({batchData.reviewRows})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('FAILED')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                      filterTab === 'FAILED'
+                        ? 'bg-red-600 text-white'
+                        : 'bg-red-50 text-red-800 hover:bg-red-100 border border-red-200'
+                    }`}
+                  >
+                    <XCircle className="w-3 h-3" />
+                    ไม่มีในระบบ ({batchData.failedRows})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterTab('SELECTED')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                      filterTab === 'SELECTED'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200'
+                    }`}
+                  >
+                    ☑️ เลือกแล้ว ({selectedRowIds.size})
+                  </button>
                 </div>
 
-                <div className="bg-red-50/60 p-4 rounded-2xl border border-red-200 shadow-xs">
-                  <div className="text-[11px] font-semibold text-red-800 flex items-center gap-1.5">
-                    <XCircle className="w-4 h-4 text-red-600" />
-                    FAILED (ไม่ผ่าน)
-                  </div>
-                  <div className="text-xl font-bold text-red-700 mt-1">{batchData.failedRows} รายการ</div>
-                  <div className="text-[10px] text-red-600 mt-0.5">ไม่พบรหัสหรือราคาผิดพลาด</div>
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleApproveAndSelectAll}
+                    className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                    title="เลือกทุกรายการที่มีรหัสและราคาถูกต้อง"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                    เลือกทั้งหมดที่ผ่าน
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRowIds(new Set())}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                  >
+                    ล้างการเลือก
+                  </button>
                 </div>
               </div>
 
@@ -891,9 +1041,17 @@ export default function BulkPriceUpdatePage() {
                         <th className="px-3 py-3.5 w-12 text-center">#</th>
                         <th className="px-4 py-3.5 font-bold text-slate-900">รหัสสินค้า (SKU)</th>
                         <th className="px-4 py-3.5">ชื่อสินค้า</th>
-                        <th className="px-4 py-3.5 text-right">ราคาเดิม</th>
-                        <th className="px-4 py-3.5 text-right font-bold text-emerald-700">ราคาใหม่</th>
-                        <th className="px-4 py-3.5 text-right">ส่วนต่าง</th>
+                        {batchData?.priceTier?.id === 'ALL_4_TIERS' ? (
+                          <th className="px-4 py-3.5 font-bold text-emerald-800 min-w-[340px]">
+                            ราคาทั้ง 4 ระดับ (เซลล์ • ปลีก • VIP • ทั่วไป)
+                          </th>
+                        ) : (
+                          <>
+                            <th className="px-4 py-3.5 text-right">ราคาเดิม</th>
+                            <th className="px-4 py-3.5 text-right font-bold text-emerald-700">ราคาใหม่</th>
+                            <th className="px-4 py-3.5 text-right">ส่วนต่าง</th>
+                          </>
+                        )}
                         <th className="px-4 py-3.5 text-center">สถานะ</th>
                         <th className="px-4 py-3.5">คำอธิบาย</th>
                       </tr>
@@ -915,21 +1073,54 @@ export default function BulkPriceUpdatePage() {
                             <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
                             <td className="px-4 py-3.5 font-mono font-bold text-slate-900">{r.detected_sku}</td>
                             <td className="px-4 py-3.5 text-slate-700 truncate max-w-xs">{r.detected_product_name}</td>
-                            <td className="px-4 py-3.5 text-right font-mono text-slate-500">
-                              {r.old_price ? `฿${r.old_price.toLocaleString()}` : '-'}
-                            </td>
-                            <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
-                              {r.new_price ? `฿${r.new_price.toLocaleString()}` : '-'}
-                            </td>
-                            <td className="px-4 py-3.5 text-right font-mono">
-                              {diff !== null ? (
-                                <span className={diff >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
-                                  {diff >= 0 ? `+฿${diff.toLocaleString()}` : `-฿${Math.abs(diff).toLocaleString()}`}
-                                </span>
-                              ) : (
-                                '-'
-                              )}
-                            </td>
+                            {batchData?.priceTier?.id === 'ALL_4_TIERS' ? (
+                              <td className="px-4 py-3.5 font-mono text-[11px]">
+                                {(r as any).prices_4_tiers ? (
+                                  <div className="flex flex-wrap gap-1 items-center">
+                                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                                      เซลล์: {(r as any).prices_4_tiers.tier_sale > 0 ? `฿${(r as any).prices_4_tiers.tier_sale.toLocaleString()}` : '-'}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                                      ปลีก: {(r as any).prices_4_tiers.tier_retail > 0 ? `฿${(r as any).prices_4_tiers.tier_retail.toLocaleString()}` : '-'}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200">
+                                      VIP: {(r as any).prices_4_tiers.tier_vip > 0 ? `฿${(r as any).prices_4_tiers.tier_vip.toLocaleString()}` : '-'}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                      ทั่วไป: {(r as any).prices_4_tiers.tier_general > 0 ? `฿${(r as any).prices_4_tiers.tier_general.toLocaleString()}` : '-'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="font-bold text-emerald-700">
+                                    {r.new_price !== null && r.new_price > 0 ? `฿${r.new_price.toLocaleString()} (ทั้ง 4 ระดับ)` : 'ไม่มีราคา (-) ทั้ง 4 ระดับ'}
+                                  </span>
+                                )}
+                              </td>
+                            ) : (
+                              <>
+                                <td className="px-4 py-3.5 text-right font-mono text-slate-500">
+                                  {r.old_price !== null && r.old_price > 0 ? `฿${r.old_price.toLocaleString()}` : '-'}
+                                </td>
+                                <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-700">
+                                  {r.new_price !== null && r.new_price > 0 ? (
+                                    `฿${r.new_price.toLocaleString()}`
+                                  ) : r.new_price === 0 ? (
+                                    <span className="text-slate-400 font-normal">ไม่มีราคา (-)</span>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </td>
+                                <td className="px-4 py-3.5 text-right font-mono">
+                                  {diff !== null && r.new_price !== null && r.new_price > 0 && r.old_price && r.old_price > 0 ? (
+                                    <span className={diff >= 0 ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                      {diff >= 0 ? `+฿${diff.toLocaleString()}` : `-฿${Math.abs(diff).toLocaleString()}`}
+                                    </span>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </td>
+                              </>
+                            )}
                             <td className="px-4 py-3.5 text-center">
                               <span
                                 className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -943,10 +1134,23 @@ export default function BulkPriceUpdatePage() {
                                 {r.validation_status === 'PASS' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
                                 {r.validation_status === 'NEEDS_REVIEW' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
                                 {r.validation_status === 'FAILED' && <XCircle className="w-3 h-3 text-red-600" />}
-                                {r.validation_status}
+                                {r.validation_status === 'PASS' ? 'ผ่านเกณฑ์' : r.validation_status === 'NEEDS_REVIEW' ? 'ต้องตรวจสอบ' : 'ไม่มีในระบบ/ไม่ผ่าน'}
                               </span>
                             </td>
-                            <td className="px-4 py-3.5 text-slate-500 text-[11px]">{r.warning_reason || '✓ ตรงรหัสสินค้า'}</td>
+                            <td className="px-4 py-3.5 text-[11px]">
+                              {r.warning_reason?.includes('ไม่มีรหัสสินค้านี้ในฐานข้อมูล') ? (
+                                <span className="text-red-600 font-medium flex items-center gap-1">
+                                  <XCircle className="w-3.5 h-3.5 flex-shrink-0 text-red-500" />
+                                  {r.warning_reason}
+                                </span>
+                              ) : r.warning_reason?.includes('ราคาในไฟล์เป็น 0') ? (
+                                <span className="text-slate-600 font-medium">
+                                  {r.warning_reason}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">{r.warning_reason || '✓ ตรงรหัสสินค้า'}</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
@@ -1037,7 +1241,7 @@ export default function BulkPriceUpdatePage() {
                     </span>
                   </h3>
                   <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
-                    โหมดนี้ออกแบบมาเพื่อ <strong>อัปเดตเฉพาะข้อมูลรายละเอียดสินค้าเท่านั้น</strong> (เช่น ชื่อสินค้า, หมวดหมู่, ขนาด, สี, รายละเอียดสินค้า, และรูปภาพ) โดยระบบจะไม่ไปแตะต้องหรือแก้ไขราคาเดิมทั้ง 4 ระดับ (ราคาเซลล์, ราคาปลีก, ราคา VIP, ราคาทั่วไป) อย่างเด็ดขาด
+                    โหมดนี้ออกแบบมาเพื่อ <strong>อัปเดตเฉพาะข้อมูลสินค้า 3 ส่วนหลักเท่านั้น ได้แก่: รหัสสินค้า (SKU), ชื่อสินค้า, และ รายละเอียดสินค้า</strong> โดยระบบจะไม่ไปแตะต้องหรือแก้ไขราคาเดิมทั้ง 4 ระดับ (ราคาเซลล์, ราคาปลีก, ราคา VIP, ราคาทั่วไป) อย่างเด็ดขาด
                   </p>
                 </div>
               </div>
@@ -1061,7 +1265,7 @@ export default function BulkPriceUpdatePage() {
                   >
                     <div>
                       <div className="font-bold text-xs text-slate-900">🌐 ทุกแคตตาล็อก (สินค้าทั้งหมด)</div>
-                      <div className="text-[11px] text-slate-500 mt-1">อัปเดตข้อมูลทั้งตู้โลและน็อคดาวน์ (310 รายการ)</div>
+                      <div className="text-[11px] text-slate-500 mt-1">อัปเดตข้อมูลทั้งตู้โลและน็อคดาวน์ (268 รายการ)</div>
                     </div>
                     <input
                       type="radio"
@@ -1080,7 +1284,7 @@ export default function BulkPriceUpdatePage() {
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (121 รายการ)</div>
+                      <div className="font-bold text-xs text-slate-900">🚪 แคตตาล็อกตู้โล (111 รายการ)</div>
                       <div className="text-[11px] text-slate-500 mt-1">ตู้กับข้าว ตู้โชว์ เคาน์เตอร์ครัว ตู้พระ</div>
                     </div>
                     <input
@@ -1100,7 +1304,7 @@ export default function BulkPriceUpdatePage() {
                     }`}
                   >
                     <div>
-                      <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (189 รายการ)</div>
+                      <div className="font-bold text-xs text-slate-900">🛏️ แคตตาล็อกน็อคดาวน์ (157 รายการ)</div>
                       <div className="text-[11px] text-slate-500 mt-1">ชุดห้องนอน เตียง ตู้เสื้อผ้า โต๊ะแป้ง</div>
                     </div>
                     <input
@@ -1132,7 +1336,7 @@ export default function BulkPriceUpdatePage() {
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-md mx-auto">
                     รองรับไฟล์ <strong>Excel (.xlsx, .xls)</strong> หรือ <strong>CSV (.csv)</strong><br />
-                    ระบบจะใช้รหัสสินค้า (SKU) ในไฟล์เพื่อค้นหาและอัปเดตข้อมูลสินค้าที่ตรงกัน
+                    ใช้ข้อมูลเฉพาะ 3 ส่วนเท่านั้น: <strong>รหัสสินค้า (SKU)</strong>, <strong>ชื่อสินค้า</strong>, และ <strong>รายละเอียดสินค้า</strong> (🔒 ราคาเดิมปลอดภัย 100%)
                   </p>
                   <input
                     type="file"
@@ -1240,7 +1444,7 @@ export default function BulkPriceUpdatePage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 mt-1">
-                    ระบบจะอัปเดตเฉพาะชื่อสินค้า, หมวดหมู่, ขนาด, สี, รายละเอียด และบันทึกลง Supabase แบบ Real-time
+                    ระบบจะอัปเดตเฉพาะรหัสสินค้า (SKU), ชื่อสินค้า, และรายละเอียดสินค้าเท่านั้น โดยราคาเดิมทั้ง 4 ระดับคงเดิมปลอดภัย 100%
                   </p>
                 </div>
 
@@ -1317,19 +1521,17 @@ export default function BulkPriceUpdatePage() {
                         <th className="px-3 py-3.5 w-12 text-center">#</th>
                         <th className="px-4 py-3.5 font-bold text-slate-900">รหัสสินค้า (SKU)</th>
                         <th className="px-4 py-3.5 min-w-[200px]">ชื่อสินค้า (เดิม ➔ ใหม่)</th>
-                        <th className="px-4 py-3.5 min-w-[150px]">หมวดหมู่ (เดิม ➔ ใหม่)</th>
-                        <th className="px-4 py-3.5 min-w-[150px]">ขนาด & สี</th>
-                        <th className="px-4 py-3.5 text-center min-w-[130px]">ราคา (Protected)</th>
+                        <th className="px-4 py-3.5 min-w-[260px]">รายละเอียดสินค้า (Description)</th>
+                        <th className="px-4 py-3.5 text-center min-w-[130px]">ราคาเดิม (Protected)</th>
                         <th className="px-4 py-3.5 text-center">สถานะ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredInfoRows.map((r) => {
                         const isChecked = infoSelectedRowIds.has(r.id);
+                        const isSkuChanged = r.new_sku && r.new_sku !== r.detected_sku;
                         const isNameChanged = r.new_name && r.new_name !== r.old_name;
-                        const isCatChanged = r.new_category_name && r.new_category_name !== r.old_category_name;
-                        const isSizeChanged = r.new_size_text && r.new_size_text !== r.old_size_text;
-                        const isColorChanged = r.new_color && r.new_color !== r.old_color;
+                        const isDescChanged = r.new_description && r.new_description !== r.old_description;
 
                         return (
                           <tr key={r.id} className={`hover:bg-slate-50/80 transition ${isChecked ? 'bg-blue-50/20' : ''}`}>
@@ -1343,10 +1545,19 @@ export default function BulkPriceUpdatePage() {
                               />
                             </td>
                             <td className="px-3 py-3.5 font-mono text-slate-400 text-center">{r.row_number}</td>
-                            <td className="px-4 py-3.5 font-mono font-bold text-slate-900">
-                              <span className="bg-slate-100 px-2 py-0.5 rounded text-red-600">
-                                {r.detected_sku}
-                              </span>
+                            <td className="px-4 py-3.5 font-mono">
+                              {isSkuChanged ? (
+                                <div>
+                                  <span className="text-slate-400 line-through text-[10px] block">{r.detected_sku}</span>
+                                  <span className="bg-emerald-50 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
+                                    ➔ {r.new_sku}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="bg-slate-100 px-2 py-0.5 rounded font-bold text-slate-900">
+                                  {r.detected_sku}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3.5">
                               {r.old_name ? (
@@ -1360,30 +1571,30 @@ export default function BulkPriceUpdatePage() {
                                 <span className="text-red-500 font-semibold">{r.detected_product_name || 'ไม่พบในระบบ'}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3.5">
-                              {r.old_category_name ? (
+                            <td className="px-4 py-3.5 max-w-sm text-[11px]">
+                              {r.new_description ? (
                                 <div>
-                                  <div className="text-slate-400 text-[10px]">เดิม: {r.old_category_name}</div>
-                                  <div className={`text-xs font-semibold ${isCatChanged ? 'text-emerald-700 font-bold' : 'text-slate-700'}`}>
-                                    {r.new_category_name || r.old_category_name}
+                                  <div className={`line-clamp-2 ${isDescChanged ? 'text-blue-900 font-medium' : 'text-slate-700'}`} title={r.new_description}>
+                                    {r.new_description}
                                   </div>
+                                  {r.old_description && isDescChanged && (
+                                    <div className="text-slate-400 text-[10px] truncate line-through mt-0.5" title={r.old_description}>
+                                      เดิม: {r.old_description}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : r.old_description ? (
+                                <div className="text-slate-500 line-clamp-2" title={r.old_description}>
+                                  {r.old_description}
                                 </div>
                               ) : (
-                                '-'
+                                <span className="text-slate-400">-</span>
                               )}
-                            </td>
-                            <td className="px-4 py-3.5 text-[11px]">
-                              <div>
-                                ขนาด: <span className="font-semibold text-slate-800">{r.new_size_text || r.old_size_text || '-'}</span>
-                              </div>
-                              <div>
-                                สี: <span className="font-semibold text-slate-800">{r.new_color || r.old_color || 'ตามภาพ'}</span>
-                              </div>
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 <Lock className="w-3 h-3 text-emerald-600" />
-                                <span>คงเดิมไม่แตะต้อง</span>
+                                <span>คงเดิม 100%</span>
                               </span>
                             </td>
                             <td className="px-4 py-3.5 text-center">

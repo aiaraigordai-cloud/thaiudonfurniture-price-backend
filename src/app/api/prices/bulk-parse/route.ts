@@ -158,9 +158,18 @@ export async function POST(request: Request) {
     const db = getDb();
 
     // Verify price tier
-    const tier = await db.prepare('SELECT id, code, name_th FROM price_tiers WHERE id = ?').get(priceTierId) as any;
-    if (!tier) {
-      return NextResponse.json({ error: 'ประเภทราคาที่เลือกไม่ถูกต้อง' }, { status: 400 });
+    let tier: any = null;
+    if (priceTierId === 'ALL_4_TIERS') {
+      tier = {
+        id: 'ALL_4_TIERS',
+        code: 'ALL_4_TIERS',
+        name_th: 'ราคาทั้งหมด 4 ระดับ (เซลล์/ปลีก/VIP/ทั่วไป)',
+      };
+    } else {
+      tier = await db.prepare('SELECT id, code, name_th FROM price_tiers WHERE id = ?').get(priceTierId) as any;
+      if (!tier) {
+        return NextResponse.json({ error: 'ประเภทราคาที่เลือกไม่ถูกต้อง' }, { status: 400 });
+      }
     }
 
     const filename = file.name;
@@ -170,7 +179,7 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    let rawRows: Array<{ sku: string; name?: string; price: number; raw: string }> = [];
+    let rawRows: Array<{ sku: string; name?: string; price: number; raw: string; prices_4_tiers?: Record<string, number> }> = [];
 
     // Pre-fetch products for matching, scoped by selected catalog_type if specified
     let prodQuery = 'SELECT id, sku, name, catalog_type FROM products WHERE 1=1';
@@ -204,6 +213,10 @@ export async function POST(request: Request) {
         let skuCol = -1;
         let nameCol = -1;
         let priceCol = -1;
+        let saleCol = -1;
+        let retailCol = -1;
+        let vipCol = -1;
+        let generalCol = -1;
         let headerRowIdx = -1;
 
         // Scan the first 15 rows to find the most accurate header row
@@ -230,6 +243,10 @@ export async function POST(request: Request) {
               str.includes('sale')
             ) {
               pCol = idx;
+              if (str.includes('เซลล์') || str.includes('sale') || str.includes('ราคาส่ง')) saleCol = idx;
+              if (str.includes('ปลีก') || str.includes('retail')) retailCol = idx;
+              if (str.includes('vip')) vipCol = idx;
+              if (str.includes('ทั่วไป') || str.includes('general')) generalCol = idx;
             } else if (
               str.includes('ชื่อ') ||
               str.includes('name') ||
@@ -325,7 +342,29 @@ export async function POST(request: Request) {
           const rawName = nameCol !== -1 && nameCol !== skuCol ? String(row[nameCol] || '').trim() : '';
           const priceRaw = row[priceCol];
           const priceClean = priceRaw !== undefined ? String(priceRaw).replace(/[,฿THBบาท\s]/g, '') : '';
-          const priceVal = parseFloat(priceClean);
+          let priceVal = parseFloat(priceClean);
+          if (priceClean === '-' || priceClean === '' || priceClean === '0' || priceClean === 'ไม่มี' || priceClean === 'ไม่มีราคา') {
+            priceVal = 0;
+          }
+
+          let p4: Record<string, number> | undefined = undefined;
+          if (priceTierId === 'ALL_4_TIERS') {
+            const parseTierVal = (cIdx: number) => {
+              if (cIdx === -1) return priceVal;
+              const rawVal = row[cIdx];
+              if (rawVal === undefined || rawVal === null) return priceVal;
+              const cl = String(rawVal).replace(/[,฿THBบาท\s]/g, '').trim();
+              if (cl === '-' || cl === '' || cl === '0' || cl === 'ไม่มี' || cl === 'ไม่มีราคา') return 0;
+              const num = parseFloat(cl);
+              return isNaN(num) ? priceVal : num;
+            };
+            p4 = {
+              tier_sale: parseTierVal(saleCol),
+              tier_retail: parseTierVal(retailCol),
+              tier_vip: parseTierVal(vipCol),
+              tier_general: parseTierVal(generalCol),
+            };
+          }
 
           if (rawSku || rawName) {
             rawRows.push({
@@ -333,6 +372,7 @@ export async function POST(request: Request) {
               name: rawName,
               price: priceVal,
               raw: `แถวที่ ${i + 1}: ${JSON.stringify(row)}`,
+              prices_4_tiers: p4,
             });
           }
         }
@@ -503,52 +543,29 @@ export async function POST(request: Request) {
         }
       }
 
-      // 2. SECONDARY MATCH: Fallback to Product Name if SKU is not found or ambiguous
+      // 2. SECONDARY MATCH: Fallback to exact Product Name ONLY (NO loose substring matching)
       if (!matchedProduct && itemName) {
-        const cleanItemName = itemName.toLowerCase();
+        const cleanItemName = itemName.toLowerCase().trim();
         // Exact name match
         if (nameMap.has(cleanItemName)) {
           matchedProduct = nameMap.get(cleanItemName);
           matchMethod = 'NAME_FALLBACK';
-        } else {
-          // Substring name match (if name has at least 4 characters)
-          const foundByName = existingProducts.find(p => 
-            p.name && cleanItemName.length >= 4 && (p.name.toLowerCase().includes(cleanItemName) || cleanItemName.includes(p.name.toLowerCase()))
-          );
-          if (foundByName) {
-            matchedProduct = foundByName;
-            matchMethod = 'NAME_FALLBACK';
-          }
         }
       }
 
-      // Also try matching by normalizedSku in names if normalizedSku is Thai text
+      // Also try matching by normalizedSku in names ONLY if exact match
       if (!matchedProduct && normalizedSku.length >= 4) {
-        const foundBySkuAsName = existingProducts.find(p =>
-          p.name && (p.name.toLowerCase().includes(normalizedSku.toLowerCase()) || normalizedSku.toLowerCase().includes(p.name.toLowerCase()))
-        );
-        if (foundBySkuAsName) {
-          matchedProduct = foundBySkuAsName;
+        const cleanSku = normalizedSku.toLowerCase().trim();
+        if (nameMap.has(cleanSku)) {
+          matchedProduct = nameMap.get(cleanSku);
           matchMethod = 'NAME_FALLBACK';
-        }
-      }
-
-      // 3. FUZZY SKU FALLBACK: Partial SKU match
-      if (!matchedProduct && normalizedSku.length >= 3) {
-        const partial = existingProducts.find(p => {
-          const pSku = p.sku.toUpperCase();
-          return pSku.includes(normalizedSku) || normalizedSku.includes(pSku);
-        });
-        if (partial) {
-          matchedProduct = partial;
-          matchMethod = 'FUZZY_SKU';
         }
       }
 
       // 4. DETERMINE VALIDATION STATUS
       if (!matchedProduct) {
         status = 'FAILED';
-        warning = `ไม่พบรหัสสินค้า "${item.sku || '-'}" หรือชื่อที่ตรงกันในฐานข้อมูล`;
+        warning = `❌ ไม่มีรหัสสินค้านี้ในฐานข้อมูลระบบ (สินค้ายังไม่ได้ลงในระบบ หรือพิมพ์รหัสในไฟล์ไม่ตรง)`;
       } else {
         // Fetch current price for this product and tier
         const currentPriceRow = await db.prepare(`
@@ -559,31 +576,30 @@ export async function POST(request: Request) {
         // Check matching method nuances
         if (matchMethod === 'NAME_FALLBACK') {
           status = 'NEEDS_REVIEW';
-          warning = `จับคู่ด้วยชื่อสินค้า "${itemName}" ➔ ตรงกับรหัส ${matchedProduct.sku} (${matchedProduct.name}) กรุณาตรวจสอบก่อนยืนยัน`;
-        } else if (matchMethod === 'FUZZY_SKU') {
-          status = 'NEEDS_REVIEW';
-          warning = `รหัส SKU ใกล้เคียงกับ ${matchedProduct.sku} (${matchedProduct.name}) กรุณาตรวจสอบ`;
+          warning = `จับคู่ด้วยชื่อสินค้าที่ตรงกัน ➔ รหัส ${matchedProduct.sku} (${matchedProduct.name}) กรุณาตรวจสอบก่อนยืนยัน`;
         } else if (matchMethod === 'SKU_RELAXED') {
-          // Valid SKU with dash/space adjustment
+          // Valid SKU with dash/space adjustment (e.g. TD -1657 -> TD-1657)
           status = 'PASS';
-          if (itemName && matchedProduct.name && !matchedProduct.name.includes(itemName) && !itemName.includes(matchedProduct.name)) {
-            warning = `จับคู่ด้วยรหัสสินค้า "${matchedProduct.sku}" (ชื่อในไฟล์: "${itemName}")`;
-          }
+          warning = `🔍 ตรงรหัสสินค้า (ปรับเว้นวรรค/ขีด) ➔ ${matchedProduct.sku}`;
         } else {
           // SKU_EXACT
           status = 'PASS';
-          if (itemName && matchedProduct.name && !matchedProduct.name.includes(itemName) && !itemName.includes(matchedProduct.name)) {
-            warning = `จับคู่ด้วยรหัสสินค้า "${matchedProduct.sku}" (ชื่อในระบบ: "${matchedProduct.name}")`;
-          }
+          warning = `✅ ตรงรหัส 100% ➔ ${matchedProduct.sku}`;
         }
 
         // Price validity check
-        if (isNaN(item.price) || item.price <= 0) {
+        if (item.price === 0) {
+          // Explicit zero or '-' represents No Price (-)
+          if ((status as string) !== 'FAILED') {
+            status = 'PASS';
+            warning = `${warning} • ราคาในไฟล์เป็น 0 หรือ "-" (ระบบจะปรับเป็นไม่มีราคา "-")`;
+          }
+        } else if (isNaN(item.price) || item.price < 0) {
           status = 'FAILED';
-          warning = 'ราคาไม่ถูกต้องหรือไม่เป็นตัวเลขบวก';
-        } else if (oldPrice && Math.abs(item.price - oldPrice) / oldPrice > 0.6) {
+          warning = 'ราคาไม่ถูกต้องหรือไม่เป็นตัวเลข';
+        } else if (oldPrice && oldPrice > 0 && Math.abs(item.price - oldPrice) / oldPrice > 0.6) {
           status = 'NEEDS_REVIEW';
-          warning = `ราคาเปลี่ยนแปลงเกิน 60% (เดิม ฿${oldPrice.toLocaleString()} ➔ ใหม่ ฿${item.price.toLocaleString()})`;
+          warning = `⚠️ ราคาเปลี่ยนแปลงเกิน 60% (เดิม ฿${oldPrice.toLocaleString()} ➔ ใหม่ ฿${item.price.toLocaleString()})`;
         }
       }
 
@@ -595,17 +611,25 @@ export async function POST(request: Request) {
       const finalSku = matchedProduct ? matchedProduct.sku : (item.sku || 'N/A');
       const finalName = matchedProduct ? matchedProduct.name : (itemName || 'ไม่ทราบชื่อสินค้า');
 
+      let rowWarning = warning;
+      if (priceTierId === 'ALL_4_TIERS' && item.prices_4_tiers) {
+        const p4 = item.prices_4_tiers;
+        const f = (n: number) => (n > 0 ? '฿' + n.toLocaleString() : '-');
+        rowWarning = `${rowWarning || ''} • [4 ระดับ] เซลล์: ${f(p4.tier_sale)} | ปลีก: ${f(p4.tier_retail)} | VIP: ${f(p4.tier_vip)} | ทั่วไป: ${f(p4.tier_general)}`;
+      }
+
       parsedRowsToInsert.push({
         id: 'row_' + crypto.randomUUID(),
         batch_id: batchId,
         row_number: index + 1,
-        source_data: item.raw,
+        source_data: item.prices_4_tiers ? JSON.stringify({ raw: item.raw, prices_4_tiers: item.prices_4_tiers }) : item.raw,
         detected_sku: finalSku,
         detected_product_name: finalName,
         old_price: oldPrice,
         new_price: isNaN(item.price) ? null : item.price,
+        prices_4_tiers: item.prices_4_tiers,
         validation_status: status,
-        warning_reason: warning,
+        warning_reason: rowWarning,
         is_selected: isSelected,
       });
     }

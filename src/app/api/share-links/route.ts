@@ -25,7 +25,9 @@ export async function GET() {
         sl.id, sl.token_raw, sl.sharing_mode, sl.catalog_filter, sl.customer_name, sl.expires_at, sl.is_revoked, sl.created_at,
         pt.name_th as price_tier_name,
         pt.code as price_tier_code,
-        p.employee_name as creator_name
+        p.employee_name as creator_name,
+        p.username as creator_username,
+        p.role as creator_role
       FROM share_links sl
       JOIN price_tiers pt ON sl.price_tier_id = pt.id
       LEFT JOIN profiles p ON sl.created_by = p.id
@@ -52,13 +54,23 @@ export async function GET() {
       prodCountByLinkId.set(row.share_link_id, row.c || 0);
     }
 
-    // Single batch query for view counts
+    // Single batch query for view counts & last accessed time
     const viewCountRows = (await db
-      .prepare('SELECT share_link_id, COUNT(*) as c FROM share_events GROUP BY share_link_id')
+      .prepare(`
+        SELECT 
+          share_link_id, 
+          COUNT(*) as c,
+          MAX(accessed_at) as last_accessed_at
+        FROM share_events 
+        GROUP BY share_link_id
+      `)
       .all()) as any[];
-    const viewCountByLinkId = new Map<string, number>();
+    const viewStatsByLinkId = new Map<string, { count: number; last_accessed_at: string | null }>();
     for (const row of viewCountRows) {
-      viewCountByLinkId.set(row.share_link_id, row.c || 0);
+      viewStatsByLinkId.set(row.share_link_id, {
+        count: row.c || 0,
+        last_accessed_at: row.last_accessed_at || null,
+      });
     }
 
     const enriched = links.map((link) => {
@@ -75,14 +87,23 @@ export async function GET() {
         productCount = prodCountByLinkId.get(link.id) || 0;
       }
 
+      const vStat = viewStatsByLinkId.get(link.id);
+
       return {
         ...link,
-        view_count: viewCountByLinkId.get(link.id) || 0,
+        creator_name: link.creator_name || 'Admin',
+        creator_username: link.creator_username || 'admin',
+        creator_role: link.creator_role || 'STAFF',
+        view_count: vStat?.count || 0,
+        last_accessed_at: vStat?.last_accessed_at || null,
         productCount,
       };
     });
 
-    return NextResponse.json({ success: true, links: enriched });
+    return NextResponse.json(
+      { success: true, links: enriched },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (error) {
     return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูลลิงก์ได้' }, { status: 500 });
   }

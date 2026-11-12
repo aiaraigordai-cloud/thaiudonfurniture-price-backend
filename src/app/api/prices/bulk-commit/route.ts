@@ -25,14 +25,19 @@ export async function POST(request: Request) {
 
     const db = getDb();
     const batch = await db.prepare(`
-      SELECT b.*, pt.code as tier_code, pt.name_th as tier_name
+      SELECT b.*, COALESCE(pt.code, b.price_tier_id) as tier_code, COALESCE(pt.name_th, b.price_tier_id) as tier_name
       FROM price_import_batches b
-      JOIN price_tiers pt ON b.price_tier_id = pt.id
+      LEFT JOIN price_tiers pt ON b.price_tier_id = pt.id
       WHERE b.id = ?
     `).get(batchId) as any;
 
     if (!batch) {
       return NextResponse.json({ error: 'ไม่พบ Batch ในระบบ' }, { status: 404 });
+    }
+
+    if (batch.price_tier_id === 'ALL_4_TIERS') {
+      batch.tier_name = 'ราคาทั้งหมด 4 ระดับ (เซลล์/ปลีก/VIP/ทั่วไป)';
+      batch.tier_code = 'ALL_4_TIERS';
     }
 
     // If client provided approved/edited rows, update them in price_import_rows first
@@ -44,7 +49,7 @@ export async function POST(request: Request) {
       `);
 
       for (const r of overrideRows) {
-        if (r.id && r.new_price > 0) {
+        if (r.id && r.new_price !== undefined && r.new_price !== null && r.new_price >= 0) {
           updateStmt.run(r.detected_sku, r.new_price, r.id, batchId);
         }
       }
@@ -53,7 +58,7 @@ export async function POST(request: Request) {
       if (supabase) {
         try {
           const supaUpdates = overrideRows
-            .filter((r: any) => r.id && r.new_price > 0)
+            .filter((r: any) => r.id && r.new_price !== undefined && r.new_price !== null && r.new_price >= 0)
             .map((r: any) => ({
               id: r.id,
               batch_id: batchId,
@@ -153,42 +158,94 @@ export async function POST(request: Request) {
           prod = prodByName.get(row.detected_sku.toLowerCase().trim());
         }
 
-        if (!prod || row.new_price === null || row.new_price <= 0) {
+        if (!prod || row.new_price === null || row.new_price === undefined || row.new_price < 0 || isNaN(row.new_price)) {
           continue;
         }
 
-        // Current price
-        const currentPriceRow = getPriceStmt.get(prod.id, batch.price_tier_id) as any;
-        const oldPrice = currentPriceRow ? currentPriceRow.price : null;
-        const changeId = crypto.randomUUID();
+        const isAll4 = batch.price_tier_id === 'ALL_4_TIERS';
+        let parsedP4: Record<string, number> | null = null;
+        try {
+          if (row.source_data && row.source_data.startsWith('{')) {
+            const sd = JSON.parse(row.source_data);
+            if (sd.prices_4_tiers) parsedP4 = sd.prices_4_tiers;
+          }
+        } catch {}
 
-        // Save history in SQLite
-        insertHistoryStmt.run(
-          changeId,
-          prod.id,
-          batch.price_tier_id,
-          oldPrice,
-          row.new_price,
-          batchId,
-          user.id,
-          `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
-        );
+        if (isAll4) {
+          const TARGET_TIERS = [
+            { id: 'tier_sale', name: 'ราคาเซลล์', key: 'tier_sale' },
+            { id: 'tier_retail', name: 'ราคาปลีก', key: 'tier_retail' },
+            { id: 'tier_vip', name: 'ราคา VIP', key: 'tier_vip' },
+            { id: 'tier_general', name: 'ราคาทั่วไป', key: 'tier_general' },
+          ];
 
-        // Upsert price in SQLite
-        upsertPriceStmt.run('price_' + crypto.randomUUID(), prod.id, batch.price_tier_id, row.new_price, user.id);
+          for (const t of TARGET_TIERS) {
+            const tierVal = parsedP4 && parsedP4[t.key] !== undefined ? parsedP4[t.key] : row.new_price;
+            if (tierVal === null || tierVal === undefined || tierVal < 0 || isNaN(tierVal)) continue;
 
-        historyRowsToSync.push({
-          id: changeId,
-          product_id: (prod.sku || '').trim(),
-          price_tier_id: batch.price_tier_id,
-          old_price: oldPrice,
-          new_price: row.new_price,
-          batch_id: batchId,
-          changed_by: user.id,
-          reason: `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
-        });
+            const currentPriceRow = getPriceStmt.get(prod.id, t.id) as any;
+            const oldPrice = currentPriceRow ? currentPriceRow.price : null;
+            const changeId = crypto.randomUUID();
 
-        updatedSuccessCount++;
+            insertHistoryStmt.run(
+              changeId,
+              prod.id,
+              t.id,
+              oldPrice,
+              tierVal,
+              batchId,
+              user.id,
+              `อัปเดต 4 ระดับจากไฟล์ ${batch.filename} (${t.name})`
+            );
+
+            upsertPriceStmt.run('price_' + crypto.randomUUID(), prod.id, t.id, tierVal, user.id);
+
+            historyRowsToSync.push({
+              id: changeId,
+              product_id: (prod.sku || '').trim(),
+              price_tier_id: t.id,
+              old_price: oldPrice,
+              new_price: tierVal,
+              batch_id: batchId,
+              changed_by: user.id,
+              reason: `อัปเดต 4 ระดับจากไฟล์ ${batch.filename} (${t.name})`,
+            });
+          }
+          updatedSuccessCount++;
+        } else {
+          // Standard single tier update
+          const currentPriceRow = getPriceStmt.get(prod.id, batch.price_tier_id) as any;
+          const oldPrice = currentPriceRow ? currentPriceRow.price : null;
+          const changeId = crypto.randomUUID();
+
+          // Save history in SQLite
+          insertHistoryStmt.run(
+            changeId,
+            prod.id,
+            batch.price_tier_id,
+            oldPrice,
+            row.new_price,
+            batchId,
+            user.id,
+            `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
+          );
+
+          // Upsert price in SQLite
+          upsertPriceStmt.run('price_' + crypto.randomUUID(), prod.id, batch.price_tier_id, row.new_price, user.id);
+
+          historyRowsToSync.push({
+            id: changeId,
+            product_id: (prod.sku || '').trim(),
+            price_tier_id: batch.price_tier_id,
+            old_price: oldPrice,
+            new_price: row.new_price,
+            batch_id: batchId,
+            changed_by: user.id,
+            reason: `อัปเดตแบบกลุ่มจากไฟล์ ${batch.filename} (${batch.tier_name})`
+          });
+
+          updatedSuccessCount++;
+        }
       }
 
       // Update batch status in SQLite

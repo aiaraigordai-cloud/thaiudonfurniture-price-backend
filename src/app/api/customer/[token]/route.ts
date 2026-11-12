@@ -268,8 +268,9 @@ export async function GET(request: Request, { params }: { params: { token: strin
           if (existingIds.has(ovr.id) || existingSkus.has(ovrSku)) continue;
           if (seenNewIds.has(ovr.id)) continue;
 
+          const effectiveFilter = link.catalog_filter || link.catalog_id;
           const ovrCatalog = ovr.catalog_type || 'knockdown';
-          if (link.catalog_id && link.catalog_id !== 'all' && ovrCatalog !== link.catalog_id) continue;
+          if (effectiveFilter && effectiveFilter !== 'all' && ovrCatalog !== effectiveFilter) continue;
 
           seenNewIds.add(ovr.id);
 
@@ -369,8 +370,15 @@ export async function GET(request: Request, { params }: { params: { token: strin
     let sanitizedCustomerName = link.customer_name ? link.customer_name.replace(/\s*\(?\bVIP\b\)?/gi, '').trim() : '';
     if (!sanitizedCustomerName) sanitizedCustomerName = 'แคตตาล็อกสินค้าทางการ';
 
+    // Filter products by catalog filter if in full catalog mode (guarantees tuulo and knockdown isolation)
+    const effectiveCatalogFilter = link.catalog_filter || link.catalog_id;
+    const finalDisplayProducts =
+      link.sharing_mode === 'FULL_CATALOG' && effectiveCatalogFilter && effectiveCatalogFilter !== 'all'
+        ? activeProducts.filter((p) => p.catalogType === effectiveCatalogFilter)
+        : activeProducts;
+
     // Strategy 4: Data Trimming - Strip internal database IDs and unused heavy fields
-    const trimmedProducts = activeProducts.map((p) => {
+    const trimmedProducts = finalDisplayProducts.map((p) => {
       const item: any = {
         sku: p.sku,
         name: p.name,

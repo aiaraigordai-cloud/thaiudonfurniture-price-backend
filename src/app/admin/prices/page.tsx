@@ -37,9 +37,9 @@ export default function PricesPage() {
   // Catalog and category filters
   const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
   const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number }>({
-    all: 310,
-    tuulo: 121,
-    knockdown: 189,
+    all: 268,
+    tuulo: 111,
+    knockdown: 157,
   });
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('');

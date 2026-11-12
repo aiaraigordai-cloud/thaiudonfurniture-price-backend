@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     let importedCount = 0;
     let updatedCount = 0;
     const supaHistoryToSync: any[] = [];
-    const overridesToSave: Partial<ProductOverride>[] = [];
+    const overridesToSave: any[] = [];
     const supaProductsToSync: any[] = [];
 
     // Use transaction for consistency

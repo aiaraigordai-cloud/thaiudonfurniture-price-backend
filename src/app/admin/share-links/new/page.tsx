@@ -81,6 +81,13 @@ export default function NewShareLinkPage() {
       } else {
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         setCreatedUrl(`${origin}${data.url}`);
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('share_links_channel');
+            bc.postMessage({ type: 'LINK_CREATED' });
+            localStorage.setItem('thaiudon_share_link_sync', Date.now().toString());
+          } catch {}
+        }
       }
     } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');

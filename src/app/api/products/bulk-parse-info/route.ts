@@ -48,6 +48,7 @@ export async function POST(request: Request) {
 
     // Smart Column Header Mapping
     let skuColIdx = -1;
+    let newSkuColIdx = -1;
     let nameColIdx = -1;
     let catColIdx = -1;
     let sizeColIdx = -1;
@@ -58,18 +59,20 @@ export async function POST(request: Request) {
 
     headerRow.forEach((col, idx) => {
       const c = col.replace(/[\s\-_*()]/g, '');
-      if (skuColIdx === -1 && (c.includes('sku') || c.includes('รหัส') || c.includes('code') || c.includes('item'))) {
+      if (newSkuColIdx === -1 && (c.includes('skuใหม่') || c.includes('รหัสใหม่') || c.includes('newsku') || c.includes('รหัสสินค้าใหม่'))) {
+        newSkuColIdx = idx;
+      } else if (skuColIdx === -1 && (c.includes('sku') || c.includes('รหัส') || c.includes('code') || c.includes('item'))) {
         skuColIdx = idx;
       } else if (nameColIdx === -1 && (c.includes('name') || c.includes('ชื่อ') || c.includes('product') || c.includes('รายการ'))) {
         nameColIdx = idx;
+      } else if (descColIdx === -1 && (c.includes('desc') || c.includes('รายละเอียด') || c.includes('detail') || c.includes('ข้อมูลสินค้า') || c.includes('คำอธิบาย') || c.includes('สเปค') || c.includes('สเปก') || c.includes('spec'))) {
+        descColIdx = idx;
       } else if (catColIdx === -1 && (c.includes('cat') || c.includes('หมวด') || c.includes('ประเภท'))) {
         catColIdx = idx;
       } else if (sizeColIdx === -1 && (c.includes('size') || c.includes('ขนาด') || c.includes('dimension'))) {
         sizeColIdx = idx;
       } else if (colorColIdx === -1 && (c.includes('color') || c.includes('colour') || c.includes('สี'))) {
         colorColIdx = idx;
-      } else if (descColIdx === -1 && (c.includes('desc') || c.includes('รายละเอียด') || c.includes('detail'))) {
-        descColIdx = idx;
       } else if (pageColIdx === -1 && (c.includes('page') || c.includes('หน้า'))) {
         pageColIdx = idx;
       } else if (refImgColIdx === -1 && (c.includes('ref') || c.includes('ภาพอ้างอิง') || c.includes('รูปอ้างอิง') || c.includes('image') || c.includes('รูปภาพ'))) {
@@ -142,6 +145,7 @@ export async function POST(request: Request) {
       const rawSku = skuColIdx !== -1 && row[skuColIdx] !== undefined ? String(row[skuColIdx]).trim() : '';
       if (!rawSku) continue;
 
+      const rawNewSku = newSkuColIdx !== -1 && row[newSkuColIdx] !== undefined ? String(row[newSkuColIdx]).trim() : '';
       const rawName = nameColIdx !== -1 && row[nameColIdx] !== undefined ? String(row[nameColIdx]).trim() : null;
       const rawCat = catColIdx !== -1 && row[catColIdx] !== undefined ? String(row[catColIdx]).trim() : null;
       const rawSize = sizeColIdx !== -1 && row[sizeColIdx] !== undefined ? String(row[sizeColIdx]).trim() : null;
@@ -196,11 +200,13 @@ export async function POST(request: Request) {
         id: rowId,
         batch_id: batchId,
         row_number: i + 1,
-        source_data: `แถวที่ ${i + 1}: SKU: ${rawSku}, ชื่อ: ${rawName || '-'}, หมวด: ${rawCat || '-'}, ขนาด: ${rawSize || '-'}, สี: ${rawColor || '-'}`,
+        source_data: `แถวที่ ${i + 1}: SKU: ${rawSku}${rawNewSku ? ` (ใหม่: ${rawNewSku})` : ''}, ชื่อ: ${rawName || '-'}, หมวด: ${rawCat || '-'}, ขนาด: ${rawSize || '-'}, สี: ${rawColor || '-'}`,
         detected_sku: rawSku,
+        new_sku: rawNewSku || null,
         detected_product_name: rawName || (matchedProduct ? matchedProduct.name : ''),
         product_id: matchedProduct ? matchedProduct.id : null,
         // Old vs New Info
+        old_sku: matchedProduct ? matchedProduct.sku : rawSku,
         old_name: matchedProduct ? matchedProduct.name : null,
         new_name: rawName,
         old_category_name: matchedProduct ? (matchedProduct.category_name || 'ทั่วไป') : null,

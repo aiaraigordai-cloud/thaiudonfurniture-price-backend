@@ -144,6 +144,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       name,
       description,
       category_id,
+      catalog_type,
       width,
       height,
       depth,
@@ -216,7 +217,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     try {
       await db.prepare(`
         UPDATE products
-        SET sku = ?, name = ?, description = ?, category_id = ?,
+        SET sku = ?, name = ?, description = ?, category_id = ?, catalog_type = COALESCE(?, catalog_type),
             width = ?, height = ?, depth = ?, size_text = ?, color = ?, status = ?,
             ref_image_url = ?,
             ref_filename = ?,
@@ -227,6 +228,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         name.trim(),
         description || '',
         category_id || null,
+        catalog_type || null,
         parsedW,
         parsedH,
         parsedD,
@@ -348,6 +350,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           description: description || '',
           category_id: category_id || null,
           category_name: resolvedCategoryName,
+          catalog_type: catalog_type || existing.catalog_type || undefined,
           size_text: finalSizeText,
           width: parsedW,
           height: parsedH,
@@ -368,6 +371,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           name: name.trim(),
           description: description || '',
           category_id: category_id || null,
+          catalog_type: catalog_type || existing.catalog_type || undefined,
           size_text: finalSizeText,
           width: parsedW,
           height: parsedH,

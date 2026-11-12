@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { syncShareLinksToDb } from './share-store';
 
 let dbInstance: DatabaseSync | null = null;
 
@@ -285,10 +286,13 @@ function initSchema(db: DatabaseSync) {
       db.exec("ALTER TABLE price_import_batches ADD COLUMN catalog_type TEXT DEFAULT 'all';");
     }
 
-    // Ensure 'tier_noprice' exists for Requirement 2
+    // Ensure 'tier_noprice', 'ALL_4_TIERS', and 'PRODUCT_INFO_ONLY' exist for full compatibility
     db.prepare(`
       INSERT OR IGNORE INTO price_tiers (id, code, name_th, description, display_order)
-      VALUES ('tier_noprice', 'NO_PRICE', 'ไม่มีราคา (-)', 'ไม่แสดงราคา หรือสอบถามราคาทาง LINE', 5)
+      VALUES 
+        ('tier_noprice', 'NO_PRICE', 'ไม่มีราคา (-)', 'ไม่แสดงราคา หรือสอบถามราคาทาง LINE', 5),
+        ('ALL_4_TIERS', 'ALL_4_TIERS', 'ราคาทั้งหมด 4 ระดับ (เซลล์/ปลีก/VIP/ทั่วไป)', 'อัปเดตราคาทั้ง 4 ระดับพร้อมกันในไฟล์เดียว', 6),
+        ('PRODUCT_INFO_ONLY', 'PRODUCT_INFO_ONLY', 'อัปเดตข้อมูลสินค้าเท่านั้น', 'อัปเดตชื่อ รายละเอียด หมวดหมู่ (ไม่แตะราคา)', 7)
     `).run();
 
     // Ensure official no-price catalog links exist for each catalog type
@@ -310,7 +314,6 @@ function initSchema(db: DatabaseSync) {
 
     // Sync all canonical and persistent share links
     try {
-      const { syncShareLinksToDb } = require('./share-store');
       syncShareLinksToDb(db);
     } catch (e) {
       console.warn('syncShareLinksToDb error:', e);

@@ -8891,5 +8891,69 @@
       "GENERAL_PRICE": 2750
     },
     "updated_at": "2026-10-30 06:58:50"
+  },
+  "prod_tuulo_TD-995": {
+    "id": "prod_tuulo_TD-995",
+    "sku": "TD-995",
+    "name": "ตู้ครัวสูง 150 เรียบ+ชั้น+ชาผสม",
+    "catalog_type": "tuulo",
+    "category_id": "cat_tuulo_kitchen_tall",
+    "category_name": "ตู้ครัวสูง",
+    "status": "Published",
+    "deleted": false,
+    "updated_at": "2026-11-12T08:59:19.928Z",
+    "prices": {
+      "SALE_PRICE": 4450,
+      "RETAIL_PRICE": 5690,
+      "VIP_PRICE": 4350,
+      "GENERAL_PRICE": 4350
+    },
+    "description": "ตู้กับข้าวและตู้ครัวอลูมิเนียม โครงสร้างแข็งแรง มาตรฐานไทยอุดรเฟอร์นิเจอร์ รหัส TD-995",
+    "size_text": "กว้าง 150 x สูง 185 x ลึก 50 ซม.",
+    "width": 150,
+    "height": 185,
+    "depth": 50,
+    "color": "ตามภาพ",
+    "ref_image_url": "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/ref/TD-995_%E0%B8%95%E0%B8%B9%E0%B9%89%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%A7%E0%B8%AA%E0%B8%B9%E0%B8%87%20150%20%E0%B9%80%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%9A%2B%E0%B8%8A%E0%B8%B1%E0%B9%89%E0%B8%99%2B%E0%B8%8A%E0%B8%B2%E0%B8%9C%E0%B8%AA%E0%B8%A1.jpg",
+    "ref_images": [
+      "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/ref/TD-995_%E0%B8%95%E0%B8%B9%E0%B9%89%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%A7%E0%B8%AA%E0%B8%B9%E0%B8%87%20150%20%E0%B9%80%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%9A%2B%E0%B8%8A%E0%B8%B1%E0%B9%89%E0%B8%99%2B%E0%B8%8A%E0%B8%B2%E0%B8%9C%E0%B8%AA%E0%B8%A1.jpg"
+    ],
+    "ref_filename": "TD-995_ตู้ครัวสูง 150 เรียบ+ชั้น+ชาผสม.png",
+    "primary_image_url": "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794473952490_1e849992.png",
+    "images": [
+      "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794473952490_1e849992.png"
+    ]
+  },
+  "TD-995": {
+    "id": "prod_tuulo_TD-995",
+    "sku": "TD-995",
+    "name": "ตู้ครัวสูง 150 เรียบ+ชั้น+ชาผสม",
+    "catalog_type": "tuulo",
+    "category_id": "cat_tuulo_kitchen_tall",
+    "category_name": "ตู้ครัวสูง",
+    "status": "Published",
+    "deleted": false,
+    "updated_at": "2026-11-12T08:59:19.928Z",
+    "prices": {
+      "SALE_PRICE": 4450,
+      "RETAIL_PRICE": 5690,
+      "VIP_PRICE": 4350,
+      "GENERAL_PRICE": 4350
+    },
+    "description": "ตู้กับข้าวและตู้ครัวอลูมิเนียม โครงสร้างแข็งแรง มาตรฐานไทยอุดรเฟอร์นิเจอร์ รหัส TD-995",
+    "size_text": "กว้าง 150 x สูง 185 x ลึก 50 ซม.",
+    "width": 150,
+    "height": 185,
+    "depth": 50,
+    "color": "ตามภาพ",
+    "ref_image_url": "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/ref/TD-995_%E0%B8%95%E0%B8%B9%E0%B9%89%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%A7%E0%B8%AA%E0%B8%B9%E0%B8%87%20150%20%E0%B9%80%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%9A%2B%E0%B8%8A%E0%B8%B1%E0%B9%89%E0%B8%99%2B%E0%B8%8A%E0%B8%B2%E0%B8%9C%E0%B8%AA%E0%B8%A1.jpg",
+    "ref_images": [
+      "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/ref/TD-995_%E0%B8%95%E0%B8%B9%E0%B9%89%E0%B8%84%E0%B8%A3%E0%B8%B1%E0%B8%A7%E0%B8%AA%E0%B8%B9%E0%B8%87%20150%20%E0%B9%80%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%9A%2B%E0%B8%8A%E0%B8%B1%E0%B9%89%E0%B8%99%2B%E0%B8%8A%E0%B8%B2%E0%B8%9C%E0%B8%AA%E0%B8%A1.jpg"
+    ],
+    "ref_filename": "TD-995_ตู้ครัวสูง 150 เรียบ+ชั้น+ชาผสม.png",
+    "primary_image_url": "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794473952490_1e849992.png",
+    "images": [
+      "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794473952490_1e849992.png"
+    ]
   }
 }

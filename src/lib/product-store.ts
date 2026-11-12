@@ -255,6 +255,7 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
   if (override.description !== undefined) res.description = override.description;
   if (override.category_id !== undefined) res.category_id = override.category_id;
   if (override.category_name !== undefined) res.category_name = override.category_name;
+  if (override.catalog_type !== undefined && override.catalog_type !== null) res.catalog_type = override.catalog_type;
   if (override.size_text !== undefined) res.size_text = override.size_text;
   if (override.width !== undefined) res.width = override.width;
   if (override.height !== undefined) res.height = override.height;

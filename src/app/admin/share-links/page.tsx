@@ -27,6 +27,8 @@ import {
   AlertTriangle,
   Trash2,
   RefreshCw,
+  Users,
+  Activity,
 } from 'lucide-react';
 
 export default function ShareLinksPage() {
@@ -66,17 +68,71 @@ export default function ShareLinksPage() {
     }
   };
 
+  const formatDateTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleDateString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const formatRelativeTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return 'ยังไม่มีการเปิดดู';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return 'ยังไม่มีการเปิดดู';
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return 'เมื่อสักครู่';
+      if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
+      if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
+      return `${diffDays} วันที่แล้ว`;
+    } catch {
+      return 'ยังไม่มีการเปิดดู';
+    }
+  };
+
   useEffect(() => {
     loadLinks();
 
-    // 1. Real-time background polling every 12 seconds when tab is visible
+    // 1. Instant sync on focus / visibility change / storage event across accounts
+    const handleFocus = () => loadLinks(true);
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadLinks(true);
+      }
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'thaiudon_share_link_sync') {
+        loadLinks(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('storage', handleStorage);
+
+    // 2. Real-time background polling every 5 seconds when tab is visible
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         loadLinks(true);
       }
-    }, 12000);
+    }, 5000);
 
-    // 2. BroadcastChannel for instant cross-tab real-time sync
+    // 3. BroadcastChannel for instant cross-tab real-time sync
     let bc: BroadcastChannel | null = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       bc = new BroadcastChannel('share_links_channel');
@@ -86,6 +142,9 @@ export default function ShareLinksPage() {
     }
 
     return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('storage', handleStorage);
       clearInterval(interval);
       bc?.close();
     };
@@ -122,10 +181,13 @@ export default function ShareLinksPage() {
       const data = await res.json();
       if (res.ok) {
         setActionMsg(data.message || (newRevoked === 1 ? 'ระงับลิงก์เรียบร้อยแล้ว' : 'เปิดใช้งานลิงก์เรียบร้อยแล้ว'));
-        // Broadcast to other tabs
+        // Broadcast to other tabs & windows
         if (typeof window !== 'undefined') {
-          const bc = new BroadcastChannel('share_links_channel');
-          bc.postMessage({ type: 'LINK_STATUS_CHANGED', linkId: link.id, is_revoked: newRevoked });
+          try {
+            const bc = new BroadcastChannel('share_links_channel');
+            bc.postMessage({ type: 'LINK_STATUS_CHANGED', linkId: link.id, is_revoked: newRevoked });
+            localStorage.setItem('thaiudon_share_link_sync', Date.now().toString());
+          } catch {}
         }
       } else {
         // Rollback on error
@@ -212,8 +274,11 @@ export default function ShareLinksPage() {
         );
 
         if (typeof window !== 'undefined') {
-          const bc = new BroadcastChannel('share_links_channel');
-          bc.postMessage({ type: 'LINK_EDITED', linkId: editLink.id });
+          try {
+            const bc = new BroadcastChannel('share_links_channel');
+            bc.postMessage({ type: 'LINK_EDITED', linkId: editLink.id });
+            localStorage.setItem('thaiudon_share_link_sync', Date.now().toString());
+          } catch {}
         }
       } else {
         alert(data.error || 'แก้ไขลิงก์ไม่สำเร็จ');
@@ -234,7 +299,7 @@ export default function ShareLinksPage() {
         token: 'catalog-tuulo-sale',
         badgeColor: 'bg-red-50 text-red-700 border-red-200',
         textColor: 'text-red-700',
-        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเรทราคาเซลล์',
+        desc: 'แชร์แคตตาล็อกตู้โล (111 รายการ) แสดงเรทราคาเซลล์',
       },
       {
         code: 'RETAIL_PRICE',
@@ -242,7 +307,7 @@ export default function ShareLinksPage() {
         token: 'catalog-tuulo-retail',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
         textColor: 'text-blue-700',
-        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเรทราคาปลีก',
+        desc: 'แชร์แคตตาล็อกตู้โล (111 รายการ) แสดงเรทราคาปลีก',
       },
       {
         code: 'VIP_PRICE',
@@ -250,7 +315,7 @@ export default function ShareLinksPage() {
         token: 'catalog-tuulo-vip',
         badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
         textColor: 'text-purple-700',
-        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเรทราคา VIP',
+        desc: 'แชร์แคตตาล็อกตู้โล (111 รายการ) แสดงเรทราคา VIP',
       },
       {
         code: 'GENERAL_PRICE',
@@ -258,7 +323,7 @@ export default function ShareLinksPage() {
         token: 'catalog-tuulo-general',
         badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
         textColor: 'text-slate-800',
-        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเรทราคาทั่วไป',
+        desc: 'แชร์แคตตาล็อกตู้โล (111 รายการ) แสดงเรทราคาทั่วไป',
       },
       {
         code: 'NO_PRICE',
@@ -266,7 +331,7 @@ export default function ShareLinksPage() {
         token: 'catalog-tuulo-noprice',
         badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
         textColor: 'text-amber-800',
-        desc: 'แชร์แคตตาล็อกตู้โล (121 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
+        desc: 'แชร์แคตตาล็อกตู้โล (111 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
       },
     ],
     knockdown: [
@@ -276,7 +341,7 @@ export default function ShareLinksPage() {
         token: 'catalog-knockdown-sale',
         badgeColor: 'bg-red-50 text-red-700 border-red-200',
         textColor: 'text-red-700',
-        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเรทราคาเซลล์',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (157 รายการ) แสดงเรทราคาเซลล์',
       },
       {
         code: 'RETAIL_PRICE',
@@ -284,7 +349,7 @@ export default function ShareLinksPage() {
         token: 'catalog-knockdown-retail',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
         textColor: 'text-blue-700',
-        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเรทราคาปลีก',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (157 รายการ) แสดงเรทราคาปลีก',
       },
       {
         code: 'VIP_PRICE',
@@ -292,7 +357,7 @@ export default function ShareLinksPage() {
         token: 'catalog-knockdown-vip',
         badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
         textColor: 'text-purple-700',
-        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเรทราคา VIP',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (157 รายการ) แสดงเรทราคา VIP',
       },
       {
         code: 'GENERAL_PRICE',
@@ -300,7 +365,7 @@ export default function ShareLinksPage() {
         token: 'catalog-knockdown-general',
         badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
         textColor: 'text-slate-800',
-        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเรทราคาทั่วไป',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (157 รายการ) แสดงเรทราคาทั่วไป',
       },
       {
         code: 'NO_PRICE',
@@ -308,7 +373,7 @@ export default function ShareLinksPage() {
         token: 'catalog-knockdown-noprice',
         badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
         textColor: 'text-amber-800',
-        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (189 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
+        desc: 'แชร์แคตตาล็อกน็อคดาวน์ (157 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
       },
     ],
     all: [
@@ -318,7 +383,7 @@ export default function ShareLinksPage() {
         token: 'catalog-sale-2026',
         badgeColor: 'bg-red-50 text-red-700 border-red-200',
         textColor: 'text-red-700',
-        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาเซลล์',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (268 รายการ) แสดงเรทราคาเซลล์',
       },
       {
         code: 'RETAIL_PRICE',
@@ -326,7 +391,7 @@ export default function ShareLinksPage() {
         token: 'catalog-retail-2026',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
         textColor: 'text-blue-700',
-        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาปลีก',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (268 รายการ) แสดงเรทราคาปลีก',
       },
       {
         code: 'VIP_PRICE',
@@ -334,7 +399,7 @@ export default function ShareLinksPage() {
         token: 'catalog-vip-2026',
         badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
         textColor: 'text-purple-700',
-        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคา VIP',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (268 รายการ) แสดงเรทราคา VIP',
       },
       {
         code: 'GENERAL_PRICE',
@@ -342,7 +407,7 @@ export default function ShareLinksPage() {
         token: 'catalog-general-2026',
         badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
         textColor: 'text-slate-800',
-        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเรทราคาทั่วไป',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (268 รายการ) แสดงเรทราคาทั่วไป',
       },
       {
         code: 'NO_PRICE',
@@ -350,7 +415,7 @@ export default function ShareLinksPage() {
         token: 'catalog-noprice-2026',
         badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
         textColor: 'text-amber-800',
-        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (310 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
+        desc: 'แชร์แคตตาล็อกรวมสินค้าทั้งหมด (268 รายการ) แสดงเฉพาะสินค้าโดยไม่มีราคา (-)',
       },
     ],
   };
@@ -360,7 +425,7 @@ export default function ShareLinksPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
       {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
-      <QuickToolNav activeTab="share-links" subtitle="ระบบแชร์ลิงก์ลูกค้าแบบ Real-time แสดงราคาทุกระดับตรงตามระบบหลังบ้าน" onRefresh={fetchLinks} />
+      <QuickToolNav activeTab="share-links" subtitle="ระบบแชร์ลิงก์ลูกค้าแบบ Real-time แสดงราคาทุกระดับตรงตามระบบหลังบ้าน" onRefresh={() => loadLinks(true)} />
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -433,7 +498,7 @@ export default function ShareLinksPage() {
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <span>แคตตาล็อกตู้โล (121 รายการ)</span>
+            <span>แคตตาล็อกตู้โล (111 รายการ)</span>
           </button>
           <button
             onClick={() => setCatalogCategoryTab('knockdown')}
@@ -443,7 +508,7 @@ export default function ShareLinksPage() {
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <span>แคตตาล็อกน็อคดาวน์ (189 รายการ)</span>
+            <span>แคตตาล็อกน็อคดาวน์ (157 รายการ)</span>
           </button>
           <button
             onClick={() => setCatalogCategoryTab('all')}
@@ -453,7 +518,7 @@ export default function ShareLinksPage() {
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <span>รวมสินค้าทั้งหมด (310 รายการ)</span>
+            <span>รวมสินค้าทั้งหมด (268 รายการ)</span>
           </button>
         </div>
 
@@ -533,15 +598,42 @@ export default function ShareLinksPage() {
         </div>
       </div>
 
-      {/* SECTION 2: CUSTOM SHARE LINKS TABLE (Real-time, Expiry Editing, Suspend / Activate) */}
+      {/* SECTION 2: CUSTOM SHARE LINKS TABLE (Real-time, Transparent Activity Across Accounts) */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">
-              ประวัติลิงก์แชร์ทั้งหมดในระบบ ({links.length})
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-600" />
+              <span>ประวัติลิงก์แชร์ทั้งหมดในระบบ ({links.length})</span>
             </h2>
-            <span className="text-[10px] text-slate-400 font-mono">
-              อัปเดตล่าสุด: {lastSyncTime.toLocaleTimeString('th-TH')}
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Live Sync ทุกบัญชี</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-500 font-mono">
+              ซิงค์ล่าสุด: {lastSyncTime.toLocaleTimeString('th-TH')}
+            </span>
+            <button
+              onClick={() => loadLinks(false)}
+              disabled={loading || isRefreshing}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+              title="ดึงข้อมูลกิจกรรมและประวัติล่าสุด"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
+              <span>{isRefreshing ? 'กำลังซิงค์...' : 'รีเฟรช'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Real-time Transparency Banner */}
+        <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>
+              <strong>บันทึกกิจกรรมโปร่งใสทุกบัญชี:</strong> ทุกบัญชีที่เข้าใช้งานจะเห็นความเคลื่อนไหวของทุกลิงก์ที่แชร์ออกไป (ผู้สร้าง, จำนวนครั้งที่ลูกค้าเปิดดู, และเวลาเข้าชมล่าสุด) โดยอัปเดตแบบ Real-time ทุกครั้งที่มีการเปิดใช้งาน
             </span>
           </div>
         </div>
@@ -552,24 +644,25 @@ export default function ShareLinksPage() {
               <thead className="bg-slate-50 text-slate-600 uppercase font-semibold border-b border-slate-200">
                 <tr>
                   <th className="px-5 py-3.5">ลูกค้า / วัตถุประสงค์</th>
-                  <th className="px-4 py-3.5">รูปแบบการแชร์</th>
-                  <th className="px-4 py-3.5">Price Tier ที่ผูกไว้</th>
+                  <th className="px-4 py-3.5">ผู้สร้าง & บัญชีที่แชร์</th>
+                  <th className="px-4 py-3.5">ความเคลื่อนไหวการเข้าชม (Live)</th>
+                  <th className="px-4 py-3.5">รูปแบบการแชร์ & ราคา</th>
                   <th className="px-4 py-3.5">ระยะเวลา / วันหมดอายุ</th>
                   <th className="px-3 py-3.5 text-center">สถานะใช้งาน</th>
-                  <th className="px-5 py-3.5 text-right">การจัดการลิงก์ (Real-time)</th>
+                  <th className="px-5 py-3.5 text-right">การจัดการลิงก์</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       <span className="inline-block w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></span>
-                      <div>กำลังโหลดข้อมูลลิงก์...</div>
+                      <div>กำลังโหลดประวัติลิงก์แชร์และกิจกรรมการเข้าชม...</div>
                     </td>
                   </tr>
                 ) : links.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       ยังไม่มีลิงก์แชร์ในระบบ
                     </td>
                   </tr>
@@ -581,31 +674,85 @@ export default function ShareLinksPage() {
 
                     return (
                       <tr key={link.id} className="hover:bg-slate-50/70 transition">
+                        {/* 1. Customer / Purpose */}
                         <td className="px-5 py-3.5">
                           <div className="font-semibold text-slate-900 flex items-center gap-1.5">
                             <span>{link.customer_name || 'ลูกค้าทั่วไป (General)'}</span>
                           </div>
-                          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                            สร้างโดย {link.creator_name || 'Admin'} • /s/{link.token_raw?.substring(0, 10)}...
+                          <div className="text-[10px] font-mono text-slate-400 mt-0.5 truncate max-w-[180px]">
+                            /s/{link.token_raw?.substring(0, 14)}...
                           </div>
                         </td>
 
+                        {/* 2. Creator Account */}
                         <td className="px-4 py-3.5">
-                          <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-[11px] font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-[11px] shrink-0">
+                              {(link.creator_name || 'A').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-800 text-[11px]">
+                                {link.creator_name || 'Admin'}
+                              </div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                <span>@{link.creator_username || 'admin'}</span>
+                                <span className="px-1.5 py-0.2 bg-slate-100 rounded text-[9px] font-medium text-slate-600">
+                                  {link.creator_role || 'Staff'}
+                                </span>
+                              </div>
+                              {link.created_at && (
+                                <div className="text-[9px] text-slate-400 mt-0.5">
+                                  สร้าง: {formatDateTime(link.created_at)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 3. Live Access & Views */}
+                        <td className="px-4 py-3.5">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                  (link.view_count || 0) > 0
+                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>{link.view_count || 0} ครั้ง</span>
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                              <span className="text-slate-400">เข้าชมล่าสุด:</span>
+                              <span className={link.last_accessed_at ? 'font-semibold text-emerald-700' : 'text-slate-400'}>
+                                {formatRelativeTime(link.last_accessed_at)}
+                              </span>
+                            </div>
+                            {link.last_accessed_at && (
+                              <div className="text-[9px] font-mono text-slate-400">
+                                ({formatDateTime(link.last_accessed_at)})
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Mode & Price Tier */}
+                        <td className="px-4 py-3.5 space-y-1">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-[11px] font-medium block w-fit">
                             {link.sharing_mode === 'FULL_CATALOG'
                               ? `ทั้งแคตตาล็อก (${link.productCount || 0} รายการ)`
                               : link.sharing_mode === 'MULTIPLE_PRODUCTS'
                               ? `เลือกสินค้า (${link.productCount || 0} รายการ)`
                               : `สินค้าเดี่ยว (1 รายการ)`}
                           </span>
-                        </td>
-
-                        <td className="px-4 py-3.5">
-                          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold">
+                          <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-bold">
                             {link.price_tier_name}
                           </span>
                         </td>
 
+                        {/* 5. Expiry */}
                         <td className="px-4 py-3.5 text-slate-600 text-[11px]">
                           {link.expires_at ? (
                             <div>
@@ -625,6 +772,7 @@ export default function ShareLinksPage() {
                           )}
                         </td>
 
+                        {/* 6. Active Status */}
                         <td className="px-3 py-3.5 text-center">
                           {isRevoked ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
@@ -644,12 +792,13 @@ export default function ShareLinksPage() {
                           )}
                         </td>
 
+                        {/* 7. Action Buttons */}
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Copy Link Button */}
                             <button
                               onClick={() => handleCopy(link.token_raw, link.id)}
-                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-2xs"
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                               title="คัดลอกลิงก์"
                             >
                               {isCopied ? (
@@ -678,7 +827,7 @@ export default function ShareLinksPage() {
                             {/* Edit Duration & Info Modal Trigger */}
                             <button
                               onClick={() => openEditModal(link)}
-                              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-2xs"
+                              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                               title="แก้ไขระยะเวลาแชร์และข้อมูลลิงก์"
                             >
                               <Edit className="w-3.5 h-3.5" />
@@ -689,7 +838,7 @@ export default function ShareLinksPage() {
                             {isRevoked ? (
                               <button
                                 onClick={() => handleToggleRevoke(link)}
-                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                                 title="เปิดใช้งานลิงก์นี้อีกครั้ง"
                               >
                                 <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
@@ -698,7 +847,7 @@ export default function ShareLinksPage() {
                             ) : (
                               <button
                                 onClick={() => handleToggleRevoke(link)}
-                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                                 title="ระงับลิงก์ชั่วคราว"
                               >
                                 <Ban className="w-3.5 h-3.5 text-amber-600" />

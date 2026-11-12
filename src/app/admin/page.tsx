@@ -15,8 +15,10 @@ import {
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
-    totalProducts: 310,
-    publishedProducts: 310,
+    totalProducts: 268,
+    publishedProducts: 268,
+    tuuloProducts: 111,
+    knockdownProducts: 157,
     categoriesCount: 12,
     shareLinksCount: 15,
     totalBatches: 0,
@@ -25,22 +27,64 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [overviewCatalogTab, setOverviewCatalogTab] = useState<'tuulo' | 'knockdown' | 'all'>('tuulo');
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch('/api/admin/stats');
-        const data = await res.json();
-        if (data.success) {
-          if (data.stats) setStats(data.stats);
-          if (data.recentProducts) setRecentProducts(data.recentProducts);
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard:', err);
-      } finally {
-        setLoading(false);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/stats?t=${Date.now()}`);
+      const data = await res.json();
+      if (data.success) {
+        if (data.stats) setStats(data.stats);
+        if (data.recentProducts) setRecentProducts(data.recentProducts);
       }
+    } catch (err) {
+      console.error('Failed to load dashboard:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
+
+    // Multi-channel Real-time BroadcastChannel Sync for Dashboard Numbers
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('thaiudon_sync_channel');
+      bc.onmessage = (event) => {
+        if (
+          event.data?.type === 'PRICES_UPDATED' ||
+          event.data?.type === 'PRICE_BATCH_UPDATED' ||
+          event.data?.type === 'CATALOG_UPDATED' ||
+          event.data?.type === 'PRODUCTS_UPDATED'
+        ) {
+          loadData(true);
+        }
+      };
+    } catch {}
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === 'thaiudon_last_sync' ||
+        e.key === 'thaiudon_batch_sync' ||
+        e.key === 'thaiudon_product_sync' ||
+        e.key === 'thaiudon_price_sync'
+      ) {
+        loadData(true);
+      }
+    };
+
+    const handleFocus = () => {
+      loadData(true);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   return (
@@ -96,7 +140,7 @@ export default function AdminDashboardPage() {
             <div className="text-xs text-slate-500 font-medium">สินค้าทั้งหมดในระบบ</div>
             <div className="text-2xl font-bold text-slate-900 mt-0.5">{stats.totalProducts} รายการ</div>
             <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
-              เผยแพร่แล้ว {stats.publishedProducts} รายการ
+              ตู้โล {stats.tuuloProducts || 111} • น็อคดาวน์ {stats.knockdownProducts || 157} รายการ
             </div>
           </div>
         </Link>
@@ -110,10 +154,10 @@ export default function AdminDashboardPage() {
             <Coins className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs text-slate-500 font-medium">ระบบราคา 5 ระดับ</div>
-            <div className="text-2xl font-bold text-slate-900 mt-0.5">5 ประเภทราคา</div>
-            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-              เซลล์ / ปลีก / VIP / ทั่วไป / ไม่มีราคา (-)
+            <div className="text-xs text-slate-500 font-medium">จัดการราคา 4 ระดับ</div>
+            <div className="text-2xl font-bold text-slate-900 mt-0.5">{stats.totalProducts} รายการ</div>
+            <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
+              เซลล์ / ปลีก / VIP / ทั่วไป
             </div>
           </div>
         </Link>

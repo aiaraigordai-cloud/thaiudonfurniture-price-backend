@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
 import { saveProductOverridesBatch } from '@/lib/product-store';
+import { getSupabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { product_ids, category_id } = body;
+    const { product_ids, category_id, catalog_type } = body;
 
     if (!Array.isArray(product_ids) || product_ids.length === 0) {
       return NextResponse.json({ error: 'กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการ' }, { status: 400 });
@@ -40,12 +41,22 @@ export async function POST(request: Request) {
     await db.exec('BEGIN TRANSACTION;');
     try {
       const placeholders = product_ids.map(() => '?').join(',');
-      await db.prepare(`
-        UPDATE products
-        SET category_id = ?, updated_at = datetime('now')
-        WHERE id IN (${placeholders})
-      `).run(category_id || null, ...product_ids);
+      let updateSql = 'UPDATE products SET updated_at = datetime("now")';
+      const updateParams: any[] = [];
 
+      if (category_id) {
+        updateSql += ', category_id = ?';
+        updateParams.push(category_id);
+      }
+      if (catalog_type) {
+        updateSql += ', catalog_type = ?';
+        updateParams.push(catalog_type);
+      }
+
+      updateSql += ` WHERE id IN (${placeholders})`;
+      updateParams.push(...product_ids);
+
+      await db.prepare(updateSql).run(...updateParams);
       await db.exec('COMMIT;');
     } catch (dbErr) {
       await db.exec('ROLLBACK;');
@@ -55,7 +66,7 @@ export async function POST(request: Request) {
     // Fetch updated product SKUs for overrides indexing
     const placeholders = product_ids.map(() => '?').join(',');
     const updatedProducts = await db.prepare(`
-      SELECT id, sku FROM products WHERE id IN (${placeholders})
+      SELECT id, sku, catalog_type FROM products WHERE id IN (${placeholders})
     `).all(...product_ids) as any[];
 
     // Batch update persistent overrides (Netlify Blobs + Local File)
@@ -63,12 +74,33 @@ export async function POST(request: Request) {
       updatedProducts.map((p) => ({
         id: p.id,
         sku: p.sku,
-        category_id: category_id || null,
-        category_name: categoryName,
+        category_id: category_id || undefined,
+        category_name: categoryName || undefined,
+        catalog_type: catalog_type || p.catalog_type,
       }))
     );
 
+    // Sync to Supabase PostgreSQL for permanence and Realtime WebSocket trigger
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const supaRows = updatedProducts.map((p) => ({
+          id: p.id,
+          sku: p.sku,
+          category_id: category_id || null,
+          catalog_type: catalog_type || p.catalog_type,
+          updated_at: new Date().toISOString(),
+        }));
+        for (let i = 0; i < supaRows.length; i += 50) {
+          await supabase.from('products').upsert(supaRows.slice(i, i + 50), { onConflict: 'id' });
+        }
+      } catch (err) {
+        console.warn('Supabase batch category sync error:', err);
+      }
+    }
+
     // Audit log
+    const catalogLabel = catalog_type === 'tuulo' ? 'ตู้โล (Tuulo)' : catalog_type === 'knockdown' ? 'น็อคดาวน์ (Knockdown)' : '';
     await logAudit(
       'BATCH_MOVE_CATEGORY',
       'PRODUCT',
@@ -79,16 +111,23 @@ export async function POST(request: Request) {
         count: product_ids.length,
         category_id: category_id || null,
         category_name: categoryName,
+        catalog_type: catalog_type || null,
         product_skus: updatedProducts.map((p) => p.sku),
       }
     );
 
+    const destMsg = [
+      catalogLabel ? `ประเภท "${catalogLabel}"` : '',
+      categoryName ? `หมวดหมู่ "${categoryName}"` : '',
+    ].filter(Boolean).join(' และ ');
+
     return NextResponse.json({
       success: true,
-      message: `ย้ายสินค้า ${product_ids.length} รายการไปยังหมวดหมู่ "${categoryName || 'ไม่ระบุ'}" สำเร็จแล้วแบบ Real-time`,
+      message: `ย้ายสินค้า ${product_ids.length} รายการไปยัง ${destMsg} สำเร็จแล้วแบบ Real-time`,
       count: product_ids.length,
       category_id: category_id || null,
       category_name: categoryName,
+      catalog_type: catalog_type || null,
       updated_ids: product_ids,
     });
   } catch (error: any) {

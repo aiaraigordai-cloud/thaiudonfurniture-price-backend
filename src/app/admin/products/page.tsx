@@ -87,15 +87,16 @@ export default function ProductsPage() {
   // 3.1 Batch Move Category State
   const [moveCategoryModalOpen, setMoveCategoryModalOpen] = useState(false);
   const [targetCategoryId, setTargetCategoryId] = useState('');
+  const [targetCatalogType, setTargetCatalogType] = useState<'keep' | 'knockdown' | 'tuulo'>('keep');
   const [movingCategory, setMovingCategory] = useState(false);
   const [moveCategoryError, setMoveCategoryError] = useState('');
 
   // 4. Catalog Type Filter (all, tuulo, knockdown)
   const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
   const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number }>({
-    all: 310,
-    tuulo: 121,
-    knockdown: 189,
+    all: 268,
+    tuulo: 111,
+    knockdown: 157,
   });
 
   // Reset pagination to page 1 whenever any filter changes
@@ -115,6 +116,7 @@ export default function ProductsPage() {
   const [quickEditProduct, setQuickEditProduct] = useState<any | null>(null);
   const [quickEditSku, setQuickEditSku] = useState('');
   const [quickEditName, setQuickEditName] = useState('');
+  const [quickEditCatalogType, setQuickEditCatalogType] = useState<'knockdown' | 'tuulo'>('knockdown');
   const [quickEditDescription, setQuickEditDescription] = useState('');
   const [quickEditCategoryId, setQuickEditCategoryId] = useState('');
   const [quickEditWidth, setQuickEditWidth] = useState('');
@@ -297,6 +299,7 @@ export default function ProductsPage() {
     setQuickEditHeight(prod.height ? String(prod.height) : '');
     setQuickEditDepth(prod.depth ? String(prod.depth) : '');
     const isTuulo = prod.catalog_type === 'tuulo' || prod.catalogType === 'tuulo';
+    setQuickEditCatalogType(isTuulo ? 'tuulo' : 'knockdown');
     setQuickEditColor(isTuulo ? 'ตามภาพ' : (prod.color || ''));
     setQuickEditStatus(prod.status || 'Published');
 
@@ -355,7 +358,7 @@ export default function ProductsPage() {
     const images = quickEditPrimaryImages.filter((img) => img && typeof img === 'string' && img.trim());
     const ref_images = quickEditRefImages.filter((img) => img && typeof img === 'string' && img.trim());
 
-    const isTuuloProduct = quickEditProduct.catalog_type === 'tuulo' || quickEditProduct.catalogType === 'tuulo';
+    const isTuuloProduct = quickEditCatalogType === 'tuulo';
     const finalProductColor = isTuuloProduct ? 'ตามภาพ' : (quickEditColor ? quickEditColor.trim() : null);
     const updatedSku = quickEditSku.trim();
 
@@ -366,6 +369,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           sku: updatedSku,
           name: quickEditName.trim(),
+          catalog_type: quickEditCatalogType,
           description: quickEditDescription.trim(),
           category_id: quickEditCategoryId || null,
           width: quickEditWidth ? parseFloat(quickEditWidth) : null,
@@ -404,6 +408,8 @@ export default function ProductsPage() {
               ...p,
               sku: updatedSku,
               name: quickEditName.trim(),
+              catalog_type: quickEditCatalogType,
+              catalogType: quickEditCatalogType,
               description: quickEditDescription.trim(),
               category_id: quickEditCategoryId || null,
               category_name: cat ? cat.name : p.category_name,
@@ -577,7 +583,7 @@ export default function ProductsPage() {
             ref_filename: null,
             images: (prev.images || []).filter((img: string) => !img.includes('/ref/') && !img.startsWith('data:image')),
           }));
-          setPreviewActiveImgIdx(0);
+          setPreviewRefImgIdx(0);
         }
         if (typeof window !== 'undefined') {
           try {
@@ -928,6 +934,13 @@ export default function ProductsPage() {
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const fullUrl = `${origin}${data.url}`;
         setGeneratedShareUrl(fullUrl);
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('share_links_channel');
+            bc.postMessage({ type: 'LINK_CREATED' });
+            localStorage.setItem('thaiudon_share_link_sync', Date.now().toString());
+          } catch {}
+        }
       }
     } catch {
       setShareError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
@@ -1006,6 +1019,13 @@ export default function ProductsPage() {
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
         const fullUrl = `${origin}${data.url}`;
         setMultiGeneratedShareUrl(fullUrl);
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('share_links_channel');
+            bc.postMessage({ type: 'LINK_CREATED' });
+            localStorage.setItem('thaiudon_share_link_sync', Date.now().toString());
+          } catch {}
+        }
       }
     } catch {
       setMultiShareError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
@@ -1027,6 +1047,7 @@ export default function ProductsPage() {
       return;
     }
     setMoveCategoryError('');
+    setTargetCatalogType('keep');
     if (!targetCategoryId && categories.length > 0) {
       setTargetCategoryId(categories[0].id);
     }
@@ -1050,6 +1071,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           product_ids: selectedIds,
           category_id: targetCategoryId,
+          catalog_type: targetCatalogType !== 'keep' ? targetCatalogType : undefined,
         }),
       });
 
@@ -1068,13 +1090,26 @@ export default function ProductsPage() {
                 ...p,
                 category_id: targetCategoryId,
                 category_name: targetCatName,
+                ...(targetCatalogType !== 'keep'
+                  ? {
+                      catalog_type: targetCatalogType,
+                      catalogType: targetCatalogType,
+                      ...(targetCatalogType === 'tuulo' ? { color: 'ตามภาพ' } : {}),
+                    }
+                  : {}),
               };
             }
             return p;
           })
         );
 
-        setActionMsg(`✅ ย้ายสินค้า ${selectedIds.length} รายการไปยังหมวดหมู่ "${targetCatName}" สำเร็จแล้วแบบ Real-time`);
+        const catalogLabel =
+          targetCatalogType === 'tuulo'
+            ? ' (และย้ายเข้าประเภทตู้โล)'
+            : targetCatalogType === 'knockdown'
+            ? ' (และย้ายเข้าประเภทน็อคดาวน์)'
+            : '';
+        setActionMsg(`✅ ย้ายสินค้า ${selectedIds.length} รายการไปยังหมวดหมู่ "${targetCatName}"${catalogLabel} สำเร็จแล้วแบบ Real-time`);
 
         // 2. Multi-channel Real-time broadcast for open tabs and customer share links
         if (typeof window !== 'undefined') {
@@ -1086,6 +1121,7 @@ export default function ProductsPage() {
               product_ids: selectedIds,
               category_id: targetCategoryId,
               category_name: targetCatName,
+              catalog_type: targetCatalogType !== 'keep' ? targetCatalogType : undefined,
               timestamp: Date.now(),
             });
             localStorage.setItem('thaiudon_last_sync', Date.now().toString());
@@ -2687,10 +2723,30 @@ export default function ProductsPage() {
               </div>
             </div>
 
+            {/* Target Catalog Type Select */}
+            <div className="space-y-1.5 bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200">
+              <label className="text-xs font-bold text-amber-950 flex items-center justify-between">
+                <span>1. เปลี่ยนประเภทแคตตาล็อก:</span>
+                <span className="text-[10px] text-amber-800 font-normal">ตู้โล vs น็อคดาวน์</span>
+              </label>
+              <select
+                value={targetCatalogType}
+                onChange={(e) => {
+                  const val = e.target.value as 'keep' | 'knockdown' | 'tuulo';
+                  setTargetCatalogType(val);
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-amber-300 text-xs font-bold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+              >
+                <option value="keep">🔄 คงเดิมตามสินค้าแต่ละชิ้น (ไม่เปลี่ยนประเภทแคตตาล็อก)</option>
+                <option value="knockdown">🛋️ เฟอร์นิเจอร์น็อคดาวน์ (Modern Luxury)</option>
+                <option value="tuulo">🚪 ตู้โล (Tuulo)</option>
+              </select>
+            </div>
+
             {/* Target Category Select */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-[#402E20] flex items-center justify-between">
-                <span>เลือกหมวดหมู่ปลายทาง:</span>
+                <span>2. เลือกหมวดหมู่สินค้าปลายทาง:</span>
                 <span className="text-[10px] text-amber-700 font-normal">* มีผลทันทีหลังกดยืนยัน</span>
               </label>
               <select
@@ -2699,11 +2755,16 @@ export default function ProductsPage() {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
               >
                 <option value="" disabled>-- กรุณาเลือกหมวดหมู่ --</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    📁 {c.name}
-                  </option>
-                ))}
+                {categories
+                  .filter((c) => {
+                    if (targetCatalogType === 'keep') return true;
+                    return !c.catalog_type || c.catalog_type === 'all' || c.catalog_type === targetCatalogType;
+                  })
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      📁 {c.name} {c.catalog_type ? `(${c.catalog_type === 'tuulo' ? 'ตู้โล' : 'น็อคดาวน์'})` : ''}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -3026,6 +3087,27 @@ export default function ProductsPage() {
                   />
                 </div>
 
+                {/* Catalog Type */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ประเภทแคตตาล็อก <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={quickEditCatalogType}
+                    onChange={(e) => {
+                      const newType = e.target.value as 'knockdown' | 'tuulo';
+                      setQuickEditCatalogType(newType);
+                      if (newType === 'tuulo') {
+                        setQuickEditColor('ตามภาพ');
+                      }
+                    }}
+                    className="w-full px-3.5 py-2 text-xs font-bold rounded-xl border border-blue-300 focus:ring-2 focus:ring-[#C5A059] focus:outline-hidden transition bg-blue-50/50 text-blue-900"
+                  >
+                    <option value="knockdown">🛋️ เฟอร์นิเจอร์น็อคดาวน์ (Modern Luxury)</option>
+                    <option value="tuulo">🚪 ตู้โล (Tuulo)</option>
+                  </select>
+                </div>
+
                 {/* Category */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">หมวดหมู่</label>
@@ -3035,11 +3117,13 @@ export default function ProductsPage() {
                     className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#C5A059] focus:outline-hidden transition bg-white"
                   >
                     <option value="">-- ไม่ระบุหมวดหมู่ --</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
+                    {categories
+                      .filter((cat) => !cat.catalog_type || cat.catalog_type === 'all' || cat.catalog_type === quickEditCatalogType)
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -3091,17 +3175,17 @@ export default function ProductsPage() {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     สี / ลาย
-                    {(quickEditProduct?.catalog_type === 'tuulo' || quickEditProduct?.catalogType === 'tuulo') && (
+                    {quickEditCatalogType === 'tuulo' && (
                       <span className="ml-1 text-[10px] text-blue-600 font-bold">(ตู้โล: ตามภาพ)</span>
                     )}
                   </label>
                   <input
                     type="text"
-                    value={(quickEditProduct?.catalog_type === 'tuulo' || quickEditProduct?.catalogType === 'tuulo') ? 'ตามภาพ' : quickEditColor}
+                    value={quickEditCatalogType === 'tuulo' ? 'ตามภาพ' : quickEditColor}
                     onChange={(e) => setQuickEditColor(e.target.value)}
-                    disabled={quickEditProduct?.catalog_type === 'tuulo' || quickEditProduct?.catalogType === 'tuulo'}
+                    disabled={quickEditCatalogType === 'tuulo'}
                     className={`w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#C5A059] focus:outline-hidden transition ${
-                      (quickEditProduct?.catalog_type === 'tuulo' || quickEditProduct?.catalogType === 'tuulo') ? 'bg-slate-100 text-slate-700 font-bold cursor-not-allowed' : ''
+                      quickEditCatalogType === 'tuulo' ? 'bg-slate-100 text-slate-700 font-bold cursor-not-allowed' : ''
                     }`}
                     placeholder="เช่น โอ๊ค, โซลิด, หินขาว"
                   />
