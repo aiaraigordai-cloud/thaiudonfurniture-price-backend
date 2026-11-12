@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import QuickToolNav from '@/components/admin/QuickToolNav';
 import { createClient } from '@supabase/supabase-js';
 import { getThumbnailUrl } from '@/lib/r2';
 import {
@@ -1111,6 +1112,9 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-24">
+      {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
+      <QuickToolNav activeTab="products" subtitle="จัดการข้อมูลสินค้า แคตตาล็อก รูปภาพหลัก และภาพอ้างอิงจริง ซิงค์เรียลไทม์กับทุกเครื่องมือ" onRefresh={() => loadProducts(false)} />
+
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

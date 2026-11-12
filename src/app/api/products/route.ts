@@ -135,11 +135,49 @@ export async function GET(request: Request) {
       };
     });
 
-    // 1. Apply persistent product overrides (for realtime name, category, image, description updates)
+    // 1. Apply persistent product overrides (for realtime name, category, image, description updates & newly imported products)
     let finalProducts = enrichedProducts;
     try {
       const overrides = await loadProductOverrides();
       finalProducts = applyProductOverrides(enrichedProducts, overrides);
+
+      // Ensure any newly appended products also respect active filters
+      if (catalogType && catalogType !== 'all') {
+        finalProducts = finalProducts.filter((p) => p.catalog_type === catalogType);
+      }
+      if (category) {
+        finalProducts = finalProducts.filter((p) => p.category_id === category);
+      }
+      if (status) {
+        finalProducts = finalProducts.filter((p) => p.status === status);
+      }
+      if (search) {
+        const searchClean = search.trim().toLowerCase();
+        const cleanDigits = search.trim().replace(/[,฿\s\.\-]/g, '');
+        finalProducts = finalProducts.filter((p) => {
+          const skuMatch = String(p.sku || '').toLowerCase().includes(searchClean);
+          const nameMatch = String(p.name || '').toLowerCase().includes(searchClean);
+          const descMatch = String(p.description || '').toLowerCase().includes(searchClean);
+          let priceMatch = false;
+          if (cleanDigits && p.prices) {
+            for (const pr of Object.values(p.prices)) {
+              if (String(Math.round(Number(pr))).includes(cleanDigits) || String(pr).includes(cleanDigits)) {
+                priceMatch = true;
+                break;
+              }
+            }
+          }
+          return skuMatch || nameMatch || descMatch || priceMatch;
+        });
+      }
+
+      // Sort consistently by page_num ASC, then sku ASC
+      finalProducts.sort((a, b) => {
+        const pageA = a.page_num !== null && a.page_num !== undefined ? a.page_num : 9999;
+        const pageB = b.page_num !== null && b.page_num !== undefined ? b.page_num : 9999;
+        if (pageA !== pageB) return pageA - pageB;
+        return String(a.sku || '').localeCompare(String(b.sku || ''));
+      });
     } catch (e) {
       console.warn('Failed to apply product overrides:', e);
     }
@@ -193,10 +231,21 @@ export async function GET(request: Request) {
       }
     }
 
-    // Dynamic catalog counts computed from finalProducts (reflects persistent deletions & additions in real-time)
-    const allCount = finalProducts.length;
-    const tuuloCount = finalProducts.filter((p) => p.catalog_type === 'tuulo').length;
-    const knockdownCount = finalProducts.filter((p) => p.catalog_type === 'knockdown').length;
+    // Dynamic catalog counts computed across entire catalog (reflects persistent deletions & additions in real-time)
+    let totalAllCount = finalProducts.length;
+    let totalTuuloCount = finalProducts.filter((p) => p.catalog_type === 'tuulo').length;
+    let totalKnockdownCount = finalProducts.filter((p) => p.catalog_type === 'knockdown').length;
+
+    if (catalogType || category || search || status) {
+      try {
+        const allBaseline = (await db.prepare('SELECT id, sku, catalog_type FROM products').all()) as any[];
+        const overrides = await loadProductOverrides();
+        const allCombined = applyProductOverrides(allBaseline, overrides);
+        totalAllCount = allCombined.length;
+        totalTuuloCount = allCombined.filter((p) => p.catalog_type === 'tuulo').length;
+        totalKnockdownCount = allCombined.filter((p) => p.catalog_type === 'knockdown').length;
+      } catch {}
+    }
 
     const sliced = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
     const outputProducts = isPricingMode
@@ -220,9 +269,9 @@ export async function GET(request: Request) {
         totalCount: finalProducts.length,
         priceTiers: tierRows,
         counts: {
-          all: catalogType || category || search || status ? (await db.prepare('SELECT COUNT(*) as c FROM products').get() as any)?.c || allCount : allCount,
-          tuulo: catalogType || category || search || status ? (await db.prepare("SELECT COUNT(*) as c FROM products WHERE catalog_type = 'tuulo'").get() as any)?.c || tuuloCount : tuuloCount,
-          knockdown: catalogType || category || search || status ? (await db.prepare("SELECT COUNT(*) as c FROM products WHERE catalog_type = 'knockdown'").get() as any)?.c || knockdownCount : knockdownCount,
+          all: totalAllCount,
+          tuulo: totalTuuloCount,
+          knockdown: totalKnockdownCount,
         },
       },
       {

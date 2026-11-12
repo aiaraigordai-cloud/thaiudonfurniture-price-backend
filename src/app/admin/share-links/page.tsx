@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import QuickToolNav from '@/components/admin/QuickToolNav';
 import {
   Share2,
   Plus,
@@ -358,6 +359,9 @@ export default function ShareLinksPage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-16">
+      {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
+      <QuickToolNav activeTab="share-links" subtitle="ระบบแชร์ลิงก์ลูกค้าแบบ Real-time แสดงราคาทุกระดับตรงตามระบบหลังบ้าน" onRefresh={fetchLinks} />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

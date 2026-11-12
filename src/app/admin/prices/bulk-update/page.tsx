@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import QuickToolNav from '@/components/admin/QuickToolNav';
 import { useRouter } from 'next/navigation';
 import {
   FileSpreadsheet,
@@ -461,6 +462,9 @@ export default function BulkPriceUpdatePage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
+      <QuickToolNav activeTab="bulk-update" subtitle="อัปเดทราคาและข้อมูลสินค้าแบบกลุ่มด้วยไฟล์ Excel พร้อมตรวจสอบความถูกต้องแบบ Real-time" />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

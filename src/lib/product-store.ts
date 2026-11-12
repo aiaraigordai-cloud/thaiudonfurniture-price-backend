@@ -8,6 +8,8 @@ export interface ProductOverride {
   description?: string;
   category_id?: string | null;
   category_name?: string | null;
+  catalog_type?: string | null;
+  page_num?: number | null;
   size_text?: string | null;
   width?: number | null;
   height?: number | null;
@@ -21,6 +23,8 @@ export interface ProductOverride {
   images?: string[];
   prices?: Record<string, number>;
   deleted?: boolean;
+  is_new?: boolean;
+  created_at?: string;
   updated_at: string;
 }
 
@@ -230,6 +234,10 @@ export function getLastProductUpdateTime(): number {
   return lastProductUpdateTime;
 }
 
+export function touchProductUpdateTime(): void {
+  lastProductUpdateTime = Date.now();
+}
+
 export function applyProductOverrideSingle(product: any, overrides: Record<string, ProductOverride>): any {
   if (!product || !overrides) return product;
 
@@ -274,8 +282,75 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
 }
 
 export function applyProductOverrides(products: any[], overrides: Record<string, ProductOverride>): any[] {
-  if (!Array.isArray(products) || !overrides || Object.keys(overrides).length === 0) {
+  if (!Array.isArray(products)) return [];
+  if (!overrides || Object.keys(overrides).length === 0) {
     return products;
   }
-  return products.map((p) => applyProductOverrideSingle(p, overrides)).filter(Boolean);
+
+  const existingIds = new Set<string>();
+  const existingSkus = new Set<string>();
+
+  const mapped = products
+    .map((p) => {
+      const updated = applyProductOverrideSingle(p, overrides);
+      if (updated) {
+        if (updated.id) existingIds.add(String(updated.id));
+        if (updated.sku) existingSkus.add(String(updated.sku).trim().toUpperCase());
+      }
+      return updated;
+    })
+    .filter(Boolean);
+
+  // Append newly added products from overrides that are not present in baseline SQLite products
+  const seenNewIds = new Set<string>();
+  for (const [key, ovr] of Object.entries(overrides)) {
+    if (!ovr || typeof ovr !== 'object') continue;
+    if (ovr.deleted) continue;
+    if (!ovr.id || !ovr.sku || !ovr.name) continue;
+
+    const ovrSku = String(ovr.sku).trim().toUpperCase();
+    if (existingIds.has(String(ovr.id)) || existingSkus.has(ovrSku)) continue;
+    if (seenNewIds.has(String(ovr.id))) continue;
+
+    seenNewIds.add(String(ovr.id));
+    existingIds.add(String(ovr.id));
+    existingSkus.add(ovrSku);
+
+    const refImgs = Array.isArray(ovr.ref_images)
+      ? ovr.ref_images
+      : (ovr.ref_image_url ? [ovr.ref_image_url] : []);
+
+    const imgs = Array.isArray(ovr.images)
+      ? ovr.images
+      : (ovr.primary_image_url ? [ovr.primary_image_url] : []);
+
+    const newProd = {
+      id: ovr.id,
+      sku: ovr.sku,
+      name: ovr.name,
+      description: ovr.description || '',
+      category_id: ovr.category_id || null,
+      category_name: ovr.category_name || null,
+      catalog_type: ovr.catalog_type || 'knockdown',
+      page_num: ovr.page_num || 1,
+      size_text: ovr.size_text || null,
+      width: ovr.width !== undefined ? ovr.width : null,
+      height: ovr.height !== undefined ? ovr.height : null,
+      depth: ovr.depth !== undefined ? ovr.depth : null,
+      color: ovr.catalog_type === 'tuulo' ? 'ตามภาพ' : (ovr.color || null),
+      status: ovr.status || 'Published',
+      ref_image_url: ovr.ref_image_url || (refImgs.length > 0 ? refImgs[0] : null),
+      ref_images: refImgs,
+      ref_filename: ovr.ref_filename || null,
+      primary_image_url: ovr.primary_image_url || (imgs.length > 0 ? imgs[0] : null),
+      images: imgs,
+      prices: ovr.prices || {},
+      created_at: ovr.created_at || ovr.updated_at || new Date().toISOString(),
+      updated_at: ovr.updated_at || new Date().toISOString(),
+    };
+
+    mapped.push(newProd);
+  }
+
+  return mapped;
 }

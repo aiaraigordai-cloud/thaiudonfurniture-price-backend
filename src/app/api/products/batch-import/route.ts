@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, syncProductToSupabasePostgres, invalidateSupabasePriceCache } from '@/lib/supabase';
+import { saveProductOverridesBatch, ProductOverride, touchProductUpdateTime } from '@/lib/product-store';
 import crypto from 'node:crypto';
 
 export async function POST(request: Request) {
@@ -23,6 +24,8 @@ export async function POST(request: Request) {
 
     const db = getDb();
     const tierRows = await db.prepare('SELECT id, code, name_th FROM price_tiers').all() as any[];
+    const validCatRows = await db.prepare('SELECT id FROM categories').all() as any[];
+    const validCatIds = new Set(validCatRows.map(c => c.id));
     const tierMap: Record<string, string> = {};
     const tierNameMap: Record<string, string> = {};
     tierRows.forEach(t => {
@@ -33,6 +36,8 @@ export async function POST(request: Request) {
     let importedCount = 0;
     let updatedCount = 0;
     const supaHistoryToSync: any[] = [];
+    const overridesToSave: Partial<ProductOverride>[] = [];
+    const supaProductsToSync: any[] = [];
 
     // Use transaction for consistency
     await db.exec('BEGIN TRANSACTION');
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
 
         const sku = String(item.sku).trim().toUpperCase();
         const name = String(item.name).trim();
-        const catalogType = catalog_id === 'tuulo' ? 'tuulo' : (catalog_id === 'knockdown' ? 'knockdown' : catalog_id);
+        const catalogType = catalog_id === 'tuulo' ? 'tuulo' : (catalog_id === 'knockdown' ? 'knockdown' : (item.catalog_type || catalog_id || 'knockdown'));
         const imageUrl = item.image_url || null;
 
         // Check if product exists by SKU
@@ -74,18 +79,33 @@ export async function POST(request: Request) {
 
             supaHistoryToSync.push({
               id: crypto.randomUUID(),
-              product_id: sku,
+              product_id: productId,
               price_tier_id: tierId,
               old_price: null,
               new_price: numVal,
               changed_by: user.id,
               reason: `อัปเดตราคาจากการนำเข้ารูปภาพแคตตาล็อก (${sku})`,
             });
+
+            overridesToSave.push({
+              id: productId,
+              sku,
+              prices: { [targetTier]: numVal },
+              updated_at: new Date().toISOString(),
+            });
+
+            supaProductsToSync.push({
+              id: productId,
+              sku,
+              prices: { [targetTier]: numVal },
+            });
           }
 
           updatedCount++;
         } else {
           // สินค้าใหม่ที่ไม่มีอยู่ในระบบ: เพิ่มเป็นสินค้าใหม่ และบันทึกเฉพาะราคาที่ระบุไว้เท่านั้น ส่วนราคาที่ไม่ได้ระบุให้เว้นว่างไว้
+          const resolvedCatId = item.category_id && validCatIds.has(item.category_id) ? item.category_id : null;
+
           await db.prepare(`
             INSERT INTO products (
               id, sku, name, description, category_id, catalog_type,
@@ -97,7 +117,7 @@ export async function POST(request: Request) {
             sku,
             name,
             item.description || '',
-            item.category_id || null,
+            resolvedCatId,
             catalogType,
             item.width ? Number(item.width) : null,
             item.height ? Number(item.height) : null,
@@ -116,11 +136,13 @@ export async function POST(request: Request) {
 
           // บันทึกเฉพาะราคาที่ระบุไว้เท่านั้น (ราคาที่ไม่ได้ระบุให้เว้นไว้ ไม่ต้องเติมอะไร)
           const rawPrices = item.prices || {};
+          const itemPrices: Record<string, number> = {};
           for (const code of ['SALE_PRICE', 'RETAIL_PRICE', 'VIP_PRICE', 'GENERAL_PRICE']) {
             const rawVal = rawPrices[code];
             const numVal = rawVal !== '' && rawVal !== null && rawVal !== undefined ? Number(rawVal) : NaN;
             const tierId = tierMap[code];
             if (tierId && !isNaN(numVal) && numVal > 0) {
+              itemPrices[code] = numVal;
               await db.prepare(`
                 INSERT OR REPLACE INTO product_prices (id, product_id, price_tier_id, price, updated_at, updated_by)
                 VALUES (
@@ -131,11 +153,66 @@ export async function POST(request: Request) {
             }
           }
 
+          const parsedW = item.width ? Number(item.width) : null;
+          const parsedH = item.height ? Number(item.height) : null;
+          const parsedD = item.depth ? Number(item.depth) : null;
+          const sizeText = (parsedW || parsedH || parsedD)
+            ? `กว้าง ${parsedW || '-'} x สูง ${parsedH || '-'} x ลึก ${parsedD || '-'} ซม.`
+            : null;
+
+          const newProductOverride: Partial<ProductOverride> = {
+            id: productId,
+            sku,
+            name,
+            description: item.description || '',
+            category_id: resolvedCatId,
+            catalog_type: catalogType,
+            width: parsedW,
+            height: parsedH,
+            depth: parsedD,
+            size_text: sizeText,
+            color: catalogType === 'tuulo' ? 'ตามภาพ' : (item.color || null),
+            status: 'Published',
+            ref_filename: item.filename || null,
+            ref_image_url: imageUrl,
+            primary_image_url: imageUrl,
+            images: imageUrl ? [imageUrl] : [],
+            prices: itemPrices,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          overridesToSave.push(newProductOverride);
+          supaProductsToSync.push(newProductOverride);
+
           importedCount++;
         }
       }
 
       await db.exec('COMMIT');
+
+      // 1. Persist overrides to Netlify Blobs & local file store
+      if (overridesToSave.length > 0) {
+        try {
+          await saveProductOverridesBatch(overridesToSave);
+          touchProductUpdateTime();
+        } catch (ovrErr) {
+          console.warn('Batch import overrides save warning:', ovrErr);
+        }
+      }
+
+      // 2. Sync new products & prices to Supabase PostgreSQL for persistence & Realtime trigger
+      if (supaProductsToSync.length > 0) {
+        for (const sp of supaProductsToSync) {
+          try {
+            await syncProductToSupabasePostgres(sp.id, sp);
+          } catch (syncErr) {
+            console.warn('Sync product to Supabase warning:', syncErr);
+          }
+        }
+      }
+
+      invalidateSupabasePriceCache();
 
       // Sync price history to Supabase in chunks of 50
       const supabase = getSupabase();

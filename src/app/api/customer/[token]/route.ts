@@ -197,6 +197,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
 
     // 1. Overlay persistent product overrides (for realtime name, category, image, sizes, fallback prices, and deletions)
     const deletedIndices = new Set<number>();
+    const appendedNewProducts: any[] = [];
     try {
       const overrides = await loadProductOverrides();
       if (overrides && Object.keys(overrides).length > 0) {
@@ -208,8 +209,14 @@ export async function GET(request: Request, { params }: { params: { token: strin
         };
         const currentTierCode = tierCodeMap[link.price_tier_id];
 
+        const existingIds = new Set<string>();
+        const existingSkus = new Set<string>();
+
         for (let i = 0; i < products.length; i++) {
           const prod = products[i];
+          if (prod.id) existingIds.add(prod.id);
+          if (prod.sku) existingSkus.add(String(prod.sku).trim().toUpperCase());
+
           const skuKey = prod.sku ? prod.sku.trim().toUpperCase() : '';
           const ovr = overrides[prod.id] || (skuKey ? overrides[skuKey] : null);
           if (ovr) {
@@ -249,14 +256,63 @@ export async function GET(request: Request, { params }: { params: { token: strin
             }
           }
         }
+
+        // Append newly created products from overrides that are not in SQLite baseline
+        const seenNewIds = new Set<string>();
+        for (const [key, ovr] of Object.entries(overrides)) {
+          if (!ovr || typeof ovr !== 'object') continue;
+          if (ovr.deleted) continue;
+          if (!ovr.id || !ovr.sku || !ovr.name) continue;
+
+          const ovrSku = String(ovr.sku).trim().toUpperCase();
+          if (existingIds.has(ovr.id) || existingSkus.has(ovrSku)) continue;
+          if (seenNewIds.has(ovr.id)) continue;
+
+          const ovrCatalog = ovr.catalog_type || 'knockdown';
+          if (link.catalog_id && link.catalog_id !== 'all' && ovrCatalog !== link.catalog_id) continue;
+
+          seenNewIds.add(ovr.id);
+
+          const refImgs = Array.isArray(ovr.ref_images) ? ovr.ref_images : (ovr.ref_image_url ? [ovr.ref_image_url] : []);
+          const mainImgs = Array.isArray(ovr.images)
+            ? ovr.images.filter((img: string) => !String(img).includes('/ref/') && !String(img).includes('catalogs/ref/'))
+            : (ovr.primary_image_url ? [ovr.primary_image_url] : []);
+
+          let prVal = 0;
+          if (!isNoPriceTier && currentTierCode && ovr.prices && ovr.prices[currentTierCode] !== undefined) {
+            prVal = Number(ovr.prices[currentTierCode]) || 0;
+          }
+
+          appendedNewProducts.push({
+            id: ovr.id,
+            sku: ovr.sku,
+            name: ovr.name,
+            description: ovr.description || '',
+            category_name: ovr.category_name || 'ทั่วไป',
+            catalogType: ovrCatalog,
+            pageNum: ovr.page_num || 999,
+            price: prVal,
+            sizeText: ovr.size_text || null,
+            width: ovr.width || null,
+            height: ovr.height || null,
+            depth: ovr.depth || null,
+            color: ovrCatalog === 'tuulo' ? 'ตามภาพ' : (ovr.color || null),
+            refImageUrl: ovr.ref_image_url || (refImgs.length > 0 ? refImgs[0] : null),
+            refImages: refImgs,
+            refFilename: ovr.ref_filename || null,
+            primaryImageUrl: mainImgs.length > 0 ? mainImgs[0] : null,
+            images: mainImgs,
+          });
+        }
       }
     } catch (e) {
       console.warn('Customer catalog overrides overlay error:', e);
     }
 
-    const activeProducts = deletedIndices.size > 0
-      ? products.filter((_, idx) => !deletedIndices.has(idx))
-      : products;
+    const activeProducts = [
+      ...(deletedIndices.size > 0 ? products.filter((_, idx) => !deletedIndices.has(idx)) : products),
+      ...appendedNewProducts,
+    ];
 
     // 2. Overlay latest real-time prices from Supabase PostgreSQL (Authoritative Price Layer)
     if (link.price_tier_id && !isNoPriceTier) {

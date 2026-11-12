@@ -70,7 +70,45 @@ export async function POST(request: Request) {
         const cleanSku = rawSku.replace(/[\s\-_.]/g, '');
         const prod = prodByExactSku.get(rawSku) || prodByRelaxedSku.get(cleanSku);
 
-        if (!prod) continue;
+        if (!prod) {
+          const newName = row.new_name && String(row.new_name).trim() ? String(row.new_name).trim() : (row.detected_product_name ? String(row.detected_product_name).trim() : null);
+          if (!newName || !rawSku) continue;
+
+          const newId = 'prod_' + crypto.randomUUID();
+          const newDesc = row.new_description !== undefined && row.new_description !== null ? String(row.new_description).trim() : '';
+          const newCatId = row.new_category_id ? String(row.new_category_id).trim() : null;
+          const newSize = row.new_size_text ? String(row.new_size_text).trim() : null;
+          const newColor = row.new_color ? String(row.new_color).trim() : null;
+          const newPage = row.new_page_num ? parseInt(String(row.new_page_num)) : 1;
+          const newRefImg = row.new_ref_image_url ? String(row.new_ref_image_url).trim() : null;
+
+          db.prepare(`
+            INSERT INTO products (
+              id, sku, name, description, category_id, catalog_type,
+              size_text, color, status, ref_image_url, page_num,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'knockdown', ?, ?, 'Published', ?, ?, datetime('now'), datetime('now'))
+          `).run(newId, rawSku, newName, newDesc, newCatId, newSize, newColor, newRefImg, newPage);
+
+          overridesToSave.push({
+            id: newId,
+            sku: rawSku,
+            name: newName,
+            description: newDesc,
+            category_id: newCatId,
+            category_name: row.new_category_name || undefined,
+            catalog_type: 'knockdown',
+            size_text: newSize,
+            color: newColor,
+            ref_image_url: newRefImg,
+            page_num: newPage,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+
+          updatedCount++;
+          continue;
+        }
 
         const newName = row.new_name && String(row.new_name).trim() ? String(row.new_name).trim() : null;
         const newDesc = row.new_description !== undefined && row.new_description !== null ? String(row.new_description).trim() : null;

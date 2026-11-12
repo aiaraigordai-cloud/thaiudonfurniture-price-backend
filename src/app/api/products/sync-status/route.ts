@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCachedSupabasePriceHistory } from '@/lib/supabase';
-import { getLastProductUpdateTime } from '@/lib/product-store';
+import { getLastProductUpdateTime, loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,17 +31,33 @@ export async function GET() {
     } catch {}
 
     const lastOverrideUpdate = getLastProductUpdateTime();
-    const syncToken = `${row?.product_count || 0}_${row?.tuulo_count || 0}_${row?.knockdown_count || 0}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
+
+    // Compute active counts taking overrides into account
+    let totalAll = row?.product_count || 0;
+    let totalTuulo = row?.tuulo_count || 0;
+    let totalKnockdown = row?.knockdown_count || 0;
+    try {
+      const overrides = await loadProductOverrides();
+      if (overrides && Object.keys(overrides).length > 0) {
+        const baseline = (await db.prepare('SELECT id, sku, catalog_type FROM products').all()) as any[];
+        const combined = applyProductOverrides(baseline, overrides);
+        totalAll = combined.length;
+        totalTuulo = combined.filter((p) => p.catalog_type === 'tuulo').length;
+        totalKnockdown = combined.filter((p) => p.catalog_type === 'knockdown').length;
+      }
+    } catch {}
+
+    const syncToken = `${totalAll}_${totalTuulo}_${totalKnockdown}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
 
     return NextResponse.json(
       {
         success: true,
         syncToken,
-        productCount: row?.product_count || 0,
+        productCount: totalAll,
         counts: {
-          all: row?.product_count || 0,
-          tuulo: row?.tuulo_count || 0,
-          knockdown: row?.knockdown_count || 0,
+          all: totalAll,
+          tuulo: totalTuulo,
+          knockdown: totalKnockdown,
         },
         lastProductUpdate: row?.last_product_update || null,
         lastPriceUpdate: row?.last_price_update || null,

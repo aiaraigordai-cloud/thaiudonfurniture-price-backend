@@ -164,9 +164,22 @@ export async function POST(request: Request) {
       let matchedCategoryName: string | null = rawCat;
 
       if (!matchedProduct) {
-        validationStatus = 'FAILED';
-        warningReason = `ไม่พบรหัสสินค้า SKU '${rawSku}' ในระบบ`;
-        failedCount++;
+        if (rawName) {
+          validationStatus = 'PASS';
+          warningReason = 'สินค้าใหม่ (จะเพิ่มเข้าระบบอัตโนมัติ)';
+          passedCount++;
+        } else {
+          validationStatus = 'FAILED';
+          warningReason = `ไม่พบรหัสสินค้า SKU '${rawSku}' ในระบบ และไม่ระบุชื่อสินค้า`;
+          failedCount++;
+        }
+        if (rawCat) {
+          const foundCat = catByName.get(rawCat.toLowerCase());
+          if (foundCat) {
+            matchedCategoryId = foundCat.id;
+            matchedCategoryName = foundCat.name;
+          }
+        }
       } else {
         passedCount++;
         // Check category resolution if category provided

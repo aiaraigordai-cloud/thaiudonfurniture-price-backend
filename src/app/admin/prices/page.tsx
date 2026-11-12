@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import QuickToolNav from '@/components/admin/QuickToolNav';
 import {
   Coins,
   Search,
@@ -431,6 +432,9 @@ export default function PricesPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
+      <QuickToolNav activeTab="prices" subtitle="จัดการราคาสินค้า 4 ระดับ (ราคาเซลล์ / ปลีก / VIP / ช่าง) ซิงค์เรียลไทม์กับทุกเครื่องมือ" onRefresh={() => loadProducts(true)} />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

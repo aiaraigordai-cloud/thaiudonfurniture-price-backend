@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import QuickToolNav from '@/components/admin/QuickToolNav';
 import {
   ArrowLeft,
   Plus,
@@ -616,6 +617,9 @@ export default function CatalogsAndImportPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Quick Tool Navigation (Linked Across All Admin Tools) */}
+      <QuickToolNav activeTab="categories" subtitle="นำเข้าสินค้าใหม่และแคตตาล็อก บันทึกสู่ฐานข้อมูล Cloud และกระจายผลแบบ Real-time ทันที" />
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

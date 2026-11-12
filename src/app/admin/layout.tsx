@@ -141,6 +141,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="text-[11px] text-slate-400 truncate">@{user?.username || 'admin'}</div>
         </div>
 
+        {/* Real-time Multi-tool Connection Badge */}
+        <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-[11px] font-semibold">Realtime ทุกเครื่องมือเชื่อมกัน</span>
+          </div>
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200 font-mono">LIVE</span>
+        </div>
+
         {/* Navigation Menus */}
         <div className="flex-1 overflow-y-auto px-3 space-y-6 py-2 custom-scrollbar">
           {/* Main Links */}
