@@ -57,517 +57,1033 @@
     "id": "prod_34c541e5-4bbd-41b3-9f9e-f9bc7a00fb0c",
     "sku": "TD-95-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-95-2": {
     "id": "prod_34c541e5-4bbd-41b3-9f9e-f9bc7a00fb0c",
     "sku": "TD-95-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_676fd720-1ffc-4fab-af12-f5ec98154144": {
     "id": "prod_676fd720-1ffc-4fab-af12-f5ec98154144",
     "sku": "D100-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D100-2": {
     "id": "prod_676fd720-1ffc-4fab-af12-f5ec98154144",
     "sku": "D100-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_394ee900-62c1-4beb-80fc-01a69413c894": {
     "id": "prod_394ee900-62c1-4beb-80fc-01a69413c894",
     "sku": "D100-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D100-4": {
     "id": "prod_394ee900-62c1-4beb-80fc-01a69413c894",
     "sku": "D100-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_3b6b5d74-63c2-4f4c-a10a-752cc3dd4245": {
     "id": "prod_3b6b5d74-63c2-4f4c-a10a-752cc3dd4245",
     "sku": "D120-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D120-2": {
     "id": "prod_3b6b5d74-63c2-4f4c-a10a-752cc3dd4245",
     "sku": "D120-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_1a0df719-f1df-466e-9291-be6f928d16d7": {
     "id": "prod_1a0df719-f1df-466e-9291-be6f928d16d7",
     "sku": "D120-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D120-3": {
     "id": "prod_1a0df719-f1df-466e-9291-be6f928d16d7",
     "sku": "D120-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.134Z"
+    "updated_at": "2026-11-12T03:06:07.134Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_bc422f9d-7ef9-429c-95f6-8b14d97812c5": {
     "id": "prod_bc422f9d-7ef9-429c-95f6-8b14d97812c5",
     "sku": "D150-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D150-2": {
     "id": "prod_bc422f9d-7ef9-429c-95f6-8b14d97812c5",
     "sku": "D150-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_2d79185b-ecdf-43d8-8ad8-8a89d3bfbdd6": {
     "id": "prod_2d79185b-ecdf-43d8-8ad8-8a89d3bfbdd6",
     "sku": "D150-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D150-3": {
     "id": "prod_2d79185b-ecdf-43d8-8ad8-8a89d3bfbdd6",
     "sku": "D150-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_35d96ce1-c682-4876-81e8-8e56cb8deab5": {
     "id": "prod_35d96ce1-c682-4876-81e8-8e56cb8deab5",
     "sku": "D150-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D150-4": {
     "id": "prod_35d96ce1-c682-4876-81e8-8e56cb8deab5",
     "sku": "D150-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_7b817957-d9ed-49b8-9ea8-38fe7dddcc38": {
     "id": "prod_7b817957-d9ed-49b8-9ea8-38fe7dddcc38",
     "sku": "D80-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D80-2": {
     "id": "prod_7b817957-d9ed-49b8-9ea8-38fe7dddcc38",
     "sku": "D80-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_19ea1d3d-d5dc-40d8-905d-fcd4f4734df9": {
     "id": "prod_19ea1d3d-d5dc-40d8-905d-fcd4f4734df9",
     "sku": "D80-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D80-3": {
     "id": "prod_19ea1d3d-d5dc-40d8-905d-fcd4f4734df9",
     "sku": "D80-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_639123e1-8075-4bce-b7a0-577b76d9fc30": {
     "id": "prod_639123e1-8075-4bce-b7a0-577b76d9fc30",
     "sku": "D80-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "D80-4": {
     "id": "prod_639123e1-8075-4bce-b7a0-577b76d9fc30",
     "sku": "D80-4",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_8c38d396-d9c3-4059-9cb3-bdaa875c25a8": {
     "id": "prod_8c38d396-d9c3-4059-9cb3-bdaa875c25a8",
     "sku": "TD-1842-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-1842-2": {
     "id": "prod_8c38d396-d9c3-4059-9cb3-bdaa875c25a8",
     "sku": "TD-1842-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_10d5b67b-fc9a-4f8a-83bd-1fd4e7873581": {
     "id": "prod_10d5b67b-fc9a-4f8a-83bd-1fd4e7873581",
     "sku": "TD-1821-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-1821-2": {
     "id": "prod_10d5b67b-fc9a-4f8a-83bd-1fd4e7873581",
     "sku": "TD-1821-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_0b3eba55-ab9b-4c54-8034-60bd4ccb4b38": {
     "id": "prod_0b3eba55-ab9b-4c54-8034-60bd4ccb4b38",
     "sku": "TD-1844-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-1844-2": {
     "id": "prod_0b3eba55-ab9b-4c54-8034-60bd4ccb4b38",
     "sku": "TD-1844-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_8838d9b8-9c8f-492c-bb5b-516616859d39": {
     "id": "prod_8838d9b8-9c8f-492c-bb5b-516616859d39",
     "sku": "TD-1843-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-1843-2": {
     "id": "prod_8838d9b8-9c8f-492c-bb5b-516616859d39",
     "sku": "TD-1843-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_787a8588-1f43-40d5-82cf-dff988bcbfb6": {
     "id": "prod_787a8588-1f43-40d5-82cf-dff988bcbfb6",
     "sku": "TD-2611-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2611-2": {
     "id": "prod_787a8588-1f43-40d5-82cf-dff988bcbfb6",
     "sku": "TD-2611-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_d05f19b6-5c5f-49bd-94ee-e6e66fa4d6a4": {
     "id": "prod_d05f19b6-5c5f-49bd-94ee-e6e66fa4d6a4",
     "sku": "TD-2664-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2664-2": {
     "id": "prod_d05f19b6-5c5f-49bd-94ee-e6e66fa4d6a4",
     "sku": "TD-2664-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_8a233842-90d1-408a-ae8e-5c6803c6e24b": {
     "id": "prod_8a233842-90d1-408a-ae8e-5c6803c6e24b",
     "sku": "TD-2665-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2665-2": {
     "id": "prod_8a233842-90d1-408a-ae8e-5c6803c6e24b",
     "sku": "TD-2665-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_d06a0f0e-c9f0-4b33-82d3-8fc6b730f26d": {
     "id": "prod_d06a0f0e-c9f0-4b33-82d3-8fc6b730f26d",
     "sku": "TD-2780-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2780-2": {
     "id": "prod_d06a0f0e-c9f0-4b33-82d3-8fc6b730f26d",
     "sku": "TD-2780-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_5eb3c0f3-95d9-40d0-9d50-6299a905f39e": {
     "id": "prod_5eb3c0f3-95d9-40d0-9d50-6299a905f39e",
     "sku": "TD-2779-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2779-2": {
     "id": "prod_5eb3c0f3-95d9-40d0-9d50-6299a905f39e",
     "sku": "TD-2779-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_b534c4e8-9954-4394-aa12-43da29e9cd5f": {
     "id": "prod_b534c4e8-9954-4394-aa12-43da29e9cd5f",
     "sku": "TD-2605-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2605-2": {
     "id": "prod_b534c4e8-9954-4394-aa12-43da29e9cd5f",
     "sku": "TD-2605-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_f57953ab-54d5-4a3a-afff-9fea5d0113f2": {
     "id": "prod_f57953ab-54d5-4a3a-afff-9fea5d0113f2",
     "sku": "TD-4242-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4242-2": {
     "id": "prod_f57953ab-54d5-4a3a-afff-9fea5d0113f2",
     "sku": "TD-4242-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_64f1e52e-ac10-4e1c-a3d6-9cea292c33ba": {
     "id": "prod_64f1e52e-ac10-4e1c-a3d6-9cea292c33ba",
     "sku": "TD-4242-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4242-3": {
     "id": "prod_64f1e52e-ac10-4e1c-a3d6-9cea292c33ba",
     "sku": "TD-4242-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_8f5ac0d9-9c0a-4c87-85d9-ffbd6865d86c": {
     "id": "prod_8f5ac0d9-9c0a-4c87-85d9-ffbd6865d86c",
     "sku": "TD-4243-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4243-2": {
     "id": "prod_8f5ac0d9-9c0a-4c87-85d9-ffbd6865d86c",
     "sku": "TD-4243-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_9d520cee-7a0e-4548-91fa-370b67a70b89": {
     "id": "prod_9d520cee-7a0e-4548-91fa-370b67a70b89",
     "sku": "TD-4243-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4243-3": {
     "id": "prod_9d520cee-7a0e-4548-91fa-370b67a70b89",
     "sku": "TD-4243-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_2b346806-ab03-4cc6-9a41-9cf3fc0b21d3": {
     "id": "prod_2b346806-ab03-4cc6-9a41-9cf3fc0b21d3",
     "sku": "TD-4245-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4245-2": {
     "id": "prod_2b346806-ab03-4cc6-9a41-9cf3fc0b21d3",
     "sku": "TD-4245-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_3dbdafe5-96f1-4372-8d43-d820332d9e55": {
     "id": "prod_3dbdafe5-96f1-4372-8d43-d820332d9e55",
     "sku": "TD-4245-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4245-3": {
     "id": "prod_3dbdafe5-96f1-4372-8d43-d820332d9e55",
     "sku": "TD-4245-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_cd785044-76c8-48c5-8878-ff2d19a7250a": {
     "id": "prod_cd785044-76c8-48c5-8878-ff2d19a7250a",
     "sku": "TD-4244-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4244-2": {
     "id": "prod_cd785044-76c8-48c5-8878-ff2d19a7250a",
     "sku": "TD-4244-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_245af3f8-d2cd-4cc7-8f1d-ca33096df1c6": {
     "id": "prod_245af3f8-d2cd-4cc7-8f1d-ca33096df1c6",
     "sku": "TD-4244-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-4244-3": {
     "id": "prod_245af3f8-d2cd-4cc7-8f1d-ca33096df1c6",
     "sku": "TD-4244-3",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_f1cd0415-d2ec-4698-b490-5595f0340b48": {
     "id": "prod_f1cd0415-d2ec-4698-b490-5595f0340b48",
     "sku": "TD-1958-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-1958-2": {
     "id": "prod_f1cd0415-d2ec-4698-b490-5595f0340b48",
     "sku": "TD-1958-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_b40aeebe-e0de-45a4-bdb9-4a8acd5866da": {
     "id": "prod_b40aeebe-e0de-45a4-bdb9-4a8acd5866da",
     "sku": "TD-2232-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2232-2": {
     "id": "prod_b40aeebe-e0de-45a4-bdb9-4a8acd5866da",
     "sku": "TD-2232-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_b6bd0b66-09de-48bc-bf3e-a6603a731ef3": {
     "id": "prod_b6bd0b66-09de-48bc-bf3e-a6603a731ef3",
     "sku": "TD-2094-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2094-2": {
     "id": "prod_b6bd0b66-09de-48bc-bf3e-a6603a731ef3",
     "sku": "TD-2094-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_b5900d4a-cd86-4773-83ec-2ceccc7629b1": {
     "id": "prod_b5900d4a-cd86-4773-83ec-2ceccc7629b1",
     "sku": "TD-3414-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3414-2": {
     "id": "prod_b5900d4a-cd86-4773-83ec-2ceccc7629b1",
     "sku": "TD-3414-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_cfbcc97a-f446-42d6-ae2b-eab75e954cfa": {
     "id": "prod_cfbcc97a-f446-42d6-ae2b-eab75e954cfa",
     "sku": "TD-3497-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3497-2": {
     "id": "prod_cfbcc97a-f446-42d6-ae2b-eab75e954cfa",
     "sku": "TD-3497-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_716e51be-f990-49a9-8a61-d232332e0bfa": {
     "id": "prod_716e51be-f990-49a9-8a61-d232332e0bfa",
     "sku": "TD-3469-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3469-2": {
     "id": "prod_716e51be-f990-49a9-8a61-d232332e0bfa",
     "sku": "TD-3469-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_dfcb43be-e043-475b-af12-986848619c34": {
     "id": "prod_dfcb43be-e043-475b-af12-986848619c34",
     "sku": "TD-3470-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3470-2": {
     "id": "prod_dfcb43be-e043-475b-af12-986848619c34",
     "sku": "TD-3470-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_80016759-121b-47fa-8eee-afa2b552bdf9": {
     "id": "prod_80016759-121b-47fa-8eee-afa2b552bdf9",
     "sku": "TD-3471-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3471-2": {
     "id": "prod_80016759-121b-47fa-8eee-afa2b552bdf9",
     "sku": "TD-3471-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_4ac7781b-a4b8-4df4-9107-2aeb44c7bbd1": {
     "id": "prod_4ac7781b-a4b8-4df4-9107-2aeb44c7bbd1",
     "sku": "TD-3472-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3472-2": {
     "id": "prod_4ac7781b-a4b8-4df4-9107-2aeb44c7bbd1",
     "sku": "TD-3472-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_50795045-91ec-41c6-b04a-50a54709169e": {
     "id": "prod_50795045-91ec-41c6-b04a-50a54709169e",
     "sku": "TD-2951-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-2951-2": {
     "id": "prod_50795045-91ec-41c6-b04a-50a54709169e",
     "sku": "TD-2951-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_bedd57af-8fd5-4adb-9fc4-755199882974": {
     "id": "prod_bedd57af-8fd5-4adb-9fc4-755199882974",
     "sku": "TD-3473-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3473-2": {
     "id": "prod_bedd57af-8fd5-4adb-9fc4-755199882974",
     "sku": "TD-3473-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_c7229bd7-810a-4465-9f90-6ba2235cbdd0": {
     "id": "prod_c7229bd7-810a-4465-9f90-6ba2235cbdd0",
     "sku": "TD-3474-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3474-2": {
     "id": "prod_c7229bd7-810a-4465-9f90-6ba2235cbdd0",
     "sku": "TD-3474-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_a70593db-c84e-4d08-9a23-a5fa12d40cfd": {
     "id": "prod_a70593db-c84e-4d08-9a23-a5fa12d40cfd",
     "sku": "TD-3475-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3475-2": {
     "id": "prod_a70593db-c84e-4d08-9a23-a5fa12d40cfd",
     "sku": "TD-3475-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_c3a1aa0e-8a0a-453f-8ff8-10f609b81b9e": {
     "id": "prod_c3a1aa0e-8a0a-453f-8ff8-10f609b81b9e",
     "sku": "TD-3476-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "TD-3476-2": {
     "id": "prod_c3a1aa0e-8a0a-453f-8ff8-10f609b81b9e",
     "sku": "TD-3476-2",
     "deleted": true,
-    "updated_at": "2026-11-12T03:06:07.135Z"
+    "updated_at": "2026-11-12T03:06:07.135Z",
+    "prices": {
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
+    }
   },
   "prod_7e6d29f6-00ea-4033-aa86-2a6724973b2e": {
     "id": "prod_7e6d29f6-00ea-4033-aa86-2a6724973b2e",
@@ -589,7 +1105,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/knockdown/images/TD-1784.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3999,
+      "SALE_PRICE": 3300,
       "RETAIL_PRICE": 6590,
       "VIP_PRICE": 3300,
       "GENERAL_PRICE": 3300
@@ -821,10 +1337,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-78.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1350,
+      "RETAIL_PRICE": 1990,
       "VIP_PRICE": 1300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -850,10 +1366,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-81.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1150,
+      "RETAIL_PRICE": 1690,
       "VIP_PRICE": 1110,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1150
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -879,10 +1395,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-82.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1250,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1200,
+      "RETAIL_PRICE": 1790,
       "VIP_PRICE": 1160,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -908,10 +1424,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-83.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2800,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1200,
+      "RETAIL_PRICE": 1790,
       "VIP_PRICE": 1160,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -937,10 +1453,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-85.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1300,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1250,
+      "RETAIL_PRICE": 1890,
       "VIP_PRICE": 1210,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -966,10 +1482,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-86.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1080,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1030,
+      "RETAIL_PRICE": 1290,
       "VIP_PRICE": 1030,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1030
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -995,10 +1511,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_01_TD-87.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 900,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 850,
+      "RETAIL_PRICE": 1190,
       "VIP_PRICE": 850,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 850
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1141,9 +1657,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1650,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2390,
       "VIP_PRICE": 1550,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1650
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1169,10 +1685,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-66.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1450,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1400,
+      "RETAIL_PRICE": 2090,
       "VIP_PRICE": 1350,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1400
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1198,10 +1714,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-67.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1450,
+      "RETAIL_PRICE": 2190,
       "VIP_PRICE": 1400,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1450
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1227,10 +1743,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-68.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1450,
+      "RETAIL_PRICE": 2190,
       "VIP_PRICE": 1400,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1450
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1256,10 +1772,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-69.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1550,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1500,
+      "RETAIL_PRICE": 2390,
       "VIP_PRICE": 1450,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1500
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1285,10 +1801,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-70.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1550,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1500,
+      "RETAIL_PRICE": 2390,
       "VIP_PRICE": 1450,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1500
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1314,10 +1830,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-77.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1400,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1350,
+      "RETAIL_PRICE": 1890,
       "VIP_PRICE": 1300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1343,10 +1859,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_02_TD-80.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1450,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1400,
+      "RETAIL_PRICE": 2090,
       "VIP_PRICE": 1350,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1400
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1459,10 +1975,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_03_TD-47.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2100,
+      "RETAIL_PRICE": 2890,
       "VIP_PRICE": 2150,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2150
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1488,10 +2004,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_03_TD-48.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2200,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2150,
+      "RETAIL_PRICE": 2990,
       "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1518,9 +2034,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2200,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2990,
       "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1546,10 +2062,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_03_TD-51.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2250,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2200,
+      "RETAIL_PRICE": 3090,
       "VIP_PRICE": 2250,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1576,9 +2092,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1700,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2490,
       "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1605,9 +2121,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1700,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2490,
       "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1634,9 +2150,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2590,
       "VIP_PRICE": 1650,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1663,9 +2179,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2590,
       "VIP_PRICE": 1650,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1692,7 +2208,7 @@
     ],
     "prices": {
       "SALE_PRICE": 16900,
-      "RETAIL_PRICE": 25900,
+      "RETAIL_PRICE": 29900,
       "VIP_PRICE": 16900,
       "GENERAL_PRICE": 16900
     },
@@ -1722,7 +2238,7 @@
     ],
     "prices": {
       "SALE_PRICE": 16900,
-      "RETAIL_PRICE": 25900,
+      "RETAIL_PRICE": 29900,
       "VIP_PRICE": 16900,
       "GENERAL_PRICE": 16900
     },
@@ -1751,7 +2267,7 @@
     ],
     "prices": {
       "SALE_PRICE": 16900,
-      "RETAIL_PRICE": 25900,
+      "RETAIL_PRICE": 29900,
       "VIP_PRICE": 16900,
       "GENERAL_PRICE": 16900
     },
@@ -1780,7 +2296,7 @@
     ],
     "prices": {
       "SALE_PRICE": 16900,
-      "RETAIL_PRICE": 25900,
+      "RETAIL_PRICE": 29900,
       "VIP_PRICE": 16900,
       "GENERAL_PRICE": 16900
     },
@@ -1809,9 +2325,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2500,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 3390,
       "VIP_PRICE": 2500,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2500
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1838,9 +2354,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2550,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 3590,
       "VIP_PRICE": 2550,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1867,9 +2383,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 2990,
       "VIP_PRICE": 2150,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2150
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1895,10 +2411,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_04_TD-64.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1900,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1850,
+      "RETAIL_PRICE": 2790,
       "VIP_PRICE": 1800,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1900
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1924,10 +2440,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_04_TD-65.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1950,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1900,
+      "RETAIL_PRICE": 2890,
       "VIP_PRICE": 1850,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1950
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1953,10 +2469,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_04_TD-72.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1800,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1750,
+      "RETAIL_PRICE": 2590,
       "VIP_PRICE": 1750,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -1982,10 +2498,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_04_TD-73.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1850,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1800,
+      "RETAIL_PRICE": 2690,
       "VIP_PRICE": 1800,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2011,10 +2527,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_04_TD-955.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1650,
+      "RETAIL_PRICE": 2190,
       "VIP_PRICE": 1700,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2156,10 +2672,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-780.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1700,
+      "RETAIL_PRICE": 2390,
       "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2185,10 +2701,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-781.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2100,
+      "RETAIL_PRICE": 2990,
       "VIP_PRICE": 2000,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2000
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2214,10 +2730,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-782.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2550,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2500,
+      "RETAIL_PRICE": 3290,
       "VIP_PRICE": 2300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2243,10 +2759,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-783.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3150,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 3100,
+      "RETAIL_PRICE": 4090,
       "VIP_PRICE": 3000,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 3000
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2272,10 +2788,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-938.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3400,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 3350,
+      "RETAIL_PRICE": 4490,
       "VIP_PRICE": 3300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 3300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2301,10 +2817,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-939.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3490,
       "VIP_PRICE": 2600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2330,10 +2846,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-943.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1900,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1850,
+      "RETAIL_PRICE": 2590,
       "VIP_PRICE": 1800,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2359,10 +2875,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-944.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2300,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2250,
+      "RETAIL_PRICE": 3190,
       "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2388,10 +2904,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-945.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3400,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 3350,
+      "RETAIL_PRICE": 4490,
       "VIP_PRICE": 3300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 3300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2417,10 +2933,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_05_TD-946.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3490,
       "VIP_PRICE": 2600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2504,10 +3020,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_06_TD-933.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1900,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1850,
+      "RETAIL_PRICE": 2590,
       "VIP_PRICE": 1800,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2533,10 +3049,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_06_TD-934.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2300,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2250,
+      "RETAIL_PRICE": 3190,
       "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2562,10 +3078,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-1012.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2300,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2200,
+      "RETAIL_PRICE": 2990,
+      "VIP_PRICE": 2100,
+      "GENERAL_PRICE": 2100
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2591,10 +3107,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-1014.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2600,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2500,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2500,
+      "RETAIL_PRICE": 3290,
+      "VIP_PRICE": 2400,
+      "GENERAL_PRICE": 2400
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2620,10 +3136,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-1016.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3050,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2950,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2950,
+      "RETAIL_PRICE": 3790,
+      "VIP_PRICE": 2850,
+      "GENERAL_PRICE": 2850
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2649,10 +3165,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-1020.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3250,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3200,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3150,
+      "RETAIL_PRICE": 4590,
+      "VIP_PRICE": 3100,
+      "GENERAL_PRICE": 3100
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2678,10 +3194,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-1107.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3400,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 3300,
+      "RETAIL_PRICE": 4950,
       "VIP_PRICE": 3300,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 3300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2707,10 +3223,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/knockdown/images/TD-1601.jpg"
     ],
     "prices": {
-      "GENERAL_PRICE": 2800,
-      "RETAIL_PRICE": 4990,
       "SALE_PRICE": 2850,
-      "VIP_PRICE": 2800
+      "RETAIL_PRICE": 4990,
+      "VIP_PRICE": 2800,
+      "GENERAL_PRICE": 2800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2765,10 +3281,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-710.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2100,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2000,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2000,
+      "RETAIL_PRICE": 2790,
+      "VIP_PRICE": 1900,
+      "GENERAL_PRICE": 1900
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2794,10 +3310,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-711.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2450,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2350,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2350,
+      "RETAIL_PRICE": 3090,
+      "VIP_PRICE": 2250,
+      "GENERAL_PRICE": 2250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2823,10 +3339,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_07_TD-763.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2900,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2800,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2800,
+      "RETAIL_PRICE": 3390,
+      "VIP_PRICE": 2700,
+      "GENERAL_PRICE": 2700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2852,10 +3368,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-11.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2650,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3290,
+      "VIP_PRICE": 2550,
+      "GENERAL_PRICE": 2550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2881,10 +3397,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-12.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2550,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2450,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2450,
+      "RETAIL_PRICE": 3190,
+      "VIP_PRICE": 2350,
+      "GENERAL_PRICE": 2350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -2997,10 +3513,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-3.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 1650,
+      "RETAIL_PRICE": 2250,
+      "VIP_PRICE": 1550,
+      "GENERAL_PRICE": 1550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3026,10 +3542,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-4.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1800,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1650,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 1700,
+      "RETAIL_PRICE": 2350,
+      "VIP_PRICE": 1600,
+      "GENERAL_PRICE": 1600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3055,10 +3571,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-6.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2050,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2050,
+      "RETAIL_PRICE": 2790,
+      "VIP_PRICE": 1950,
+      "GENERAL_PRICE": 1950
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3084,10 +3600,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-7.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3550,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2350,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2350,
+      "RETAIL_PRICE": 3090,
+      "VIP_PRICE": 2250,
+      "GENERAL_PRICE": 2250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3113,10 +3629,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-8.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2050,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1900,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 1950,
+      "RETAIL_PRICE": 2790,
+      "VIP_PRICE": 1850,
+      "GENERAL_PRICE": 1850
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3142,10 +3658,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_08_TD-9.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2100,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1950,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2000,
+      "RETAIL_PRICE": 2890,
+      "VIP_PRICE": 1900,
+      "GENERAL_PRICE": 1900
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3171,10 +3687,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-13.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2350,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2200,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2250,
+      "RETAIL_PRICE": 2990,
+      "VIP_PRICE": 2150,
+      "GENERAL_PRICE": 2150
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3200,10 +3716,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-14.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2400,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2250,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2300,
+      "RETAIL_PRICE": 3090,
+      "VIP_PRICE": 2200,
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3229,10 +3745,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-15.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2050,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 2950,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3050,
+      "RETAIL_PRICE": 3890,
+      "VIP_PRICE": 2850,
+      "GENERAL_PRICE": 2850
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3258,10 +3774,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-16.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3550,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3650,
+      "RETAIL_PRICE": 4690,
+      "VIP_PRICE": 3450,
+      "GENERAL_PRICE": 3450
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3287,10 +3803,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-17.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 2990,
-      "VIP_PRICE": 2650,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3490,
+      "VIP_PRICE": 2550,
+      "GENERAL_PRICE": 2550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3374,10 +3890,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_09_TD-18.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2100,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3150,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3250,
+      "RETAIL_PRICE": 4090,
+      "VIP_PRICE": 3050,
+      "GENERAL_PRICE": 3050
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3403,10 +3919,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-1013.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3700,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3400,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3400,
+      "RETAIL_PRICE": 4290,
+      "VIP_PRICE": 3300,
+      "GENERAL_PRICE": 3300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3519,10 +4035,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-19.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3100,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3100,
+      "RETAIL_PRICE": 4090,
+      "VIP_PRICE": 3000,
+      "GENERAL_PRICE": 3000
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3548,10 +4064,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-21.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3550,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3350,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3350,
+      "RETAIL_PRICE": 4390,
+      "VIP_PRICE": 3250,
+      "GENERAL_PRICE": 3250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3577,10 +4093,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-22.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3900,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3700,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3700,
+      "RETAIL_PRICE": 4590,
+      "VIP_PRICE": 3600,
+      "GENERAL_PRICE": 3600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3606,10 +4122,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-23.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4000,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3800,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3800,
+      "RETAIL_PRICE": 4690,
+      "VIP_PRICE": 3700,
+      "GENERAL_PRICE": 3700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3635,10 +4151,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_10_TD-24.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4100,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 3800,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 3900,
+      "RETAIL_PRICE": 4690,
+      "VIP_PRICE": 3700,
+      "GENERAL_PRICE": 3700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3664,10 +4180,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-27.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4300,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 4100,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4100,
+      "RETAIL_PRICE": 5090,
+      "VIP_PRICE": 4000,
+      "GENERAL_PRICE": 4000
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3693,10 +4209,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-30.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4500,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 4300,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4300,
+      "RETAIL_PRICE": 5390,
+      "VIP_PRICE": 4200,
+      "GENERAL_PRICE": 4200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3722,10 +4238,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-31.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4600,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 4400,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4400,
+      "RETAIL_PRICE": 5690,
+      "VIP_PRICE": 4300,
+      "GENERAL_PRICE": 4300
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3751,10 +4267,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-32.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4350,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 4150,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4150,
+      "RETAIL_PRICE": 5190,
+      "VIP_PRICE": 4050,
+      "GENERAL_PRICE": 4050
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3780,10 +4296,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-33.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4550,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 4350,
+      "RETAIL_PRICE": 5390,
       "VIP_PRICE": 4250,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 4250
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3809,10 +4325,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-34.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4650,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 4450,
+      "RETAIL_PRICE": 5690,
       "VIP_PRICE": 4350,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 4350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3838,10 +4354,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_11_TD-772.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 5150,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4950,
+      "RETAIL_PRICE": 6190,
+      "VIP_PRICE": 4550,
+      "GENERAL_PRICE": 4550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3867,10 +4383,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_12_TD-37.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 5000,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 4800,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 4800,
+      "RETAIL_PRICE": 5990,
+      "VIP_PRICE": 4700,
+      "GENERAL_PRICE": 4700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3896,10 +4412,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_12_TD-40.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 5500,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 5300,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 5300,
+      "RETAIL_PRICE": 6690,
+      "VIP_PRICE": 5200,
+      "GENERAL_PRICE": 5200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3925,10 +4441,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_12_TD-45.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 6000,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 5800,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 5800,
+      "RETAIL_PRICE": 7190,
+      "VIP_PRICE": 5700,
+      "GENERAL_PRICE": 5700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3954,10 +4470,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-106.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1400,
+      "RETAIL_PRICE": 1990,
       "VIP_PRICE": 1350,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1400
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -3983,10 +4499,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-110.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1600,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1450,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 1500,
+      "RETAIL_PRICE": 2090,
+      "VIP_PRICE": 1550,
+      "GENERAL_PRICE": 1550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4012,10 +4528,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-113.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1600,
-      "RETAIL_PRICE": 0,
-      "VIP_PRICE": 1450,
-      "GENERAL_PRICE": 0
+      "SALE_PRICE": 1500,
+      "RETAIL_PRICE": 2090,
+      "VIP_PRICE": 1550,
+      "GENERAL_PRICE": 1550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4041,10 +4557,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-115.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1750,
+      "RETAIL_PRICE": 2900,
       "VIP_PRICE": 1550,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1650
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4070,10 +4586,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-118.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1800,
+      "RETAIL_PRICE": 2790,
       "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4099,10 +4615,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-120.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1700,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1750,
+      "RETAIL_PRICE": 2900,
       "VIP_PRICE": 1550,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1650
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4128,10 +4644,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-121.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1800,
+      "RETAIL_PRICE": 2790,
       "VIP_PRICE": 1600,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4157,10 +4673,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_13_TD-126.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1850,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 1750,
+      "RETAIL_PRICE": 2990,
       "VIP_PRICE": 1800,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 1800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4188,7 +4704,7 @@
     "prices": {
       "SALE_PRICE": 900,
       "RETAIL_PRICE": 1490,
-      "VIP_PRICE": 900,
+      "VIP_PRICE": 850,
       "GENERAL_PRICE": 900
     },
     "updated_at": "2026-11-07 09:56:51"
@@ -4303,10 +4819,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_14_TD-103.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 4800,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 4600,
+      "RETAIL_PRICE": 7990,
       "VIP_PRICE": 4500,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 4700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4332,10 +4848,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_14_TD-1542.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2850,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3890,
       "VIP_PRICE": 2610,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4361,10 +4877,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_14_TD-1543.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2850,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2650,
+      "RETAIL_PRICE": 3890,
       "VIP_PRICE": 2610,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4391,7 +4907,7 @@
     ],
     "prices": {
       "SALE_PRICE": 3900,
-      "RETAIL_PRICE": 5590,
+      "RETAIL_PRICE": 5990,
       "VIP_PRICE": 3900,
       "GENERAL_PRICE": 3900
     },
@@ -4448,10 +4964,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/knockdown/images/TD-2119.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 3200,
-      "RETAIL_PRICE": 3900,
-      "VIP_PRICE": 2900,
-      "GENERAL_PRICE": 2900
+      "SALE_PRICE": 0,
+      "RETAIL_PRICE": 0,
+      "VIP_PRICE": 0,
+      "GENERAL_PRICE": 0
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4507,9 +5023,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 3490,
       "VIP_PRICE": 2510,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4536,9 +5052,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 3490,
       "VIP_PRICE": 2510,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2600
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4563,10 +5079,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794449712908_3f1c4c69.png"
     ],
     "prices": {
-      "SALE_PRICE": 2950,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2750,
+      "RETAIL_PRICE": 4290,
       "VIP_PRICE": 2710,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4592,10 +5108,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_14_TD-96.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2950,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2750,
+      "RETAIL_PRICE": 4290,
       "VIP_PRICE": 2710,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2800
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4708,10 +5224,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_15_TD-927.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2300,
+      "RETAIL_PRICE": 3090,
       "VIP_PRICE": 2250,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4737,10 +5253,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/ตู้โล_15_TD-932_v2.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2500,
-      "RETAIL_PRICE": 0,
+      "SALE_PRICE": 2300,
+      "RETAIL_PRICE": 3090,
       "VIP_PRICE": 2250,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 2350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4854,9 +5370,9 @@
     ],
     "prices": {
       "SALE_PRICE": 3500,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 4990,
       "VIP_PRICE": 3500,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 3500
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4883,9 +5399,9 @@
     ],
     "prices": {
       "SALE_PRICE": 4500,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 5990,
       "VIP_PRICE": 4500,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 4500
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4912,9 +5428,9 @@
     ],
     "prices": {
       "SALE_PRICE": 4900,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 6900,
       "VIP_PRICE": 4900,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 4900
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4941,9 +5457,9 @@
     ],
     "prices": {
       "SALE_PRICE": 5700,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 7900,
       "VIP_PRICE": 5700,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 5700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4970,9 +5486,9 @@
     ],
     "prices": {
       "SALE_PRICE": 5750,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 7900,
       "VIP_PRICE": 5750,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 5750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -4999,9 +5515,9 @@
     ],
     "prices": {
       "SALE_PRICE": 6550,
-      "RETAIL_PRICE": 0,
+      "RETAIL_PRICE": 8900,
       "VIP_PRICE": 6550,
-      "GENERAL_PRICE": 0
+      "GENERAL_PRICE": 6550
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -5029,7 +5545,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794450571832_c3e0895a.png"
     ],
     "prices": {
-      "SALE_PRICE": 2390,
+      "SALE_PRICE": 0,
       "RETAIL_PRICE": 0,
       "VIP_PRICE": 0,
       "GENERAL_PRICE": 0
@@ -5056,7 +5572,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/tuulo/images/D100-02-white-option.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2390,
+      "SALE_PRICE": 0,
       "RETAIL_PRICE": 0,
       "VIP_PRICE": 0,
       "GENERAL_PRICE": 0
@@ -5086,7 +5602,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794450641747_787dbc53.png"
     ],
     "prices": {
-      "SALE_PRICE": 2690,
+      "SALE_PRICE": 0,
       "RETAIL_PRICE": 0,
       "VIP_PRICE": 0,
       "GENERAL_PRICE": 0
@@ -5117,7 +5633,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794450705359_79301b37.png"
     ],
     "prices": {
-      "SALE_PRICE": 3290,
+      "SALE_PRICE": 0,
       "RETAIL_PRICE": 0,
       "VIP_PRICE": 0,
       "GENERAL_PRICE": 0
@@ -5148,7 +5664,7 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/primary/1794450497364_abe2a618.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 1990,
+      "SALE_PRICE": 0,
       "RETAIL_PRICE": 0,
       "VIP_PRICE": 0,
       "GENERAL_PRICE": 0
@@ -5327,8 +5843,8 @@
     "prices": {
       "SALE_PRICE": 7900,
       "RETAIL_PRICE": 11900,
-      "VIP_PRICE": 7800,
-      "GENERAL_PRICE": 7800
+      "VIP_PRICE": 7900,
+      "GENERAL_PRICE": 7900
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -5360,7 +5876,7 @@
       "SALE_PRICE": 7800,
       "RETAIL_PRICE": 11900,
       "VIP_PRICE": 7800,
-      "GENERAL_PRICE": 7900
+      "GENERAL_PRICE": 7800
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -5388,8 +5904,8 @@
     "prices": {
       "SALE_PRICE": 2750,
       "RETAIL_PRICE": 3990,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "VIP_PRICE": 2700,
+      "GENERAL_PRICE": 2700
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -5445,9 +5961,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 9900,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "RETAIL_PRICE": 3990,
+      "VIP_PRICE": 2750,
+      "GENERAL_PRICE": 2750
     },
     "updated_at": "2026-10-30 06:58:48"
   },
@@ -5474,9 +5990,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 2990,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "RETAIL_PRICE": 2590,
+      "VIP_PRICE": 1750,
+      "GENERAL_PRICE": 1750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -5503,7 +6019,7 @@
     ],
     "prices": {
       "SALE_PRICE": 6400,
-      "RETAIL_PRICE": 9900,
+      "RETAIL_PRICE": 8990,
       "VIP_PRICE": 6400,
       "GENERAL_PRICE": 6400
     },
@@ -5532,9 +6048,9 @@
     ],
     "prices": {
       "SALE_PRICE": 2650,
-      "RETAIL_PRICE": 9900,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "RETAIL_PRICE": 3850,
+      "VIP_PRICE": 2650,
+      "GENERAL_PRICE": 2650
     },
     "updated_at": "2026-10-30 06:58:48"
   },
@@ -5590,7 +6106,7 @@
     ],
     "prices": {
       "SALE_PRICE": 2750,
-      "RETAIL_PRICE": 7990,
+      "RETAIL_PRICE": 5990,
       "VIP_PRICE": 2700,
       "GENERAL_PRICE": 2700
     },
@@ -5681,8 +6197,8 @@
     "prices": {
       "SALE_PRICE": 8900,
       "RETAIL_PRICE": 13900,
-      "VIP_PRICE": 8800,
-      "GENERAL_PRICE": 8800
+      "VIP_PRICE": 8900,
+      "GENERAL_PRICE": 8900
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -5829,8 +6345,8 @@
     "prices": {
       "SALE_PRICE": 4900,
       "RETAIL_PRICE": 8200,
-      "VIP_PRICE": 3900,
-      "GENERAL_PRICE": 3900
+      "VIP_PRICE": 4900,
+      "GENERAL_PRICE": 4900
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -5973,7 +6489,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 17900,
+      "RETAIL_PRICE": 16900,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -6002,7 +6518,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 17900,
+      "RETAIL_PRICE": 16900,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -6031,7 +6547,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 17900,
+      "RETAIL_PRICE": 16900,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -6092,7 +6608,7 @@
     ],
     "prices": {
       "SALE_PRICE": 4100,
-      "RETAIL_PRICE": 6990,
+      "RETAIL_PRICE": 9900,
       "VIP_PRICE": 3950,
       "GENERAL_PRICE": 3950
     },
@@ -6124,7 +6640,7 @@
     ],
     "prices": {
       "SALE_PRICE": 4900,
-      "RETAIL_PRICE": 7900,
+      "RETAIL_PRICE": 6900,
       "VIP_PRICE": 4900,
       "GENERAL_PRICE": 4900
     },
@@ -6414,8 +6930,8 @@
     ],
     "prices": {
       "SALE_PRICE": 0,
-      "RETAIL_PRICE": 6590,
-      "VIP_PRICE": 4100,
+      "RETAIL_PRICE": 5590,
+      "VIP_PRICE": 4000,
       "GENERAL_PRICE": 4100
     },
     "updated_at": "2026-11-07 09:56:51"
@@ -6443,7 +6959,7 @@
     ],
     "prices": {
       "SALE_PRICE": 0,
-      "RETAIL_PRICE": 3990,
+      "RETAIL_PRICE": 3200,
       "VIP_PRICE": 2200,
       "GENERAL_PRICE": 2200
     },
@@ -6530,8 +7046,8 @@
     ],
     "prices": {
       "SALE_PRICE": 0,
-      "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 4100,
+      "RETAIL_PRICE": 5590,
+      "VIP_PRICE": 4000,
       "GENERAL_PRICE": 4100
     },
     "updated_at": "2026-11-07 09:56:51"
@@ -6588,7 +7104,7 @@
     ],
     "prices": {
       "SALE_PRICE": 0,
-      "RETAIL_PRICE": 3990,
+      "RETAIL_PRICE": 3200,
       "VIP_PRICE": 2200,
       "GENERAL_PRICE": 2200
     },
@@ -6675,7 +7191,7 @@
     ],
     "prices": {
       "SALE_PRICE": 4100,
-      "RETAIL_PRICE": 6990,
+      "RETAIL_PRICE": 0,
       "VIP_PRICE": 4100,
       "GENERAL_PRICE": 4100
     },
@@ -6704,7 +7220,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 16900,
+      "RETAIL_PRICE": 15900,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -6733,7 +7249,7 @@
     ],
     "prices": {
       "SALE_PRICE": 5950,
-      "RETAIL_PRICE": 5590,
+      "RETAIL_PRICE": 7990,
       "VIP_PRICE": 5950,
       "GENERAL_PRICE": 5950
     },
@@ -6761,10 +7277,10 @@
       "https://pub-5f55e2c74bac424b9086fa534205afe0.r2.dev/catalogs/knockdown/images/TD-2433.jpg"
     ],
     "prices": {
-      "SALE_PRICE": 2150,
-      "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 2150,
-      "GENERAL_PRICE": 2150
+      "SALE_PRICE": 2200,
+      "RETAIL_PRICE": 3990,
+      "VIP_PRICE": 2200,
+      "GENERAL_PRICE": 2200
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -6792,8 +7308,8 @@
     "prices": {
       "SALE_PRICE": 3590,
       "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 3950,
-      "GENERAL_PRICE": 3950
+      "VIP_PRICE": 3590,
+      "GENERAL_PRICE": 3590
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -6820,7 +7336,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 16900,
+      "RETAIL_PRICE": 15500,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -6849,7 +7365,7 @@
     ],
     "prices": {
       "SALE_PRICE": 4200,
-      "RETAIL_PRICE": 7990,
+      "RETAIL_PRICE": 6590,
       "VIP_PRICE": 4190,
       "GENERAL_PRICE": 4190
     },
@@ -7142,7 +7658,7 @@
     ],
     "prices": {
       "SALE_PRICE": 10900,
-      "RETAIL_PRICE": 16900,
+      "RETAIL_PRICE": 15900,
       "VIP_PRICE": 10900,
       "GENERAL_PRICE": 10900
     },
@@ -7174,9 +7690,9 @@
     ],
     "prices": {
       "SALE_PRICE": 10800,
-      "RETAIL_PRICE": 16900,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "RETAIL_PRICE": 15900,
+      "VIP_PRICE": 10800,
+      "GENERAL_PRICE": 10800
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -7206,9 +7722,9 @@
     ],
     "prices": {
       "SALE_PRICE": 5990,
-      "RETAIL_PRICE": 16900,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "RETAIL_PRICE": 7990,
+      "VIP_PRICE": 5950,
+      "GENERAL_PRICE": 5950
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -7239,8 +7755,8 @@
     "prices": {
       "SALE_PRICE": 2500,
       "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "VIP_PRICE": 2350,
+      "GENERAL_PRICE": 2350
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -7271,8 +7787,8 @@
     "prices": {
       "SALE_PRICE": 3590,
       "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "VIP_PRICE": 3790,
+      "GENERAL_PRICE": 3790
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -7303,8 +7819,8 @@
     "prices": {
       "SALE_PRICE": 3490,
       "RETAIL_PRICE": 5990,
-      "VIP_PRICE": 0,
-      "GENERAL_PRICE": 0
+      "VIP_PRICE": 3690,
+      "GENERAL_PRICE": 3690
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -7389,7 +7905,7 @@
     ],
     "prices": {
       "SALE_PRICE": 14900,
-      "RETAIL_PRICE": 21900,
+      "RETAIL_PRICE": 19900,
       "VIP_PRICE": 14900,
       "GENERAL_PRICE": 14900
     },
@@ -7546,7 +8062,7 @@
     ],
     "prices": {
       "SALE_PRICE": 8500,
-      "RETAIL_PRICE": 9900,
+      "RETAIL_PRICE": 16900,
       "VIP_PRICE": 8500,
       "GENERAL_PRICE": 8500
     },
@@ -7578,7 +8094,7 @@
     ],
     "prices": {
       "SALE_PRICE": 3200,
-      "RETAIL_PRICE": 7900,
+      "RETAIL_PRICE": 6900,
       "VIP_PRICE": 3200,
       "GENERAL_PRICE": 3200
     },
@@ -7738,7 +8254,7 @@
     ],
     "prices": {
       "SALE_PRICE": 6500,
-      "RETAIL_PRICE": 3990,
+      "RETAIL_PRICE": 9900,
       "VIP_PRICE": 6500,
       "GENERAL_PRICE": 6500
     },
@@ -7973,7 +8489,7 @@
     ],
     "prices": {
       "SALE_PRICE": 17900,
-      "RETAIL_PRICE": 24900,
+      "RETAIL_PRICE": 25900,
       "VIP_PRICE": 17900,
       "GENERAL_PRICE": 17900
     },
@@ -8002,7 +8518,7 @@
     ],
     "prices": {
       "SALE_PRICE": 17900,
-      "RETAIL_PRICE": 24900,
+      "RETAIL_PRICE": 25900,
       "VIP_PRICE": 17900,
       "GENERAL_PRICE": 17900
     },
@@ -8235,8 +8751,8 @@
     "prices": {
       "SALE_PRICE": 6800,
       "RETAIL_PRICE": 9800,
-      "VIP_PRICE": 6900,
-      "GENERAL_PRICE": 6900
+      "VIP_PRICE": 6800,
+      "GENERAL_PRICE": 6800
     },
     "updated_at": "2026-10-30 06:58:49"
   },
@@ -8269,8 +8785,8 @@
     "prices": {
       "SALE_PRICE": 2850,
       "RETAIL_PRICE": 3990,
-      "VIP_PRICE": 1750,
-      "GENERAL_PRICE": 1750
+      "VIP_PRICE": 2850,
+      "GENERAL_PRICE": 2850
     },
     "updated_at": "2026-11-07 09:56:51"
   },
@@ -8302,9 +8818,9 @@
     ],
     "prices": {
       "SALE_PRICE": 1750,
-      "RETAIL_PRICE": 2990,
-      "VIP_PRICE": 2850,
-      "GENERAL_PRICE": 2850
+      "RETAIL_PRICE": 2590,
+      "VIP_PRICE": 1750,
+      "GENERAL_PRICE": 1750
     },
     "updated_at": "2026-11-07 09:56:51"
   },
