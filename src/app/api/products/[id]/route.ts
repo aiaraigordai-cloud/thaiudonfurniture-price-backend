@@ -198,8 +198,49 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     const db = getDb();
 
-    // Check existing product
-    const existing = await db.prepare('SELECT id, sku, name, category_id, catalog_type, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+    // Check existing product in SQLite or Cloud Overrides / Supabase
+    let existing = await db.prepare('SELECT id, sku, name, category_id, catalog_type, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+    
+    // If not found in local SQLite (e.g. newly created cloud item on Netlify), check persistent store or Supabase
+    if (!existing) {
+      const overrides = await loadProductOverrides();
+      const ov = overrides[params.id] || (sku ? Object.values(overrides).find((o: any) => o.sku && o.sku.toUpperCase() === sku.trim().toUpperCase()) : null);
+      if (ov) {
+        // Insert into SQLite so foreign keys and local joins work seamlessly
+        try {
+          await db.prepare(`
+            INSERT OR REPLACE INTO products (
+              id, sku, name, description, category_id, catalog_type, size_text, ref_image_url, ref_filename, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            params.id,
+            sku.trim(),
+            name.trim(),
+            description || '',
+            category_id || ov.category_id || null,
+            catalog_type || ov.catalog_type || 'knockdown',
+            ov.size_text || null,
+            ov.ref_image_url || null,
+            ov.ref_filename || null,
+            status || 'Published'
+          );
+          existing = await db.prepare('SELECT id, sku, name, category_id, catalog_type, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+        } catch (e) {
+          console.warn('Failed to backfill cloud product into local SQLite:', e);
+          existing = {
+            id: params.id,
+            sku: sku.trim(),
+            name: name.trim(),
+            category_id: ov.category_id || category_id || null,
+            catalog_type: ov.catalog_type || catalog_type || 'knockdown',
+            size_text: ov.size_text || null,
+            ref_image_url: ov.ref_image_url || null,
+            ref_filename: ov.ref_filename || null,
+          };
+        }
+      }
+    }
+
     if (!existing) {
       return NextResponse.json({ error: 'ไม่พบสินค้ารายการนี้' }, { status: 404 });
     }

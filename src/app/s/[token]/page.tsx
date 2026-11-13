@@ -58,6 +58,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedPriceRange, setSelectedPriceRange] = useState<string>('all');
   const [isPriceRangeExpanded, setIsPriceRangeExpanded] = useState<boolean>(false);
+  const [onlyNew24h, setOnlyNew24h] = useState<boolean>(false);
   const [showSocialChannels, setShowSocialChannels] = useState<boolean>(false);
   const [selectedProductModal, setSelectedProductModal] = useState<any | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<'graphic' | 'ref'>('graphic');
@@ -89,7 +90,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   // Reset pagination to first batch whenever search, catalog filter, category, price range, or sharedCart changes
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, catalogTab, selectedCategory, selectedPriceRange, isSharedCartView]);
+  }, [search, catalogTab, selectedCategory, selectedPriceRange, isSharedCartView, onlyNew24h]);
 
   // Format product size in "กว้าง x สูง x ลึก" while strictly preserving "ฟุต"
   const formatCustomerProductSize = (prod: any) => {
@@ -512,6 +513,17 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
       )
     : products;
 
+  // Check if product is newly created/imported within the last 24 hours
+  const checkIsNewProduct24h = (prod: any) => {
+    const rawDate = prod?.created_at || prod?.override_updated_at || prod?.updated_at;
+    if (!rawDate) return false;
+    const itemTime = new Date(rawDate).getTime();
+    if (isNaN(itemTime)) return false;
+    const now = Date.now();
+    const diffHours = (now - itemTime) / (1000 * 60 * 60);
+    return diffHours >= 0 && diffHours <= 24;
+  };
+
   // Filter products by search (including price), catalogTab (tuulo/knockdown/all), and category
   const filtered = baseProducts.filter((p) => {
     const rawSearch = search.trim();
@@ -552,16 +564,21 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
       }
     }
 
-    return matchSearch && matchCatalog && matchCat && matchPriceRange;
+    const matchNew24h = !onlyNew24h || checkIsNewProduct24h(p);
+
+    return matchSearch && matchCatalog && matchCat && matchPriceRange && matchNew24h;
   });
 
   // Calculate available categories based on current catalog tab
   const tabProducts = baseProducts.filter((p) => {
     if (isSharedCartView) return true;
+    if (onlyNew24h && !checkIsNewProduct24h(p)) return false;
     if (catalogTab === 'tuulo') return p.catalogType === 'tuulo';
     if (catalogTab === 'knockdown') return p.catalogType === 'knockdown';
     return true;
   });
+
+  const countTotalNew24h = baseProducts.filter(checkIsNewProduct24h).length;
 
   const categoryCounts: Record<string, number> = {};
   tabProducts.forEach((p) => {
@@ -1086,6 +1103,20 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>น็อคดาวน์ Modern Luxury ({products.filter((p) => p.catalogType === 'knockdown').length})</span>
                 </button>
+
+                {countTotalNew24h > 0 && (
+                  <button
+                    onClick={() => { setOnlyNew24h(!onlyNew24h); }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap shadow-xs ${
+                      onlyNew24h
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm ring-2 ring-blue-300'
+                        : 'bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200'
+                    }`}
+                    title="แสดงเฉพาะสินค้าที่เพิ่งนำเข้ามาใหม่ภายใน 24 ชั่วโมง"
+                  >
+                    <span>✨ สินค้ามาใหม่ 24 ชม. ({countTotalNew24h})</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1183,6 +1214,23 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">
                     หมวดหมู่:
                   </span>
+                  {countTotalNew24h > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setOnlyNew24h(!onlyNew24h)}
+                      className={`px-3 py-1 rounded-full text-xs transition shrink-0 flex items-center gap-1 font-bold ${
+                        onlyNew24h
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs ring-2 ring-blue-300'
+                          : 'bg-blue-50 text-blue-900 border border-blue-200 hover:bg-blue-100'
+                      }`}
+                      title="แสดงเฉพาะสินค้าที่เพิ่งนำเข้ามาใหม่ภายใน 24 ชั่วโมง"
+                    >
+                      <span>✨ สินค้าใหม่ 24 ชม.</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-200 text-blue-950">
+                        {countTotalNew24h}
+                      </span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setSelectedCategory('')}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition shrink-0 ${
@@ -1300,8 +1348,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                           </div>
 
                           {prod.category_name && (
-                            <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-[#161B40]/90 text-white text-[10px] font-semibold backdrop-blur-xs">
-                              {prod.category_name}
+                            <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded-full bg-[#161B40]/90 text-white text-[10px] font-semibold backdrop-blur-xs flex items-center gap-1">
+                              {checkIsNewProduct24h(prod) && <span className="text-amber-300">✨</span>}
+                              <span>{prod.category_name}</span>
                             </div>
                           )}
 

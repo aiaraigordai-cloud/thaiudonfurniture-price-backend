@@ -615,7 +615,7 @@ export default function ProductsPage() {
       const params = new URLSearchParams();
       if (search) params.append('q', search);
       if (selectedCategory) params.append('category', selectedCategory);
-      if (selectedStatus && !['price_incomplete', 'image_incomplete', 'price_complete', 'image_complete'].includes(selectedStatus)) {
+      if (selectedStatus && !['price_incomplete', 'image_incomplete', 'price_complete', 'image_complete', 'new_24h'].includes(selectedStatus)) {
         params.append('status', selectedStatus);
       }
       if (catalogTypeFilter !== 'all') params.append('catalog_type', catalogTypeFilter);
@@ -900,6 +900,19 @@ export default function ProductsPage() {
   const countPriceIncomplete = products.filter(checkPriceIncomplete).length;
   const countImageIncomplete = products.filter(checkImageIncomplete).length;
 
+  // Check if a product is newly created/imported within the last 24 hours
+  const checkIsNewProduct24h = (prod: any) => {
+    const rawDate = prod.created_at || prod.override_updated_at || prod.updated_at;
+    if (!rawDate) return false;
+    const itemTime = new Date(rawDate).getTime();
+    if (isNaN(itemTime)) return false;
+    const now = Date.now();
+    const diffHours = (now - itemTime) / (1000 * 60 * 60);
+    return diffHours >= 0 && diffHours <= 24;
+  };
+
+  const countNewProducts24h = products.filter(checkIsNewProduct24h).length;
+
   // Check if search matches price in any of the 4 price tiers
   const checkPriceMatch = (prod: any, q: string) => {
     const raw = q.trim();
@@ -939,6 +952,9 @@ export default function ProductsPage() {
     }
     if (selectedStatus === 'image_complete') {
       return !checkImageIncomplete(prod);
+    }
+    if (selectedStatus === 'new_24h') {
+      return checkIsNewProduct24h(prod);
     }
     return true;
   });
@@ -1482,6 +1498,7 @@ export default function ProductsPage() {
             <option value="Published">Published (เผยแพร่)</option>
             <option value="Draft">Draft (ร่าง)</option>
             <option value="Archived">Archived (เก็บถาวร)</option>
+            <option value="new_24h">✨ สินค้าใหม่ 24 ชม. ({countNewProducts24h})</option>
             <option value="Deleted">♻️ สินค้าที่ถูกลบ / กู้คืน ({catalogCounts.deleted ?? 0})</option>
             <option value="price_incomplete">⚠️ ราคาไม่ครบ ({countPriceIncomplete})</option>
             <option value="image_incomplete">📷 รูปภาพไม่ครบ ({countImageIncomplete})</option>
@@ -1494,6 +1511,21 @@ export default function ProductsPage() {
       {/* Quick Status Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-[#705E4F]">ตัวกรองสถานะด่วน:</span>
+        <button
+          onClick={() => setSelectedStatus(selectedStatus === 'new_24h' ? '' : 'new_24h')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
+            selectedStatus === 'new_24h'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100'
+          }`}
+          title="แสดงเฉพาะสินค้าที่เพิ่งนำเข้ามาใหม่ภายใน 24 ชั่วโมง"
+        >
+          <span>✨ สินค้าใหม่ 24 ชม.</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-200/80 text-blue-950 font-mono">
+            {countNewProducts24h}
+          </span>
+        </button>
+
         <button
           onClick={() => setSelectedStatus(selectedStatus === 'price_incomplete' ? '' : 'price_incomplete')}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border shadow-2xs ${
@@ -1654,6 +1686,11 @@ export default function ProductsPage() {
                               ) : (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
                                   น็อคดาวน์
+                                </span>
+                              )}
+                              {checkIsNewProduct24h(prod) && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-2xs animate-pulse">
+                                  ✨ ใหม่
                                 </span>
                               )}
                             </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import QuickToolNav from '@/components/admin/QuickToolNav';
+import { uploadDirectToR2 } from '@/lib/client-upload';
 import {
   ArrowLeft,
   Plus,
@@ -538,31 +539,59 @@ export default function CatalogsAndImportPage() {
     }
 
     setImporting(true);
-    setCommitProgress(20);
+    setCommitProgress(10);
     setImportStatus(null);
 
-    const progressTimer = setInterval(() => {
-      setCommitProgress((prev) => (prev < 90 ? prev + 20 : prev));
-    }, 250);
-
     try {
+      // Upload images to Cloudflare R2 first to prevent temporary blob URLs
+      const totalToUpload = selectedItems.length;
+      const uploadedProducts: any[] = [];
+
+      for (let i = 0; i < selectedItems.length; i++) {
+        const item = selectedItems[i];
+        let finalImageUrl: string | null = null;
+
+        // If user provided a real File object, upload to Cloudflare R2
+        if (item.file && item.file instanceof File) {
+          try {
+            setCommitProgress(10 + Math.round(((i + 1) / totalToUpload) * 60));
+            finalImageUrl = await uploadDirectToR2(item.file, selectedCatalogId === 'tuulo' ? 'tuulo' : 'knockdown');
+          } catch (upErr) {
+            console.warn('Failed to upload file to R2, trying fallback:', item.filename, upErr);
+          }
+        }
+
+        // If already a remote URL (http/https), preserve it; otherwise avoid saving local blob: URLs
+        if (!finalImageUrl) {
+          if (item.thumbnailUrl && (item.thumbnailUrl.startsWith('http://') || item.thumbnailUrl.startsWith('https://'))) {
+            finalImageUrl = item.thumbnailUrl;
+          } else {
+            finalImageUrl = null;
+          }
+        }
+
+        uploadedProducts.push({
+          sku: item.sku.toUpperCase(),
+          name: item.name,
+          description: item.description,
+          category_id: item.category_id,
+          width: item.width || null,
+          height: item.height || null,
+          depth: item.depth || null,
+          color: item.color,
+          filename: item.filename,
+          image_url: finalImageUrl,
+          price_tier: item.priceTier,
+          prices: item.prices,
+        });
+      }
+
+      setCommitProgress(75);
+
       const payload = {
         catalog_id: selectedCatalogId,
         price_tier: selectedPriceTier,
-        products: selectedItems.map((p) => ({
-          sku: p.sku.toUpperCase(),
-          name: p.name,
-          description: p.description,
-          category_id: p.category_id,
-          width: p.width || null,
-          height: p.height || null,
-          depth: p.depth || null,
-          color: p.color,
-          filename: p.filename,
-          image_url: p.thumbnailUrl,
-          price_tier: p.priceTier,
-          prices: p.prices,
-        })),
+        products: uploadedProducts,
       };
 
       const res = await fetch('/api/products/batch-import', {
@@ -571,7 +600,6 @@ export default function CatalogsAndImportPage() {
         body: JSON.stringify(payload),
       });
 
-      clearInterval(progressTimer);
       setCommitProgress(100);
 
       const data = await res.json();
@@ -605,7 +633,6 @@ export default function CatalogsAndImportPage() {
         });
       }
     } catch {
-      clearInterval(progressTimer);
       setImportStatus({
         success: false,
         message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อนำเข้าสินค้าได้',

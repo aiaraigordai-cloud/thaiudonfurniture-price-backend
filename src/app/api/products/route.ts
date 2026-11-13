@@ -205,7 +205,7 @@ export async function GET(request: Request) {
     if (category) {
       finalProducts = finalProducts.filter((p) => p.category_id === category);
     }
-    if (!isViewingDeleted && status) {
+    if (!isViewingDeleted && status && status !== 'new_24h') {
       finalProducts = finalProducts.filter((p) => p.status === status);
     }
 

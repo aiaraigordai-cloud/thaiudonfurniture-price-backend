@@ -91,6 +91,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
           p.catalog_type, p.size_text, p.ref_image_url, p.ref_filename, p.graphic_filename, p.page_num,
           c.name as category_name, c.slug as category_slug,
           p.width, p.height, p.depth, p.color,
+          p.created_at, p.updated_at,
           pp.price
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
@@ -109,6 +110,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
           p.catalog_type, p.size_text, p.ref_image_url, p.ref_filename, p.graphic_filename, p.page_num,
           c.name as category_name, c.slug as category_slug,
           p.width, p.height, p.depth, p.color,
+          p.created_at, p.updated_at,
           pp.price
         FROM share_link_products slp
         JOIN products p ON slp.product_id = p.id
@@ -190,6 +192,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
         height: p.height,
         depth: p.depth,
         color: p.catalog_type === 'tuulo' ? 'ตามภาพ' : p.color,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
         images: [...imgs],
         price: basePrice,
       };
@@ -299,6 +303,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
             height: ovr.height || null,
             depth: ovr.depth || null,
             color: ovrCatalog === 'tuulo' ? 'ตามภาพ' : (ovr.color || null),
+            created_at: ovr.created_at || ovr.updated_at || new Date().toISOString(),
+            updated_at: ovr.updated_at || new Date().toISOString(),
             refImageUrl: ovr.ref_image_url || (refImgs.length > 0 ? refImgs[0] : null),
             refImages: refImgs,
             refFilename: ovr.ref_filename || null,
@@ -447,6 +453,8 @@ export async function GET(request: Request, { params }: { params: { token: strin
         graphicFilename: p.graphicFilename,
         pageNum: p.pageNum,
         color: p.color,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
         images: p.images,
         price: p.price,
       };
