@@ -69,7 +69,7 @@ export async function PUT(request: Request) {
     await db.exec('BEGIN TRANSACTION;');
     try {
       if (status) {
-        await db.prepare('UPDATE profiles SET status = ?, updated_at = datetime("now") WHERE id = ?').run(status, profileId);
+        await db.prepare("UPDATE profiles SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, profileId);
       }
 
       if (permissions && typeof permissions === 'object') {

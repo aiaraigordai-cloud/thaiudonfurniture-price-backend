@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getCachedSupabasePriceHistory, invalidateSupabasePriceCache, getSupabase, syncProductToSupabasePostgres } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, invalidateSupabasePriceCache, invalidateSupabaseProductCache, getSupabase, syncProductToSupabasePostgres, getCachedSupabaseProducts, CachedSupabaseProduct } from '@/lib/supabase';
 import { loadProductOverrides, applyProductOverrides, saveProductOverride } from '@/lib/product-store';
 import { formatImageUrlToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
@@ -24,7 +24,8 @@ export async function GET(request: Request) {
 
     const db = getDb();
 
-    let query = `
+    // Fetch ALL baseline products from SQLite so moved/restored items are never missed by raw SQL filters
+    const query = `
       SELECT 
         p.id, p.sku, p.name, p.description, p.category_id,
         p.catalog_type, p.size_text, p.ref_image_url, p.ref_filename, p.graphic_filename, p.page_num,
@@ -33,42 +34,11 @@ export async function GET(request: Request) {
         p.created_at, p.updated_at
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE 1=1
+      ORDER BY p.page_num ASC, p.sku ASC
     `;
-    const params: any[] = [];
-
-    if (search) {
-      const cleanDigits = search.trim().replace(/[,฿\s\.\-]/g, '');
-      const term = `%${search.trim()}%`;
-      const priceTerm = cleanDigits ? `%${cleanDigits}%` : term;
-      query += ` AND (
-        p.sku LIKE ? OR 
-        p.name LIKE ? OR 
-        p.description LIKE ? OR 
-        p.id IN (SELECT product_id FROM product_prices WHERE CAST(ROUND(price) AS TEXT) LIKE ? OR CAST(price AS TEXT) LIKE ?)
-      )`;
-      params.push(term, term, term, priceTerm, priceTerm);
-    }
-
-    if (catalogType && catalogType !== 'all') {
-      query += ` AND p.catalog_type = ?`;
-      params.push(catalogType);
-    }
-
-    if (category) {
-      query += ` AND p.category_id = ?`;
-      params.push(category);
-    }
-
-    if (status) {
-      query += ` AND p.status = ?`;
-      params.push(status);
-    }
-
-    query += ` ORDER BY p.page_num ASC, p.sku ASC`;
 
     // Execute batch queries instead of 620 N+1 queries
-    const products = (await db.prepare(query).all(...params)) as any[];
+    const products = (await db.prepare(query).all()) as any[];
     const tierRows = (await db.prepare("SELECT id, code, name_th, description FROM price_tiers WHERE id IN ('tier_sale', 'tier_retail', 'tier_vip', 'tier_general') ORDER BY display_order").all()) as any[];
     const allImages = isPricingMode
       ? []
@@ -132,57 +102,114 @@ export async function GET(request: Request) {
         images: imgUrls,
         ref_images: refImgUrls,
         prices,
+        deleted: prod.status === 'Deleted',
       };
     });
 
-    // 1. Apply persistent product overrides (for realtime name, category, image, description updates & newly imported products)
-    let finalProducts = enrichedProducts;
+    // 1. Apply persistent product overrides FIRST (with includeDeleted = true so we retain deleted items for Restore)
+    let allMergedProducts = enrichedProducts;
     try {
       const overrides = await loadProductOverrides();
-      finalProducts = applyProductOverrides(enrichedProducts, overrides);
-
-      // Ensure any newly appended products also respect active filters
-      if (catalogType && catalogType !== 'all') {
-        finalProducts = finalProducts.filter((p) => p.catalog_type === catalogType);
-      }
-      if (category) {
-        finalProducts = finalProducts.filter((p) => p.category_id === category);
-      }
-      if (status) {
-        finalProducts = finalProducts.filter((p) => p.status === status);
-      }
-      if (search) {
-        const searchClean = search.trim().toLowerCase();
-        const cleanDigits = search.trim().replace(/[,฿\s\.\-]/g, '');
-        finalProducts = finalProducts.filter((p) => {
-          const skuMatch = String(p.sku || '').toLowerCase().includes(searchClean);
-          const nameMatch = String(p.name || '').toLowerCase().includes(searchClean);
-          const descMatch = String(p.description || '').toLowerCase().includes(searchClean);
-          let priceMatch = false;
-          if (cleanDigits && p.prices) {
-            for (const pr of Object.values(p.prices)) {
-              if (String(Math.round(Number(pr))).includes(cleanDigits) || String(pr).includes(cleanDigits)) {
-                priceMatch = true;
-                break;
-              }
-            }
-          }
-          return skuMatch || nameMatch || descMatch || priceMatch;
-        });
-      }
-
-      // Sort consistently by page_num ASC, then sku ASC
-      finalProducts.sort((a, b) => {
-        const pageA = a.page_num !== null && a.page_num !== undefined ? a.page_num : 9999;
-        const pageB = b.page_num !== null && b.page_num !== undefined ? b.page_num : 9999;
-        if (pageA !== pageB) return pageA - pageB;
-        return String(a.sku || '').localeCompare(String(b.sku || ''));
-      });
+      allMergedProducts = applyProductOverrides(enrichedProducts, overrides, true);
     } catch (e) {
       console.warn('Failed to apply product overrides:', e);
     }
 
-    // 2. Overlay latest real-time prices from Supabase PostgreSQL (Authoritative Price Layer)
+    // 2. Authoritative Cloud Layer from Supabase PostgreSQL SECOND (Categories, Catalog Type, Status, Deleted/Restored)
+    try {
+      const catRows = (await db.prepare('SELECT id, name FROM categories').all()) as any[];
+      const catNameById: Record<string, string> = {};
+      for (const c of catRows) {
+        catNameById[c.id] = c.name;
+      }
+
+      const supaProducts = await getCachedSupabaseProducts();
+      if (supaProducts && supaProducts.length > 0) {
+        const supaById = new Map<string, CachedSupabaseProduct>();
+        const supaBySku = new Map<string, CachedSupabaseProduct>();
+        for (const sp of supaProducts) {
+          if (sp.id) supaById.set(sp.id, sp);
+          if (sp.sku) supaBySku.set(sp.sku.trim().toUpperCase(), sp);
+        }
+
+        for (const p of allMergedProducts) {
+          const skuKey = p.sku ? String(p.sku).trim().toUpperCase() : '';
+          const sp = supaById.get(p.id) || (skuKey ? supaBySku.get(skuKey) : null);
+          if (sp) {
+            const ovTime = p.override_updated_at ? new Date(p.override_updated_at).getTime() : 0;
+            const spTime = sp.updated_at ? new Date(sp.updated_at).getTime() : 0;
+            const isRecentSupa = sp.updated_at ? sp.updated_at >= '2026-11-13' : false;
+
+            if (sp.status === 'Deleted') {
+              p.deleted = true;
+              p.status = 'Deleted';
+            } else if (p.deleted && sp.status === 'Published' && isRecentSupa && spTime >= ovTime) {
+              // Restored via Cloud Layer
+              p.deleted = false;
+              p.status = 'Published';
+            } else if (!p.deleted && sp.status && (spTime >= ovTime || isRecentSupa)) {
+              p.status = sp.status;
+            }
+
+            if (sp.category_id !== undefined && sp.category_id !== null && (spTime >= ovTime || isRecentSupa || !p.category_id)) {
+              p.category_id = sp.category_id;
+              if (catNameById[sp.category_id]) {
+                p.category_name = catNameById[sp.category_id];
+              }
+            }
+            if (sp.catalog_type && (sp.category_id !== null || spTime >= ovTime || isRecentSupa)) {
+              p.catalog_type = sp.catalog_type;
+              if (sp.catalog_type === 'tuulo') {
+                p.color = 'ตามภาพ';
+              }
+            }
+            if (sp.name && (spTime >= ovTime || isRecentSupa)) {
+              p.name = sp.name;
+            }
+            if (sp.description !== undefined && sp.description !== null && (spTime >= ovTime || isRecentSupa)) {
+              p.description = sp.description;
+            }
+          }
+          // Ensure category_name is populated whenever category_id is set
+          if (p.category_id && catNameById[p.category_id]) {
+            p.category_name = catNameById[p.category_id];
+          }
+        }
+      } else {
+        for (const p of allMergedProducts) {
+          if (p.category_id && catNameById[p.category_id]) {
+            p.category_name = catNameById[p.category_id];
+          }
+        }
+      }
+    } catch (supaErr) {
+      console.warn('Supabase product overlay error:', supaErr);
+    }
+
+    // 3. Partition into Active vs Deleted products & compute exact real-time counts
+    const allActiveProducts = allMergedProducts.filter((p) => !p.deleted && p.status !== 'Deleted');
+    const allDeletedProducts = allMergedProducts.filter((p) => Boolean(p.deleted) || p.status === 'Deleted');
+
+    const totalAllCount = allActiveProducts.length;
+    const totalTuuloCount = allActiveProducts.filter((p) => p.catalog_type === 'tuulo').length;
+    const totalKnockdownCount = allActiveProducts.filter((p) => p.catalog_type === 'knockdown').length;
+    const totalDeletedCount = allDeletedProducts.length;
+
+    // 4. Filter working list according to user request (Active vs Trash/Deleted view)
+    const isViewingDeleted = status === 'Deleted' || catalogType === 'deleted';
+    let finalProducts = isViewingDeleted ? [...allDeletedProducts] : [...allActiveProducts];
+
+    if (!isViewingDeleted && catalogType && catalogType !== 'all') {
+      finalProducts = finalProducts.filter((p) => p.catalog_type === catalogType);
+    }
+    if (category) {
+      finalProducts = finalProducts.filter((p) => p.category_id === category);
+    }
+    if (!isViewingDeleted && status) {
+      finalProducts = finalProducts.filter((p) => p.status === status);
+    }
+
+    // 5. Overlay latest real-time prices from Supabase PostgreSQL (Authoritative Price Layer)
     try {
       const supabase = getSupabase();
       if (supabase) {
@@ -215,6 +242,34 @@ export async function GET(request: Request) {
       console.warn('Supabase price overlay error:', err);
     }
 
+    // 6. Apply search filter (after price & metadata overlay) and sort
+    if (search) {
+      const searchClean = search.trim().toLowerCase();
+      const cleanDigits = search.trim().replace(/[,฿\s\.\-]/g, '');
+      finalProducts = finalProducts.filter((p) => {
+        const skuMatch = String(p.sku || '').toLowerCase().includes(searchClean);
+        const nameMatch = String(p.name || '').toLowerCase().includes(searchClean);
+        const descMatch = String(p.description || '').toLowerCase().includes(searchClean);
+        let priceMatch = false;
+        if (cleanDigits && p.prices) {
+          for (const pr of Object.values(p.prices)) {
+            if (String(Math.round(Number(pr))).includes(cleanDigits) || String(pr).includes(cleanDigits)) {
+              priceMatch = true;
+              break;
+            }
+          }
+        }
+        return skuMatch || nameMatch || descMatch || priceMatch;
+      });
+    }
+
+    finalProducts.sort((a, b) => {
+      const pageA = a.page_num !== null && a.page_num !== undefined ? a.page_num : 9999;
+      const pageB = b.page_num !== null && b.page_num !== undefined ? b.page_num : 9999;
+      if (pageA !== pageB) return pageA - pageB;
+      return String(a.sku || '').localeCompare(String(b.sku || ''));
+    });
+
     // Convert all images to high-speed Cloudflare R2 CDN URLs (skipped if pricing mode)
     if (!isPricingMode) {
       for (const p of finalProducts) {
@@ -230,20 +285,6 @@ export async function GET(request: Request) {
         }
       }
     }
-
-    // Dynamic catalog counts computed across entire catalog (reflects persistent deletions & additions in real-time)
-    let totalAllCount = 268;
-    let totalTuuloCount = 111;
-    let totalKnockdownCount = 157;
-
-    try {
-      const allBaseline = (await db.prepare('SELECT id, sku, catalog_type FROM products').all()) as any[];
-      const overrides = await loadProductOverrides();
-      const allCombined = applyProductOverrides(allBaseline, overrides);
-      totalAllCount = allCombined.length;
-      totalTuuloCount = allCombined.filter((p) => p.catalog_type === 'tuulo').length;
-      totalKnockdownCount = allCombined.filter((p) => p.catalog_type === 'knockdown').length;
-    } catch {}
 
     const sliced = limitParam > 0 ? finalProducts.slice(0, limitParam) : finalProducts;
     const outputProducts = isPricingMode
@@ -270,6 +311,7 @@ export async function GET(request: Request) {
           all: totalAllCount,
           tuulo: totalTuuloCount,
           knockdown: totalKnockdownCount,
+          deleted: totalDeletedCount,
         },
       },
       {
@@ -399,6 +441,7 @@ export async function POST(request: Request) {
           description: description || '',
           category_id: category_id || null,
           category_name: resolvedCategoryName,
+          catalog_type: catalogType,
           size_text: computedSizeText,
           width: parsedW,
           height: parsedH,
@@ -431,6 +474,8 @@ export async function POST(request: Request) {
           images: Array.isArray(images) ? images : undefined,
           prices: prices || undefined,
         });
+
+        invalidateSupabaseProductCache();
       } catch (syncErr) {
         console.warn('Sync new product to Supabase/Overrides warning:', syncErr);
       }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { saveProductOverridesBatch } from '@/lib/product-store';
-import { getSupabase } from '@/lib/supabase';
+import { saveProductOverridesBatch, loadProductOverrides } from '@/lib/product-store';
+import { getSupabase, invalidateSupabaseProductCache } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -22,11 +22,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการ' }, { status: 400 });
     }
 
+    if (!category_id && !catalog_type) {
+      return NextResponse.json({ error: 'กรุณาเลือกหมวดหมู่หรือประเภทแคตตาล็อกที่ต้องการย้าย' }, { status: 400 });
+    }
+
     const db = getDb();
 
     // Verify category if category_id is provided
     let categoryName: string | null = null;
-    let categorySlug: string | null = null;
 
     if (category_id) {
       const category = await db.prepare('SELECT id, name, slug FROM categories WHERE id = ?').get(category_id) as any;
@@ -34,23 +37,25 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'ไม่พบหมวดหมู่สินค้าที่ระบุ' }, { status: 404 });
       }
       categoryName = category.name;
-      categorySlug = category.slug;
     }
 
-    // Execute SQLite UPDATE within a transaction
+    // Execute SQLite UPDATE within a transaction (using single-quoted 'now' for SQLite strict mode)
     await db.exec('BEGIN TRANSACTION;');
     try {
       const placeholders = product_ids.map(() => '?').join(',');
-      let updateSql = 'UPDATE products SET updated_at = datetime("now")';
+      let updateSql = "UPDATE products SET updated_at = datetime('now')";
       const updateParams: any[] = [];
 
       if (category_id) {
         updateSql += ', category_id = ?';
         updateParams.push(category_id);
       }
-      if (catalog_type) {
+      if (catalog_type && (catalog_type === 'tuulo' || catalog_type === 'knockdown')) {
         updateSql += ', catalog_type = ?';
         updateParams.push(catalog_type);
+        if (catalog_type === 'tuulo') {
+          updateSql += ", color = 'ตามภาพ'";
+        }
       }
 
       updateSql += ` WHERE id IN (${placeholders})`;
@@ -63,11 +68,28 @@ export async function POST(request: Request) {
       throw dbErr;
     }
 
-    // Fetch updated product SKUs for overrides indexing
+    // Fetch updated product SKUs for overrides indexing (combining SQLite + persistent overrides)
     const placeholders = product_ids.map(() => '?').join(',');
-    const updatedProducts = await db.prepare(`
-      SELECT id, sku, catalog_type FROM products WHERE id IN (${placeholders})
+    const dbProducts = await db.prepare(`
+      SELECT id, sku, name, catalog_type, category_id FROM products WHERE id IN (${placeholders})
     `).all(...product_ids) as any[];
+
+    const overrides = await loadProductOverrides();
+    const productMap = new Map<string, { id: string; sku: string; catalog_type?: string }>();
+    for (const p of dbProducts) {
+      productMap.set(p.id, { id: p.id, sku: p.sku, catalog_type: p.catalog_type });
+    }
+    for (const pid of product_ids) {
+      if (!productMap.has(pid) && overrides[pid]) {
+        productMap.set(pid, {
+          id: pid,
+          sku: overrides[pid].sku || pid,
+          catalog_type: overrides[pid].catalog_type || undefined,
+        });
+      }
+    }
+
+    const updatedProducts = Array.from(productMap.values());
 
     // Batch update persistent overrides (Netlify Blobs + Local File)
     await saveProductOverridesBatch(
@@ -76,7 +98,7 @@ export async function POST(request: Request) {
         sku: p.sku,
         category_id: category_id || undefined,
         category_name: categoryName || undefined,
-        catalog_type: catalog_type || p.catalog_type,
+        catalog_type: (catalog_type === 'tuulo' || catalog_type === 'knockdown') ? catalog_type : p.catalog_type,
       }))
     );
 
@@ -84,19 +106,41 @@ export async function POST(request: Request) {
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const supaRows = updatedProducts.map((p) => ({
-          id: p.id,
-          sku: p.sku,
-          category_id: category_id || null,
-          catalog_type: catalog_type || p.catalog_type,
+        const supaUpdatePayload: Record<string, any> = {
           updated_at: new Date().toISOString(),
-        }));
-        for (let i = 0; i < supaRows.length; i += 50) {
-          await supabase.from('products').upsert(supaRows.slice(i, i + 50), { onConflict: 'id' });
+        };
+        if (category_id) {
+          supaUpdatePayload.category_id = category_id;
         }
+        if (catalog_type === 'tuulo' || catalog_type === 'knockdown') {
+          supaUpdatePayload.catalog_type = catalog_type;
+          if (catalog_type === 'tuulo') {
+            supaUpdatePayload.color = 'ตามภาพ';
+          }
+        }
+
+        // Direct UPDATE by IDs & SKUs (avoids NOT NULL constraint errors on upsert)
+        for (let i = 0; i < product_ids.length; i += 50) {
+          await supabase
+            .from('products')
+            .update(supaUpdatePayload)
+            .in('id', product_ids.slice(i, i + 50));
+        }
+
+        const skus = updatedProducts.map((p) => p.sku).filter(Boolean);
+        for (let i = 0; i < skus.length; i += 50) {
+          await supabase
+            .from('products')
+            .update(supaUpdatePayload)
+            .in('sku', skus.slice(i, i + 50));
+        }
+
+        invalidateSupabaseProductCache();
       } catch (err) {
         console.warn('Supabase batch category sync error:', err);
       }
+    } else {
+      invalidateSupabaseProductCache();
     }
 
     // Audit log

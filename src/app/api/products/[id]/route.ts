@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser, logAudit } from '@/lib/auth';
-import { getSupabase, invalidateSupabasePriceCache, syncProductToSupabasePostgres } from '@/lib/supabase';
+import { getSupabase, getCachedSupabaseProducts, invalidateSupabasePriceCache, invalidateSupabaseProductCache, syncProductToSupabasePostgres } from '@/lib/supabase';
 import { loadProductOverrides, saveProductOverride, applyProductOverrideSingle } from '@/lib/product-store';
 import { formatImageUrlToR2 } from '@/lib/r2';
 import crypto from 'node:crypto';
@@ -103,9 +103,48 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     // Apply persistent product overrides if available
     const overrides = await loadProductOverrides();
-    const finalProduct = applyProductOverrideSingle(baseProduct, overrides);
+    const finalProduct = applyProductOverrideSingle(baseProduct, overrides, true);
 
+    // Overlay authoritative Supabase product metadata (category_id, catalog_type, status, name)
     if (finalProduct) {
+      try {
+        const supaProducts = await getCachedSupabaseProducts();
+        if (supaProducts && supaProducts.length > 0) {
+          const skuKey = finalProduct.sku ? String(finalProduct.sku).trim().toUpperCase() : '';
+          const sp = supaProducts.find(
+            (s) => s.id === finalProduct.id || (skuKey && s.sku && s.sku.trim().toUpperCase() === skuKey)
+          );
+          if (sp) {
+            const ovTime = finalProduct.override_updated_at ? new Date(finalProduct.override_updated_at).getTime() : 0;
+            const spTime = sp.updated_at ? new Date(sp.updated_at).getTime() : 0;
+            const isRecentSupa = sp.updated_at ? sp.updated_at >= '2026-11-13' : false;
+
+            if (sp.category_id !== undefined && sp.category_id !== null && (spTime >= ovTime || isRecentSupa || !finalProduct.category_id)) {
+              finalProduct.category_id = sp.category_id;
+              const catRow = (await db.prepare('SELECT name FROM categories WHERE id = ?').get(sp.category_id)) as any;
+              if (catRow?.name) finalProduct.category_name = catRow.name;
+            }
+            if (sp.catalog_type && (sp.category_id !== null || spTime >= ovTime || isRecentSupa)) {
+              finalProduct.catalog_type = sp.catalog_type;
+              if (sp.catalog_type === 'tuulo') finalProduct.color = 'ตามภาพ';
+            }
+            if (sp.name && (spTime >= ovTime || isRecentSupa)) {
+              finalProduct.name = sp.name;
+            }
+            if (sp.description !== undefined && sp.description !== null && (spTime >= ovTime || isRecentSupa)) {
+              finalProduct.description = sp.description;
+            }
+            if (sp.status === 'Deleted') {
+              finalProduct.status = 'Deleted';
+              finalProduct.deleted = true;
+            } else if (sp.status && (spTime >= ovTime || isRecentSupa)) {
+              finalProduct.status = sp.status;
+              finalProduct.deleted = false;
+            }
+          }
+        }
+      } catch {}
+
       if (finalProduct.ref_image_url) finalProduct.ref_image_url = formatImageUrlToR2(finalProduct.ref_image_url);
       if (finalProduct.primary_image_url) finalProduct.primary_image_url = formatImageUrlToR2(finalProduct.primary_image_url);
       if (Array.isArray(finalProduct.images)) {
@@ -160,7 +199,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const db = getDb();
 
     // Check existing product
-    const existing = await db.prepare('SELECT id, sku, name, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
+    const existing = await db.prepare('SELECT id, sku, name, category_id, catalog_type, size_text, ref_image_url, ref_filename FROM products WHERE id = ?').get(params.id) as any;
     if (!existing) {
       return NextResponse.json({ error: 'ไม่พบสินค้ารายการนี้' }, { status: 404 });
     }
@@ -384,6 +423,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           images: Array.isArray(images) ? images : undefined,
           prices: prices || undefined,
         });
+
+        invalidateSupabaseProductCache();
+        invalidateSupabasePriceCache();
       } catch (storeErr) {
         console.warn('Persistent store update error:', storeErr);
       }
@@ -424,35 +466,38 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
     await db.exec('BEGIN TRANSACTION;');
     try {
-      await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(params.id);
-      await db.prepare('DELETE FROM product_prices WHERE product_id = ?').run(params.id);
-      await db.prepare('DELETE FROM share_link_products WHERE product_id = ?').run(params.id);
-      await db.prepare('DELETE FROM price_change_history WHERE product_id = ?').run(params.id);
-      await db.prepare('DELETE FROM products WHERE id = ?').run(params.id);
+      // Soft-delete in SQLite (keep product_images and product_prices intact so Restore recovers 100% of data)
+      await db.prepare("UPDATE products SET status = 'Deleted', updated_at = datetime('now') WHERE id = ?").run(params.id);
       await db.exec('COMMIT;');
     } catch (txErr) {
       await db.exec('ROLLBACK;');
       throw txErr;
     }
 
-    // Mark as deleted in persistent store so serverless instances also hide it immediately
+    // Mark as deleted in Supabase PostgreSQL & Persistent Store (Cloud Source of Truth)
     try {
-      await saveProductOverride(params.id, {
-        sku: existing?.sku || undefined,
-        deleted: true,
-      });
-
       const supabase = getSupabase();
       if (supabase) {
-        await supabase.from('product_images').delete().eq('product_id', params.id);
-        await supabase.from('product_prices').delete().eq('product_id', params.id);
-        await supabase.from('price_change_history').delete().eq('product_id', params.id);
-        await supabase.from('products').delete().eq('id', params.id);
+        const delPayload = {
+          status: 'Deleted',
+          updated_at: new Date().toISOString(),
+        };
+        await supabase.from('products').update(delPayload).eq('id', params.id);
+        if (existing?.sku) {
+          await supabase.from('products').update(delPayload).eq('sku', existing.sku);
+        }
       }
+
+      await saveProductOverride(params.id, {
+        sku: existing?.sku || undefined,
+        status: 'Deleted',
+        deleted: true,
+      });
     } catch (storeErr) {
       console.warn('Persistent store delete mark error:', storeErr);
     }
 
+    invalidateSupabaseProductCache();
     invalidateSupabasePriceCache();
 
     await logAudit('DELETE_PRODUCT', 'PRODUCT', params.id, user.id, user.username, {
@@ -460,7 +505,12 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
       name: existing?.name,
     });
 
-    return NextResponse.json({ success: true, message: 'ลบสินค้าเรียบร้อยแล้ว' });
+    return NextResponse.json({
+      success: true,
+      message: 'ลบสินค้าเรียบร้อยแล้ว (สามารถกู้คืนได้จากเมนูถังขยะ)',
+      deleted_id: params.id,
+      deleted_sku: existing?.sku || null,
+    });
   } catch (error: any) {
     console.error('Delete product error:', error);
     return NextResponse.json({ error: error.message || 'เกิดข้อผิดพลาดในการลบสินค้า' }, { status: 500 });

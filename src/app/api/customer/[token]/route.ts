@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { getCachedSupabasePriceHistory, getSupabase } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, getSupabase, getCachedSupabaseProducts, CachedSupabaseProduct } from '@/lib/supabase';
 import { loadProductOverrides } from '@/lib/product-store';
 import { findShareLinkByToken } from '@/lib/share-store';
 import { formatImageUrlToR2 } from '@/lib/r2';
@@ -195,9 +195,10 @@ export async function GET(request: Request, { params }: { params: { token: strin
       };
     });
 
-    // 1. Overlay persistent product overrides (for realtime name, category, image, sizes, fallback prices, and deletions)
+    // 1. Overlay persistent product overrides FIRST, then Supabase Cloud Status SECOND
     const deletedIndices = new Set<number>();
     const appendedNewProducts: any[] = [];
+
     try {
       const overrides = await loadProductOverrides();
       if (overrides && Object.keys(overrides).length > 0) {
@@ -213,21 +214,22 @@ export async function GET(request: Request, { params }: { params: { token: strin
         const existingSkus = new Set<string>();
 
         for (let i = 0; i < products.length; i++) {
-          const prod = products[i];
+          const prod = products[i] as any;
           if (prod.id) existingIds.add(prod.id);
           if (prod.sku) existingSkus.add(String(prod.sku).trim().toUpperCase());
 
           const skuKey = prod.sku ? prod.sku.trim().toUpperCase() : '';
           const ovr = overrides[prod.id] || (skuKey ? overrides[skuKey] : null);
           if (ovr) {
+            prod.override_updated_at = ovr.updated_at || null;
             if (ovr.deleted) {
               deletedIndices.add(i);
-              continue;
             }
             if (ovr.sku) prod.sku = ovr.sku;
             if (ovr.name) prod.name = ovr.name;
             if (ovr.description !== undefined) prod.description = ovr.description;
             if (ovr.category_name) prod.category_name = ovr.category_name;
+            if (ovr.catalog_type) prod.catalogType = ovr.catalog_type;
             if (ovr.size_text !== undefined) prod.sizeText = ovr.size_text;
             if (ovr.width !== undefined) prod.width = ovr.width;
             if (ovr.height !== undefined) prod.height = ovr.height;
@@ -240,7 +242,6 @@ export async function GET(request: Request, { params }: { params: { token: strin
             }
             if (ovr.ref_filename !== undefined) prod.refFilename = ovr.ref_filename;
             if (Array.isArray(ovr.images) && ovr.images.length > 0) {
-              // Ensure no ref images in main images array
               prod.images = ovr.images.filter(
                 (img: string) => !String(img).includes('/ref/') && !String(img).includes('catalogs/ref/')
               );
@@ -308,6 +309,60 @@ export async function GET(request: Request, { params }: { params: { token: strin
       }
     } catch (e) {
       console.warn('Customer catalog overrides overlay error:', e);
+    }
+
+    // 2. Authoritative Supabase Cloud Layer SECOND (Delete/Restore status, category name/slug, catalog type)
+    try {
+      const supaProducts = await getCachedSupabaseProducts();
+      if (supaProducts && supaProducts.length > 0) {
+        const catRows = (await db.prepare('SELECT id, name, slug FROM categories').all()) as any[];
+        const catMap: Record<string, { name: string; slug: string }> = {};
+        for (const c of catRows) {
+          catMap[c.id] = { name: c.name, slug: c.slug };
+        }
+
+        const supaById = new Map<string, CachedSupabaseProduct>();
+        const supaBySku = new Map<string, CachedSupabaseProduct>();
+        for (const sp of supaProducts) {
+          if (sp.id) supaById.set(sp.id, sp);
+          if (sp.sku) supaBySku.set(sp.sku.trim().toUpperCase(), sp);
+        }
+
+        for (let i = 0; i < products.length; i++) {
+          const prod = products[i] as any;
+          const skuKey = prod.sku ? String(prod.sku).trim().toUpperCase() : '';
+          const sp = supaById.get(prod.id) || (skuKey ? supaBySku.get(skuKey) : null);
+          if (sp) {
+            const ovTime = prod.override_updated_at ? new Date(prod.override_updated_at).getTime() : 0;
+            const spTime = sp.updated_at ? new Date(sp.updated_at).getTime() : 0;
+            const isRecentSupa = sp.updated_at ? sp.updated_at >= '2026-11-13' : false;
+
+            if (sp.status === 'Deleted') {
+              deletedIndices.add(i);
+              continue;
+            } else if (deletedIndices.has(i) && sp.status === 'Published' && isRecentSupa && spTime >= ovTime) {
+              deletedIndices.delete(i);
+            }
+
+            if (sp.category_id && catMap[sp.category_id] && (spTime >= ovTime || isRecentSupa || !prod.category_name)) {
+              prod.category_name = catMap[sp.category_id].name;
+              prod.category_slug = catMap[sp.category_id].slug;
+            }
+            if (sp.catalog_type && (sp.category_id !== null || spTime >= ovTime || isRecentSupa)) {
+              prod.catalogType = sp.catalog_type;
+              if (sp.catalog_type === 'tuulo') prod.color = 'ตามภาพ';
+            }
+            if (sp.name && (spTime >= ovTime || isRecentSupa)) {
+              prod.name = sp.name;
+            }
+            if (sp.description !== undefined && sp.description !== null && (spTime >= ovTime || isRecentSupa)) {
+              prod.description = sp.description;
+            }
+          }
+        }
+      }
+    } catch (supaErr) {
+      console.warn('Customer Supabase overlay warning:', supaErr);
     }
 
     const activeProducts = [

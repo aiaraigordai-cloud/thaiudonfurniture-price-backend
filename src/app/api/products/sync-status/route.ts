@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { getCachedSupabasePriceHistory } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, getCachedSupabaseProducts, CachedSupabaseProduct } from '@/lib/supabase';
 import { getLastProductUpdateTime, loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
 
 export const dynamic = 'force-dynamic';
@@ -32,22 +32,58 @@ export async function GET() {
 
     const lastOverrideUpdate = getLastProductUpdateTime();
 
-    // Compute active counts taking overrides into account
+    let supaProductStamp = '';
+    // Compute active counts taking overrides & Supabase Cloud into account
     let totalAll = row?.product_count || 0;
     let totalTuulo = row?.tuulo_count || 0;
     let totalKnockdown = row?.knockdown_count || 0;
+    let totalDeleted = 0;
     try {
       const overrides = await loadProductOverrides();
-      if (overrides && Object.keys(overrides).length > 0) {
-        const baseline = (await db.prepare('SELECT id, sku, catalog_type FROM products').all()) as any[];
-        const combined = applyProductOverrides(baseline, overrides);
-        totalAll = combined.length;
-        totalTuulo = combined.filter((p) => p.catalog_type === 'tuulo').length;
-        totalKnockdown = combined.filter((p) => p.catalog_type === 'knockdown').length;
+      const baseline = (await db.prepare('SELECT id, sku, category_id, catalog_type, status FROM products').all()) as any[];
+      const combined = applyProductOverrides(baseline, overrides, true);
+
+      const supaProducts = await getCachedSupabaseProducts();
+      if (supaProducts && supaProducts.length > 0) {
+        supaProductStamp = supaProducts[0]?.updated_at || '';
+        const supaById = new Map<string, CachedSupabaseProduct>();
+        const supaBySku = new Map<string, CachedSupabaseProduct>();
+        for (const sp of supaProducts) {
+          if (sp.id) supaById.set(sp.id, sp);
+          if (sp.sku) supaBySku.set(sp.sku.trim().toUpperCase(), sp);
+        }
+
+        for (const p of combined) {
+          const skuKey = p.sku ? String(p.sku).trim().toUpperCase() : '';
+          const sp = supaById.get(p.id) || (skuKey ? supaBySku.get(skuKey) : null);
+          if (sp) {
+            const ovTime = p.override_updated_at ? new Date(p.override_updated_at).getTime() : 0;
+            const spTime = sp.updated_at ? new Date(sp.updated_at).getTime() : 0;
+            const isRecentSupa = sp.updated_at ? sp.updated_at >= '2026-11-13' : false;
+
+            if (sp.status === 'Deleted') {
+              p.deleted = true;
+              p.status = 'Deleted';
+            } else if (p.deleted && sp.status === 'Published' && isRecentSupa && spTime >= ovTime) {
+              p.deleted = false;
+              p.status = 'Published';
+            }
+            if (sp.catalog_type && (sp.category_id !== null || spTime >= ovTime || isRecentSupa)) {
+              p.catalog_type = sp.catalog_type;
+            }
+          }
+        }
       }
+
+      const activeList = combined.filter((p) => !p.deleted && p.status !== 'Deleted');
+      const deletedList = combined.filter((p) => Boolean(p.deleted) || p.status === 'Deleted');
+      totalAll = activeList.length;
+      totalTuulo = activeList.filter((p) => p.catalog_type === 'tuulo').length;
+      totalKnockdown = activeList.filter((p) => p.catalog_type === 'knockdown').length;
+      totalDeleted = deletedList.length;
     } catch {}
 
-    const syncToken = `${totalAll}_${totalTuulo}_${totalKnockdown}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
+    const syncToken = `${totalAll}_${totalTuulo}_${totalKnockdown}_${totalDeleted}_${supaProductStamp}_${row?.last_product_update || ''}_${lastOverrideUpdate}_${row?.last_price_update || ''}_${supaPriceStamp}_${row?.price_count || 0}_${row?.batch_count || 0}_${row?.last_batch_created || ''}_${row?.committed_batch_count || 0}`;
 
     return NextResponse.json(
       {
@@ -58,6 +94,7 @@ export async function GET() {
           all: totalAll,
           tuulo: totalTuulo,
           knockdown: totalKnockdown,
+          deleted: totalDeleted,
         },
         lastProductUpdate: row?.last_product_update || null,
         lastPriceUpdate: row?.last_price_update || null,

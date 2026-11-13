@@ -91,12 +91,17 @@ export default function ProductsPage() {
   const [movingCategory, setMovingCategory] = useState(false);
   const [moveCategoryError, setMoveCategoryError] = useState('');
 
-  // 4. Catalog Type Filter (all, tuulo, knockdown)
-  const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown'>('all');
-  const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number }>({
+  // 3.2 Restore Deleted Products State
+  const [lastDeletedProduct, setLastDeletedProduct] = useState<{ id: string; sku?: string; name?: string } | null>(null);
+  const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set());
+
+  // 4. Catalog Type Filter (all, tuulo, knockdown, deleted)
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<'all' | 'tuulo' | 'knockdown' | 'deleted'>('all');
+  const [catalogCounts, setCatalogCounts] = useState<{ all: number; tuulo: number; knockdown: number; deleted?: number }>({
     all: 268,
-    tuulo: 111,
-    knockdown: 157,
+    tuulo: 110,
+    knockdown: 158,
+    deleted: 43,
   });
 
   // Reset pagination to page 1 whenever any filter changes
@@ -445,6 +450,9 @@ export default function ProductsPage() {
             window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
           } catch {}
         }
+
+        // Background re-fetch to ensure server sync
+        loadProducts(true);
       }
     } catch {
       setQuickEditError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
@@ -765,9 +773,15 @@ export default function ProductsPage() {
             all: Math.max(0, prev.all - 1),
             tuulo: isTuulo ? Math.max(0, prev.tuulo - 1) : prev.tuulo,
             knockdown: isKd ? Math.max(0, prev.knockdown - 1) : prev.knockdown,
+            deleted: (prev.deleted || 0) + 1,
           };
         });
-        setActionMsg(`🗑️ ลบสินค้า ${targetProd?.sku ? `(${targetProd.sku}) ` : ''}ออกจากระบบสำเร็จแบบ Real-time`);
+        setLastDeletedProduct({
+          id,
+          sku: targetProd?.sku || data.deleted_sku,
+          name: targetProd?.name,
+        });
+        setActionMsg(`🗑️ ลบสินค้า ${targetProd?.sku ? `(${targetProd.sku}) ` : ''}ออกจากระบบสำเร็จแบบ Real-time (สามารถกดปุ่มกู้คืนกลับมาได้ทันที)`);
         setDeleteConfirmId(null);
         if (previewProduct?.id === id) setPreviewProduct(null);
         if (quickEditProduct?.id === id) setQuickEditProduct(null);
@@ -799,6 +813,64 @@ export default function ProductsPage() {
       }
     } catch (e) {
       alert('เกิดข้อผิดพลาดในการลบสินค้า');
+    }
+  };
+
+  const handleRestoreProducts = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    setRestoringIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+
+    try {
+      const res = await fetch('/api/products/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_ids: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'กู้คืนสินค้าไม่สำเร็จ');
+      } else {
+        const skuText = data.restored_skus?.length ? ` (${data.restored_skus.slice(0, 5).join(', ')})` : '';
+        setActionMsg(`♻️ กู้คืนสินค้า ${ids.length} รายการ${skuText} กลับเข้าสู่ระบบสำเร็จแบบ Real-time`);
+        if (lastDeletedProduct && ids.includes(lastDeletedProduct.id)) {
+          setLastDeletedProduct(null);
+        }
+        setSelectedProductIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+
+        // Broadcast real-time update
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('thaiudon_sync_channel');
+            bc.postMessage({
+              type: 'PRODUCTS_UPDATED',
+              action: 'RESTORE_PRODUCT',
+              product_ids: ids,
+              timestamp: Date.now(),
+            });
+            localStorage.setItem('thaiudon_last_sync', Date.now().toString());
+            localStorage.setItem('thaiudon_product_sync', Date.now().toString());
+            window.dispatchEvent(new CustomEvent('thaiudon_catalog_sync'));
+          } catch {}
+        }
+
+        await loadProducts(true);
+      }
+    } catch {
+      alert('เกิดข้อผิดพลาดในการกู้คืนสินค้า');
+    } finally {
+      setRestoringIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
     }
   };
 
@@ -1048,15 +1120,22 @@ export default function ProductsPage() {
     }
     setMoveCategoryError('');
     setTargetCatalogType('keep');
-    if (!targetCategoryId && categories.length > 0) {
+    if (selectedProductIds.size === 1) {
+      const singleProd = products.find((p) => selectedProductIds.has(p.id));
+      if (singleProd?.category_id) {
+        setTargetCategoryId(singleProd.category_id);
+      } else if (!targetCategoryId && categories.length > 0) {
+        setTargetCategoryId(categories[0].id);
+      }
+    } else if (!targetCategoryId && categories.length > 0) {
       setTargetCategoryId(categories[0].id);
     }
     setMoveCategoryModalOpen(true);
   };
 
   const handleBatchMoveCategory = async () => {
-    if (selectedProductIds.size === 0 || !targetCategoryId) {
-      setMoveCategoryError('กรุณาเลือกหมวดหมู่ปลายทางที่ต้องการย้าย');
+    if (selectedProductIds.size === 0 || (!targetCategoryId && targetCatalogType === 'keep')) {
+      setMoveCategoryError('กรุณาเลือกหมวดหมู่ปลายทาง หรือประเภทแคตตาล็อกที่ต้องการย้าย');
       return;
     }
 
@@ -1070,7 +1149,7 @@ export default function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_ids: selectedIds,
-          category_id: targetCategoryId,
+          category_id: targetCategoryId || undefined,
           catalog_type: targetCatalogType !== 'keep' ? targetCatalogType : undefined,
         }),
       });
@@ -1088,8 +1167,12 @@ export default function ProductsPage() {
             if (selectedProductIds.has(p.id)) {
               return {
                 ...p,
-                category_id: targetCategoryId,
-                category_name: targetCatName,
+                ...(targetCategoryId
+                  ? {
+                      category_id: targetCategoryId,
+                      category_name: targetCatName,
+                    }
+                  : {}),
                 ...(targetCatalogType !== 'keep'
                   ? {
                       catalog_type: targetCatalogType,
@@ -1145,6 +1228,7 @@ export default function ProductsPage() {
   };
 
   const selectedProductsList = products.filter((p) => selectedProductIds.has(p.id));
+  const isTrashView = catalogTypeFilter === 'deleted' || selectedStatus === 'Deleted';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-24">
@@ -1165,13 +1249,26 @@ export default function ProductsPage() {
             </span>
           </div>
           <p className="text-xs text-[#705E4F] mt-0.5">
-            เลือกสินค้าหลายรายการเพื่อสร้างลิงก์แชร์ชุดสินค้า เลือกระดับราคาที่ต้องการส่งให้ลูกค้า พร้อมพรีวิวรูปภาพ
+            เลือกสินค้าหลายรายการเพื่อสร้างลิงก์แชร์ชุดสินค้า ย้ายหมวดหมู่ หรือกู้คืนสินค้าที่ถูกลบแบบ Real-time
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Quick Trigger Button for Batch Restore when in Trash view */}
+          {selectedProductIds.size > 0 && isTrashView && (
+            <button
+              onClick={() => handleRestoreProducts(Array.from(selectedProductIds))}
+              disabled={restoringIds.size > 0}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition animate-in fade-in cursor-pointer disabled:opacity-50"
+              title="กู้คืนสินค้าที่เลือกกลับเข้าสู่ระบบ"
+            >
+              <RefreshCw className={`w-4 h-4 ${restoringIds.size > 0 ? 'animate-spin' : ''}`} />
+              <span>♻️ กู้คืนที่เลือก ({selectedProductIds.size})</span>
+            </button>
+          )}
+
           {/* Quick Trigger Button for Batch Move Category */}
-          {selectedProductIds.size > 0 && (
+          {selectedProductIds.size > 0 && !isTrashView && (
             <button
               onClick={openMoveCategoryModal}
               className="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition animate-in fade-in cursor-pointer"
@@ -1183,7 +1280,7 @@ export default function ProductsPage() {
           )}
 
           {/* Quick Trigger Button for Multi Share */}
-          {selectedProductIds.size > 0 && (
+          {selectedProductIds.size > 0 && !isTrashView && (
             <button
               onClick={openMultiShareModal}
               className="px-4 py-2 bg-gradient-to-r from-[#C5A059] to-[#BB9251] hover:from-[#BB9251] hover:to-[#A67D3D] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition animate-in fade-in cursor-pointer"
@@ -1231,18 +1328,39 @@ export default function ProductsPage() {
       )}
 
       {actionMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between">
-          <span>{actionMsg}</span>
-          <button onClick={() => setActionMsg('')} className="text-emerald-900 font-bold text-xs">✕</button>
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex flex-wrap items-center justify-between gap-2">
+          <span className="font-medium">{actionMsg}</span>
+          <div className="flex items-center gap-2">
+            {lastDeletedProduct && (
+              <button
+                type="button"
+                onClick={() => handleRestoreProducts([lastDeletedProduct.id])}
+                disabled={restoringIds.has(lastDeletedProduct.id)}
+                className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${restoringIds.has(lastDeletedProduct.id) ? 'animate-spin' : ''}`} />
+                <span>♻️ กู้คืนสินค้า {lastDeletedProduct.sku ? `(${lastDeletedProduct.sku})` : ''} ทันที (Restore)</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setActionMsg('');
+                setLastDeletedProduct(null);
+              }}
+              className="text-emerald-900 font-bold text-xs px-1.5 py-0.5 hover:bg-emerald-100 rounded"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
       {/* Catalog Switcher Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <button
-          onClick={() => { setCatalogTypeFilter('all'); setSelectedCategory(''); }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
-            catalogTypeFilter === 'all'
+          onClick={() => { setCatalogTypeFilter('all'); setSelectedCategory(''); if (selectedStatus === 'Deleted') setSelectedStatus(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${
+            catalogTypeFilter === 'all' && selectedStatus !== 'Deleted'
               ? 'bg-[#161B40] text-white shadow-sm'
               : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
           }`}
@@ -1252,9 +1370,9 @@ export default function ProductsPage() {
         </button>
 
         <button
-          onClick={() => { setCatalogTypeFilter('tuulo'); setSelectedCategory(''); }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
-            catalogTypeFilter === 'tuulo'
+          onClick={() => { setCatalogTypeFilter('tuulo'); setSelectedCategory(''); if (selectedStatus === 'Deleted') setSelectedStatus(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${
+            catalogTypeFilter === 'tuulo' && selectedStatus !== 'Deleted'
               ? 'bg-[#DE1B23] text-white shadow-sm'
               : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
           }`}
@@ -1263,16 +1381,62 @@ export default function ProductsPage() {
         </button>
 
         <button
-          onClick={() => { setCatalogTypeFilter('knockdown'); setSelectedCategory(''); }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap ${
-            catalogTypeFilter === 'knockdown'
+          onClick={() => { setCatalogTypeFilter('knockdown'); setSelectedCategory(''); if (selectedStatus === 'Deleted') setSelectedStatus(''); }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${
+            catalogTypeFilter === 'knockdown' && selectedStatus !== 'Deleted'
               ? 'bg-[#DE1B23] text-white shadow-sm'
               : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
           }`}
         >
           <span>แคตตาล็อกน็อคดาวน์ ({catalogCounts.knockdown} รายการ)</span>
         </button>
+
+        <button
+          onClick={() => {
+            setCatalogTypeFilter('deleted');
+            setSelectedCategory('');
+            setSelectedStatus('');
+            setSelectedProductIds(new Set());
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${
+            isTrashView
+              ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-400'
+              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300'
+          }`}
+          title="ดูรายการสินค้าที่ลบไปแล้วและกู้คืนกลับมาได้"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>♻️ ถังขยะ / กู้คืนสินค้าที่ลบ ({catalogCounts.deleted ?? 0} รายการ)</span>
+        </button>
       </div>
+
+      {/* Trash / Restore Mode Active Banner */}
+      {isTrashView && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <span className="text-lg">♻️</span>
+            <div>
+              <div className="font-bold text-amber-950">
+                โหมดกู้คืนสินค้าที่ถูกลบ (Product Restore & Trash Bin) — พบ {products.length} รายการ
+              </div>
+              <div className="text-[11px] text-amber-800 mt-0.5">
+                สามารถคลิกปุ่ม <strong>"♻️ กู้คืนสินค้า"</strong> ด้านขวาของรายการที่ต้องการ หรือติ๊กเลือกหลายรายการเพื่อกู้คืนกลับเข้าสู่แคตตาล็อกพร้อมกัน (ข้อมูลรูปภาพและราคาทั้ง 4 ระดับจะกลับมาครบ 100%)
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setCatalogTypeFilter('all');
+              setSelectedStatus('');
+              setSelectedProductIds(new Set());
+            }}
+            className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-950 border border-amber-300 rounded-xl font-bold text-xs whitespace-nowrap transition cursor-pointer"
+          >
+            ← กลับสู่รายการสินค้าปกติ ({catalogCounts.all})
+          </button>
+        </div>
+      )}
 
       {/* Search & Filter Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-[#D2B681] shadow-xs flex flex-col md:flex-row gap-3">
@@ -1303,13 +1467,22 @@ export default function ProductsPage() {
 
           <select
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedStatus(val);
+              if (val === 'Deleted') {
+                setCatalogTypeFilter('deleted');
+              } else if (catalogTypeFilter === 'deleted') {
+                setCatalogTypeFilter('all');
+              }
+            }}
             className="px-3 py-2 bg-[#FFFAF3] border border-[#D2B681] rounded-xl text-xs text-[#402E20] focus:outline-none focus:border-[#C5A059]"
           >
             <option value="">ทุกสถานะ ({products.length})</option>
             <option value="Published">Published (เผยแพร่)</option>
             <option value="Draft">Draft (ร่าง)</option>
             <option value="Archived">Archived (เก็บถาวร)</option>
+            <option value="Deleted">♻️ สินค้าที่ถูกลบ / กู้คืน ({catalogCounts.deleted ?? 0})</option>
             <option value="price_incomplete">⚠️ ราคาไม่ครบ ({countPriceIncomplete})</option>
             <option value="image_incomplete">📷 รูปภาพไม่ครบ ({countImageIncomplete})</option>
             <option value="price_complete">✓ ราคาครบ</option>
@@ -1537,6 +1710,8 @@ export default function ProductsPage() {
                           onClick={() => {
                             setSelectedProductIds(new Set([prod.id]));
                             setTargetCategoryId(prod.category_id || (categories[0]?.id || ''));
+                            setTargetCatalogType('keep');
+                            setMoveCategoryError('');
                             setMoveCategoryModalOpen(true);
                           }}
                           className="px-2.5 py-1 bg-amber-50/80 hover:bg-amber-100 border border-amber-200 text-amber-900 rounded-lg text-[11px] font-semibold transition cursor-pointer inline-flex items-center gap-1 group shadow-2xs"
@@ -1572,14 +1747,16 @@ export default function ProductsPage() {
                         <div className="flex flex-col items-center gap-1">
                           <span
                             className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                              prod.status === 'Published'
+                              prod.deleted || prod.status === 'Deleted'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : prod.status === 'Published'
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : prod.status === 'Draft'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {prod.status}
+                            {prod.deleted || prod.status === 'Deleted' ? 'ถูกลบ (ในถังขยะ)' : prod.status}
                           </span>
 
                           {/* ราคาไม่ครบ */}
@@ -1626,30 +1803,45 @@ export default function ProductsPage() {
 
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* QUICK SHARE BUTTON FOR EVERY SINGLE PRODUCT */}
-                          <button
-                            onClick={() => openQuickShare(prod)}
-                            className="px-2.5 py-1.5 bg-[#FFFAF3] hover:bg-[#F7F0E6] text-[#805216] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-[#D2B681] shadow-2xs"
-                            title="สร้างลิงก์แชร์สินค้านี้"
-                          >
-                            <Share2 className="w-3.5 h-3.5 text-[#C5A059]" />
-                            <span>แชร์</span>
-                          </button>
+                          {prod.deleted || prod.status === 'Deleted' || isTrashView ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreProducts([prod.id])}
+                              disabled={restoringIds.has(prod.id)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-xs disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                              title="กู้คืนสินค้าชิ้นนี้กลับเข้าสู่ระบบแคตตาล็อก"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${restoringIds.has(prod.id) ? 'animate-spin' : ''}`} />
+                              <span>♻️ กู้คืนสินค้า</span>
+                            </button>
+                          ) : (
+                            <>
+                              {/* QUICK SHARE BUTTON FOR EVERY SINGLE PRODUCT */}
+                              <button
+                                onClick={() => openQuickShare(prod)}
+                                className="px-2.5 py-1.5 bg-[#FFFAF3] hover:bg-[#F7F0E6] text-[#805216] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border border-[#D2B681] shadow-2xs"
+                                title="สร้างลิงก์แชร์สินค้านี้"
+                              >
+                                <Share2 className="w-3.5 h-3.5 text-[#C5A059]" />
+                                <span>แชร์</span>
+                              </button>
 
-                          <button
-                            onClick={() => openQuickEditModal(prod)}
-                            className="p-1.5 text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-lg transition border border-blue-200 shadow-2xs"
-                            title="แก้ไขข้อมูลสินค้าแบบ Real-time"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(prod.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="ลบสินค้า"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                              <button
+                                onClick={() => openQuickEditModal(prod)}
+                                className="p-1.5 text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-lg transition border border-blue-200 shadow-2xs"
+                                title="แก้ไขข้อมูลสินค้าแบบ Real-time"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(prod.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                title="ลบสินค้า"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1747,7 +1939,9 @@ export default function ProductsPage() {
                   เลือกสินค้าแล้ว {selectedProductIds.size} รายการ
                 </div>
                 <div className="text-[10px] text-[#D2B681]">
-                  พร้อมสร้างลิงก์แชร์เฉพาะกลุ่มสินค้านี้
+                  {isTrashView
+                    ? 'พร้อมกู้คืนสินค้าที่เลือกกลับเข้าสู่ระบบแคตตาล็อก'
+                    : 'พร้อมย้ายหมวดหมู่ หรือสร้างลิงก์แชร์เฉพาะกลุ่มสินค้านี้'}
                 </div>
               </div>
             </div>
@@ -1760,22 +1954,36 @@ export default function ProductsPage() {
                 ยกเลิกการเลือก
               </button>
 
-              <button
-                onClick={openMoveCategoryModal}
-                className="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
-                title="ย้ายหมวดหมู่สินค้าที่เลือกไปยังหมวดหมู่อื่น"
-              >
-                <Layers className="w-4 h-4" />
-                <span>ย้ายหมวดหมู่ ({selectedProductIds.size})</span>
-              </button>
+              {isTrashView ? (
+                <button
+                  type="button"
+                  onClick={() => handleRestoreProducts(Array.from(selectedProductIds))}
+                  disabled={restoringIds.size > 0}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${restoringIds.size > 0 ? 'animate-spin' : ''}`} />
+                  <span>♻️ กู้คืนสินค้าที่เลือก ({selectedProductIds.size} รายการ)</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={openMoveCategoryModal}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
+                    title="ย้ายหมวดหมู่สินค้าที่เลือกไปยังหมวดหมู่อื่น"
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span>ย้ายหมวดหมู่ ({selectedProductIds.size})</span>
+                  </button>
 
-              <button
-                onClick={openMultiShareModal}
-                className="px-4 py-2 bg-gradient-to-r from-[#C5A059] to-[#BB9251] hover:from-[#BB9251] hover:to-[#A67D3D] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>แชร์สินค้าที่เลือก ({selectedProductIds.size})</span>
-              </button>
+                  <button
+                    onClick={openMultiShareModal}
+                    className="px-4 py-2 bg-gradient-to-r from-[#C5A059] to-[#BB9251] hover:from-[#BB9251] hover:to-[#A67D3D] text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    <span>แชร์สินค้าที่เลือก ({selectedProductIds.size})</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -2754,7 +2962,11 @@ export default function ProductsPage() {
                 onChange={(e) => setTargetCategoryId(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
               >
-                <option value="" disabled>-- กรุณาเลือกหมวดหมู่ --</option>
+                <option value="">
+                  {targetCatalogType !== 'keep'
+                    ? '🔄 -- คงหมวดหมู่เดิมของสินค้า (เปลี่ยนเฉพาะประเภทแคตตาล็อก) --'
+                    : '-- กรุณาเลือกหมวดหมู่ --'}
+                </option>
                 {categories
                   .filter((c) => {
                     if (targetCatalogType === 'keep') return true;
@@ -2796,7 +3008,7 @@ export default function ProductsPage() {
               <button
                 type="button"
                 onClick={handleBatchMoveCategory}
-                disabled={movingCategory || selectedProductIds.size === 0 || !targetCategoryId}
+                disabled={movingCategory || selectedProductIds.size === 0 || (!targetCategoryId && targetCatalogType === 'keep')}
                 className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-bold shadow-xs transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 {movingCategory ? (

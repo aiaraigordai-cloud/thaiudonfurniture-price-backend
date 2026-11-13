@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { getCachedSupabasePriceHistory } from '@/lib/supabase';
+import { getCachedSupabasePriceHistory, getCachedSupabaseProducts, CachedSupabaseProduct } from '@/lib/supabase';
 import { loadProductOverrides, applyProductOverrides } from '@/lib/product-store';
 
 export const dynamic = 'force-dynamic';
@@ -26,17 +26,54 @@ export async function GET() {
       .get()) as any;
 
     // Calculate authoritative product counts matching /api/products exactly across entire system
-    const allBaseline = (await db.prepare('SELECT id, sku, catalog_type, status FROM products').all()) as any[];
-    let allActive = allBaseline;
+    const allBaseline = (await db.prepare('SELECT id, sku, category_id, catalog_type, status FROM products').all()) as any[];
+    let allMerged = allBaseline;
     try {
       const overrides = await loadProductOverrides();
-      allActive = applyProductOverrides(allBaseline, overrides);
+      allMerged = applyProductOverrides(allBaseline, overrides, true);
+
+      const supaProducts = await getCachedSupabaseProducts();
+      if (supaProducts && supaProducts.length > 0) {
+        const supaById = new Map<string, CachedSupabaseProduct>();
+        const supaBySku = new Map<string, CachedSupabaseProduct>();
+        for (const sp of supaProducts) {
+          if (sp.id) supaById.set(sp.id, sp);
+          if (sp.sku) supaBySku.set(sp.sku.trim().toUpperCase(), sp);
+        }
+
+        for (const p of allMerged) {
+          const skuKey = p.sku ? String(p.sku).trim().toUpperCase() : '';
+          const sp = supaById.get(p.id) || (skuKey ? supaBySku.get(skuKey) : null);
+          if (sp) {
+            const ovTime = p.override_updated_at ? new Date(p.override_updated_at).getTime() : 0;
+            const spTime = sp.updated_at ? new Date(sp.updated_at).getTime() : 0;
+            const isRecentSupa = sp.updated_at ? sp.updated_at >= '2026-11-13' : false;
+
+            if (sp.status === 'Deleted') {
+              p.deleted = true;
+              p.status = 'Deleted';
+            } else if (p.deleted && sp.status === 'Published' && isRecentSupa && spTime >= ovTime) {
+              p.deleted = false;
+              p.status = 'Published';
+            } else if (!p.deleted && sp.status && (spTime >= ovTime || isRecentSupa)) {
+              p.status = sp.status;
+            }
+            if (sp.catalog_type && (sp.category_id !== null || spTime >= ovTime || isRecentSupa)) {
+              p.catalog_type = sp.catalog_type;
+            }
+          }
+        }
+      }
     } catch {}
+
+    const allActive = allMerged.filter((p) => !p.deleted && p.status !== 'Deleted');
+    const allDeleted = allMerged.filter((p) => Boolean(p.deleted) || p.status === 'Deleted');
 
     const totalActiveCount = allActive.length;
     const publishedActiveCount = allActive.filter((p) => p.status === 'Published').length;
     const tuuloActiveCount = allActive.filter((p) => p.catalog_type === 'tuulo').length;
     const kdActiveCount = allActive.filter((p) => p.catalog_type === 'knockdown').length;
+    const deletedCount = allDeleted.length;
 
     // 2. Fetch only top 8 recent products for dashboard preview
     const recentRaw = (await db

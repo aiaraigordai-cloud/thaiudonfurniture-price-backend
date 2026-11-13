@@ -59,6 +59,72 @@ let cachedPriceHistoryTime = 0;
 let inFlightPriceHistoryPromise: Promise<CachedPriceHistoryRow[]> | null = null;
 const PRICE_CACHE_TTL_MS = 15000;
 
+export interface CachedSupabaseProduct {
+  id: string;
+  sku: string;
+  name: string;
+  description?: string | null;
+  category_id?: string | null;
+  catalog_type?: string | null;
+  status?: string | null;
+  updated_at?: string | null;
+}
+
+let cachedSupabaseProducts: CachedSupabaseProduct[] | null = null;
+let cachedSupabaseProductsTime = 0;
+let inFlightProductsPromise: Promise<CachedSupabaseProduct[]> | null = null;
+const PRODUCT_CACHE_TTL_MS = 8000;
+
+export function invalidateSupabaseProductCache(): void {
+  cachedSupabaseProducts = null;
+  cachedSupabaseProductsTime = 0;
+  inFlightProductsPromise = null;
+}
+
+export async function getCachedSupabaseProducts(
+  forceRefresh = false
+): Promise<CachedSupabaseProduct[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const now = Date.now();
+  if (!forceRefresh && cachedSupabaseProducts !== null && now - cachedSupabaseProductsTime < PRODUCT_CACHE_TTL_MS) {
+    return cachedSupabaseProducts;
+  }
+
+  if (!forceRefresh && inFlightProductsPromise) {
+    return inFlightProductsPromise;
+  }
+
+  inFlightProductsPromise = (async () => {
+    try {
+      const fetchPromise = supabase
+        .from('products')
+        .select('id, sku, name, description, category_id, catalog_type, status, updated_at');
+
+      const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), 3000)
+      );
+
+      const result = await Promise.race([fetchPromise, timeoutPromise]);
+      if (result && Array.isArray(result.data)) {
+        const rows = result.data as CachedSupabaseProduct[];
+        cachedSupabaseProducts = rows;
+        cachedSupabaseProductsTime = Date.now();
+        return rows;
+      }
+      return cachedSupabaseProducts || [];
+    } catch (err) {
+      console.warn('[supabase] products cache fetch warning:', err);
+      return cachedSupabaseProducts || [];
+    } finally {
+      inFlightProductsPromise = null;
+    }
+  })();
+
+  return inFlightProductsPromise;
+}
+
 export function invalidateSupabasePriceCache(): void {
   cachedPriceHistory = null;
   cachedPriceHistoryTime = 0;

@@ -141,13 +141,20 @@ export async function saveProductOverride(
   overrideData: Partial<ProductOverride>
 ): Promise<void> {
   const overrides = await loadProductOverrides();
-  const existing = overrides[productId] || { id: productId, updated_at: new Date().toISOString() };
+  const skuFromData = overrideData.sku ? overrideData.sku.trim().toUpperCase() : null;
+  const existing =
+    overrides[productId] ||
+    (skuFromData ? overrides[skuFromData] : null) ||
+    { id: productId, updated_at: new Date().toISOString() };
 
   const oldSkuKey = existing.sku ? existing.sku.trim().toUpperCase() : null;
+  const cleanOverrideData = Object.fromEntries(
+    Object.entries(overrideData).filter(([_, v]) => v !== undefined)
+  );
 
   const merged: ProductOverride = {
     ...existing,
-    ...overrideData,
+    ...cleanOverrideData,
     id: productId,
     updated_at: new Date().toISOString(),
   };
@@ -190,23 +197,35 @@ export async function saveProductOverridesBatch(
     sku?: string;
     category_id?: string | null;
     category_name?: string | null;
+    catalog_type?: string | null;
+    status?: string;
+    deleted?: boolean;
   }>
 ): Promise<void> {
   const overrides = await loadProductOverrides();
   const nowStr = new Date().toISOString();
 
   for (const item of updates) {
-    const existing = overrides[item.id] || { id: item.id, updated_at: nowStr };
+    const skuKey = item.sku ? item.sku.trim().toUpperCase() : null;
+    const existing =
+      overrides[item.id] ||
+      (skuKey ? overrides[skuKey] : null) ||
+      { id: item.id, updated_at: nowStr };
+
+    const cleanItem = Object.fromEntries(
+      Object.entries(item).filter(([_, v]) => v !== undefined)
+    );
+
     const merged: ProductOverride = {
       ...existing,
-      ...item,
+      ...cleanItem,
       id: item.id,
       updated_at: nowStr,
     };
     overrides[item.id] = merged;
-    if (merged.sku) {
-      const skuKey = merged.sku.trim().toUpperCase();
-      overrides[skuKey] = merged;
+    const finalSkuKey = merged.sku ? merged.sku.trim().toUpperCase() : skuKey;
+    if (finalSkuKey) {
+      overrides[finalSkuKey] = merged;
     }
   }
 
@@ -238,7 +257,11 @@ export function touchProductUpdateTime(): void {
   lastProductUpdateTime = Date.now();
 }
 
-export function applyProductOverrideSingle(product: any, overrides: Record<string, ProductOverride>): any {
+export function applyProductOverrideSingle(
+  product: any,
+  overrides: Record<string, ProductOverride>,
+  includeDeleted = false
+): any {
   if (!product || !overrides) return product;
 
   const keyById = product.id;
@@ -246,9 +269,16 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
 
   const override = overrides[keyById] || (keyBySku ? overrides[keyBySku] : null);
   if (!override) return product;
-  if (override.deleted) return null;
+  if (override.deleted && !includeDeleted) return null;
 
   const res = { ...product };
+  res.override_updated_at = override.updated_at || null;
+  if (override.deleted) {
+    res.deleted = true;
+    res.status = 'Deleted';
+  } else if (override.deleted === false) {
+    res.deleted = false;
+  }
 
   if (override.sku !== undefined && override.sku !== null) res.sku = override.sku;
   if (override.name !== undefined && override.name !== null) res.name = override.name;
@@ -261,7 +291,7 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
   if (override.height !== undefined) res.height = override.height;
   if (override.depth !== undefined) res.depth = override.depth;
   if (override.color !== undefined) res.color = override.color;
-  if (override.status !== undefined && override.status !== null) res.status = override.status;
+  if (!override.deleted && override.status !== undefined && override.status !== null) res.status = override.status;
   if (override.ref_image_url !== undefined) res.ref_image_url = override.ref_image_url;
   if (Array.isArray(override.ref_images)) {
     res.ref_images = override.ref_images;
@@ -282,7 +312,11 @@ export function applyProductOverrideSingle(product: any, overrides: Record<strin
   return res;
 }
 
-export function applyProductOverrides(products: any[], overrides: Record<string, ProductOverride>): any[] {
+export function applyProductOverrides(
+  products: any[],
+  overrides: Record<string, ProductOverride>,
+  includeDeleted = false
+): any[] {
   if (!Array.isArray(products)) return [];
   if (!overrides || Object.keys(overrides).length === 0) {
     return products;
@@ -293,7 +327,7 @@ export function applyProductOverrides(products: any[], overrides: Record<string,
 
   const mapped = products
     .map((p) => {
-      const updated = applyProductOverrideSingle(p, overrides);
+      const updated = applyProductOverrideSingle(p, overrides, includeDeleted);
       if (updated) {
         if (updated.id) existingIds.add(String(updated.id));
         if (updated.sku) existingSkus.add(String(updated.sku).trim().toUpperCase());
@@ -306,7 +340,7 @@ export function applyProductOverrides(products: any[], overrides: Record<string,
   const seenNewIds = new Set<string>();
   for (const [key, ovr] of Object.entries(overrides)) {
     if (!ovr || typeof ovr !== 'object') continue;
-    if (ovr.deleted) continue;
+    if (ovr.deleted && !includeDeleted) continue;
     if (!ovr.id || !ovr.sku || !ovr.name) continue;
 
     const ovrSku = String(ovr.sku).trim().toUpperCase();
@@ -339,7 +373,9 @@ export function applyProductOverrides(products: any[], overrides: Record<string,
       height: ovr.height !== undefined ? ovr.height : null,
       depth: ovr.depth !== undefined ? ovr.depth : null,
       color: ovr.catalog_type === 'tuulo' ? 'ตามภาพ' : (ovr.color || null),
-      status: ovr.status || 'Published',
+      status: ovr.deleted ? 'Deleted' : (ovr.status || 'Published'),
+      deleted: Boolean(ovr.deleted),
+      override_updated_at: ovr.updated_at || null,
       ref_image_url: ovr.ref_image_url || (refImgs.length > 0 ? refImgs[0] : null),
       ref_images: refImgs,
       ref_filename: ovr.ref_filename || null,
