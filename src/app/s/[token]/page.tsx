@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { getThumbnailUrl } from '@/lib/r2';
+import { getSalesRepContact, SalesRepContact } from '@/lib/sales-rep';
 import {
   Package,
   Search,
@@ -79,6 +80,10 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
   // SHARED CART VIEW MODE: Displays ONLY the customer's selected products when opened from a shared cart link
   const [isSharedCartView, setIsSharedCartView] = useState(false);
   const [sharedCartSkus, setSharedCartSkus] = useState<string[]>([]);
+
+  // SALES REP & QR CODE STATES
+  const [salesRepParam, setSalesRepParam] = useState<string>('');
+  const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
 
   // PREVIEW GUIDE MODAL: Shown every visit on initial page load as requested (except when viewing a shared cart link)
   const [showCartGuide, setShowCartGuide] = useState(true);
@@ -202,6 +207,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
         const urlParams = new URLSearchParams(window.location.search);
         const cartParam = urlParams.get('cart');
         const cnameParam = urlParams.get('cname') || urlParams.get('name') || urlParams.get('customer_name');
+        const rep = urlParams.get('rep') || urlParams.get('sales') || urlParams.get('by') || urlParams.get('seller') || urlParams.get('admin');
+
+        if (rep && rep.trim()) {
+          setSalesRepParam(rep.trim());
+        }
 
         if (cnameParam && cnameParam.trim()) {
           const cleanName = cnameParam.trim();
@@ -300,13 +310,33 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     }
   };
 
-  const isInCart = (productId: string) => {
-    return cart.some((item) => item.id === productId);
+  const getProductKey = (p: any): string => {
+    if (!p) return '';
+    return String(p.id || p.sku || '').trim();
+  };
+
+  const isInCart = (productOrId: any): boolean => {
+    if (!productOrId) return false;
+    const targetKey = typeof productOrId === 'string'
+      ? productOrId.trim()
+      : getProductKey(productOrId);
+    if (!targetKey) return false;
+
+    return cart.some((item) => {
+      const itemKey = getProductKey(item);
+      return (itemKey && itemKey === targetKey) || (item.sku && targetKey === item.sku);
+    });
   };
 
   const toggleCart = (product: any) => {
-    if (isInCart(product.id)) {
-      const updated = cart.filter((item) => item.id !== product.id);
+    const key = getProductKey(product);
+    if (!key) return;
+
+    if (isInCart(product)) {
+      const updated = cart.filter((item) => {
+        const itemKey = getProductKey(item);
+        return itemKey !== key && item.sku !== product.sku;
+      });
       saveCart(updated);
       showToast(`นำ "${product.sku || product.name}" ออกจากตะกร้าแล้ว`);
     } else {
@@ -316,9 +346,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     }
   };
 
-  const removeFromCart = (productId: string) => {
-    const item = cart.find((i) => i.id === productId);
-    const updated = cart.filter((i) => i.id !== productId);
+  const removeFromCart = (productOrId: any) => {
+    const key = typeof productOrId === 'string' ? productOrId.trim() : getProductKey(productOrId);
+    if (!key) return;
+    const item = cart.find((i) => getProductKey(i) === key || i.sku === key);
+    const updated = cart.filter((i) => getProductKey(i) !== key && i.sku !== key);
     saveCart(updated);
     if (item) {
       showToast(`นำ "${item.sku || item.name}" ออกจากตะกร้าแล้ว`);
@@ -358,9 +390,14 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     }
   };
 
-  // Pre-filled LINE OA inquiry URL for single product
+  // Active Sales Rep Contact Resolution
+  const activeSalesRep: SalesRepContact = getSalesRepContact(
+    salesRepParam || catalogData?.salesRep?.username || catalogData?.salesRep?.name
+  );
+
+  // Pre-filled LINE inquiry URL for single product
   const getLineInquiryUrl = (_prod?: any) => {
-    return 'https://line.me/ti/p/~0930494178';
+    return activeSalesRep.lineUrl;
   };
 
   // Cart total calculations
@@ -377,6 +414,9 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
     if (customerNameInput.trim()) {
       url += `&cname=${encodeURIComponent(customerNameInput.trim())}`;
     }
+    if (activeSalesRep.username === 'admin02') {
+      url += `&rep=admin02`;
+    }
     return url;
   };
 
@@ -392,6 +432,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
       ] : []),
       `🛒 *สรุปรายการสินค้าที่เลือกไว้ในตะกร้า* (${cart.length} รายการ)`,
       `โชว์รูมและโรงงาน: ไทยอุดรเฟอร์นิเจอร์`,
+      `💬 ฝ่ายขาย: ${activeSalesRep.name} (Line: ${activeSalesRep.lineId})`,
       `-------------------------------------------`,
       ...cart.map((p, idx) => {
         const priceStr = p.price && p.price > 0 ? `฿${p.price.toLocaleString()} บาท` : 'รอฝ่ายขายประเมินราคา';
@@ -511,6 +552,8 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
           sharedCartSkus.includes(String(p.sku || '').toLowerCase()) ||
           sharedCartSkus.includes(String(p.id || '').toLowerCase())
       )
+    : isSharedCartView && cart.length > 0
+    ? products.filter((p) => isInCart(p))
     : products;
 
   // Check if product is newly created/imported within the last 24 hours
@@ -719,16 +762,30 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
               )}
             </button>
 
-            {/* Direct Line Contact */}
-            <a
-              href="https://line.me/ti/p/~0930494178"
-              target="_blank"
-              rel="noreferrer"
-              className="px-3.5 py-2 rounded-xl bg-[#06C755] hover:bg-[#05b54c] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span className="hidden md:inline">สอบถามฝ่ายขาย LINE</span>
-            </a>
+            {/* Direct Line Contact & QR Code */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-[#161B40] border border-slate-200 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title={`เปิด QR Code LINE ฝ่ายขาย (${activeSalesRep.lineId})`}
+              >
+                <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="hidden sm:inline">QR Code</span>
+              </button>
+
+              <a
+                href={activeSalesRep.lineUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 sm:px-3.5 py-2 rounded-xl bg-[#06C755] hover:bg-[#05b54c] text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                title={`สอบถามฝ่ายขาย LINE: ${activeSalesRep.lineId}`}
+              >
+                <MessageCircle className="w-4 h-4 shrink-0" />
+                <span className="hidden md:inline">LINE : {activeSalesRep.lineId}</span>
+                <span className="md:hidden">LINE</span>
+              </a>
+            </div>
           </div>
         </div>
       </header>
@@ -1033,12 +1090,12 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                 <button
                   onClick={() => toggleCart(singleProduct)}
                   className={`w-full py-3.5 px-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm ${
-                    isInCart(singleProduct.id)
+                    isInCart(singleProduct)
                       ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
                       : 'bg-[#161B40] hover:bg-[#202758] text-white'
                   }`}
                 >
-                  {isInCart(singleProduct.id) ? (
+                  {isInCart(singleProduct) ? (
                     <>
                       <Check className="w-4 h-4" />
                       <span>อยู่ในตะกร้าแล้ว (กดเพื่อลบออก)</span>
@@ -1051,16 +1108,28 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   )}
                 </button>
 
-                {/* Direct Line Inquiry */}
-                <a
-                  href={getLineInquiryUrl(singleProduct)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full py-3.5 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>สอบถามทาง Line : 0930494178</span>
-                </a>
+                {/* Direct Line Inquiry & QR Code Button */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <a
+                    href={getLineInquiryUrl(singleProduct)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="sm:col-span-2 py-3.5 px-4 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition shadow-sm"
+                  >
+                    <MessageCircle className="w-5 h-5 shrink-0" />
+                    <span>สอบถามทาง Line : {activeSalesRep.lineId}</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsQrModalOpen(true)}
+                    className="py-3 px-3 bg-white hover:bg-slate-50 text-[#161B40] border-2 border-emerald-600 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
+                    title="สแกนหรือดู QR Code LINE"
+                  >
+                    <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>ลิงก์ไปที่ QR code</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1314,11 +1383,11 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     const thumbImg = getThumbnailUrl(fullImg);
                     const displayImg = thumbImg || fullImg;
                     const hasRef = Boolean(prod.refImageUrl);
-                    const inCart = isInCart(prod.id);
+                    const inCart = isInCart(prod);
 
                     return (
                       <article
-                        key={prod.id}
+                        key={prod.id || prod.sku}
                         className={`bg-white rounded-2xl border overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col group ${
                           inCart ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-200 hover:border-slate-300'
                         }`}
@@ -1443,16 +1512,25 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                             </button>
 
                             {/* LINE Order Button & QR Code Button */}
-                            <div className="pt-1">
+                            <div className="pt-1 flex items-center gap-1.5">
                               <a
                                 href={getLineInquiryUrl(prod)}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="w-full py-2 px-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
+                                className="flex-1 py-2 px-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-2xs"
                               >
                                 <MessageCircle className="w-3.5 h-3.5 shrink-0" />
-                                <span>สอบถามทาง Line : 0930494178</span>
+                                <span>สอบถามทาง Line : {activeSalesRep.lineId}</span>
                               </a>
+
+                              <button
+                                type="button"
+                                onClick={() => setIsQrModalOpen(true)}
+                                className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition flex items-center justify-center shadow-2xs cursor-pointer shrink-0"
+                                title={`เปิด QR Code LINE ฝ่ายขาย (${activeSalesRep.lineId})`}
+                              >
+                                <QrCode className="w-3.5 h-3.5 shrink-0" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1746,12 +1824,12 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                   <button
                     onClick={() => toggleCart(selectedProductModal)}
                     className={`w-full py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-xs ${
-                      isInCart(selectedProductModal.id)
+                      isInCart(selectedProductModal)
                         ? 'bg-amber-500 hover:bg-amber-600 text-white ring-2 ring-amber-300'
                         : 'bg-[#161B40] hover:bg-[#202758] text-white'
                     }`}
                   >
-                    {isInCart(selectedProductModal.id) ? (
+                    {isInCart(selectedProductModal) ? (
                       <>
                         <Check className="w-4 h-4" />
                         <span>อยู่ในตะกร้าแล้ว (กดเพื่อลบออก)</span>
@@ -1764,15 +1842,27 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                     )}
                   </button>
 
-                  <a
-                    href={getLineInquiryUrl(selectedProductModal)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-sm"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>สอบถามทาง Line : 0930494178</span>
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={getLineInquiryUrl(selectedProductModal)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 py-3 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-sm"
+                    >
+                      <MessageCircle className="w-4 h-4 shrink-0" />
+                      <span>สอบถามทาง Line : {activeSalesRep.lineId}</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsQrModalOpen(true)}
+                      className="py-3 px-3.5 bg-white hover:bg-slate-50 text-[#161B40] border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
+                      title={`เปิด QR Code LINE ฝ่ายขาย (${activeSalesRep.lineId})`}
+                    >
+                      <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="hidden sm:inline">QR Code</span>
+                    </button>
+                  </div>
 
                   {/* Prev / Next navigation inside modal */}
                   <div className="flex items-center justify-between pt-1">
@@ -1931,7 +2021,7 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
                         </div>
 
                         <button
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => removeFromCart(item)}
                           className="w-8 h-8 rounded-xl bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 flex items-center justify-center transition shrink-0"
                           title="ลบออกจากตะกร้า"
                         >
@@ -2001,21 +2091,31 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
 
                 {/* Primary Button: Direct link to Sales LINE */}
                 <a
-                  href="https://line.me/ti/p/~0930494178"
+                  href={activeSalesRep.lineUrl}
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => {
                     try {
                       const text = getCartSummaryText();
                       navigator.clipboard.writeText(text);
-                      showToast('คัดลอกรายการสินค้าแล้ว กำลังเปิด LINE: 0930494178...');
+                      showToast(`คัดลอกรายการสินค้าแล้ว กำลังเปิด LINE: ${activeSalesRep.lineId}...`);
                     } catch {}
                   }}
                   className="w-full py-3.5 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-2xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition hover:scale-[1.01] active:scale-[0.99]"
                 >
                   <MessageCircle className="w-5 h-5" />
-                  <span>ติดต่อฝ่ายขายทาง LINE (0930494178)</span>
+                  <span>ติดต่อฝ่ายขายทาง LINE ({activeSalesRep.lineId})</span>
                 </a>
+
+                {/* QR Code Action Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="w-full py-2.5 px-3 bg-white hover:bg-slate-50 text-[#161B40] border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>สแกน QR Code LINE ฝ่ายขาย ({activeSalesRep.lineId})</span>
+                </button>
 
                 {/* Secondary Action: Direct LINE Share Link (Works on both Mobile & Notebook/PC) */}
                 <button
@@ -2201,8 +2301,17 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
           <div className="space-y-2">
             <div className="font-bold text-white text-xs uppercase tracking-wider text-red-400">ติดต่อฝ่ายขายและโรงงาน</div>
             <p className="text-slate-400 text-[11px] leading-relaxed">
-              📞 สายด่วน: 093-049-4178, 061-789-1164
-              <br />💬 Line ID: 0930494178
+              📞 สายด่วน: {activeSalesRep.phone}, 061-789-1164
+              <br />💬 Line ID: {activeSalesRep.lineId}
+              {' '}
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="underline text-emerald-400 hover:text-emerald-300 font-bold ml-1 cursor-pointer inline-flex items-center gap-1"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>ลิงก์ไปที่ QR code</span>
+              </button>
               <br />⏰ เวลาทำการ: ทุกวัน 8:00 - 17:30 น.
             </p>
           </div>
@@ -2212,6 +2321,87 @@ export default function CustomerCatalogPage({ params }: { params: { token: strin
           © {new Date().getFullYear()} ไทยอุดรเฟอร์นิเจอร์. สงวนลิขสิทธิ์ทั้งหมด. ระบบแคตตาล็อกทางการ Master Control.
         </div>
       </footer>
+
+      {/* 10. QR CODE POPUP MODAL */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 text-center space-y-4 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-50 text-[#06C755] flex items-center justify-center border border-emerald-100">
+              <QrCode className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-extrabold text-[#161B40]">
+                QR Code LINE ฝ่ายขาย
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                สแกนเพื่อเพิ่มเพื่อนและสอบถามราคากับ {activeSalesRep.name}
+              </p>
+            </div>
+
+            {/* QR Code Image Container */}
+            <div className="p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-emerald-200 inline-block mx-auto">
+              <img
+                src={activeSalesRep.qrLocalPath}
+                alt={`QR Code Line ${activeSalesRep.lineId}`}
+                className="w-56 h-56 object-contain rounded-xl shadow-xs mx-auto bg-white p-2"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = activeSalesRep.qrCodeUrl;
+                }}
+              />
+            </div>
+
+            <div className="bg-emerald-50/80 rounded-2xl p-3 border border-emerald-100 flex items-center justify-between">
+              <div className="text-left">
+                <div className="text-[10px] text-slate-500 font-semibold uppercase">Line ID / เบอร์ติดต่อ</div>
+                <div className="text-sm font-black text-[#06C755] tracking-wide">{activeSalesRep.lineId}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(activeSalesRep.lineId);
+                  showToast(`คัดลอก Line ID: ${activeSalesRep.lineId} แล้ว`);
+                }}
+                className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>คัดลอก</span>
+              </button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <a
+                href={activeSalesRep.lineUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-2.5 px-4 bg-[#06C755] hover:bg-[#05b54c] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition shadow-xs"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>เปิดแอป LINE โดยตรง</span>
+              </a>
+
+              <a
+                href={activeSalesRep.qrLocalPath}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>เปิดดูรูปภาพ QR Code เต็มจอ</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

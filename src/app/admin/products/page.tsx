@@ -1057,13 +1057,21 @@ export default function ProductsPage() {
     });
   };
 
+  const allVisibleSelected =
+    displayedProducts.length > 0 &&
+    displayedProducts.every((p) => selectedProductIds.has(p.id));
+
   const toggleSelectAll = () => {
-    if (selectedProductIds.size === products.length && products.length > 0) {
-      setSelectedProductIds(new Set());
-    } else {
-      const allIds = new Set(products.map((p) => p.id));
-      setSelectedProductIds(allIds);
-    }
+    const visibleIds = displayedProducts.map((p) => p.id);
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   };
 
   // Open Multi-Product Share Modal
@@ -1593,10 +1601,10 @@ export default function ProductsPage() {
                 <th className="px-4 py-3.5 w-12 text-center">
                   <input
                     type="checkbox"
-                    checked={selectedProductIds.size === products.length && products.length > 0}
+                    checked={allVisibleSelected}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-[#805216] focus:ring-[#C5A059] border-[#D2B681] rounded cursor-pointer"
-                    title="เลือกทั้งหมด"
+                    title={allVisibleSelected ? "ยกเลิกการเลือกรายการทั้งหมด" : "เลือกรายการทั้งหมดที่แสดง"}
                   />
                 </th>
                 <th className="px-4 py-3.5">SKU & รูปภาพ (คลิกพรีวิว)</th>
@@ -1635,11 +1643,15 @@ export default function ProductsPage() {
                       }`}
                     >
                       {/* ROW CHECKBOX */}
-                      <td className="px-4 py-3.5 text-center">
+                      <td className="px-4 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
+                          id={`product-check-${prod.id}`}
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => toggleSelectProduct(prod.id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleSelectProduct(prod.id);
+                          }}
                           className="w-4 h-4 text-[#805216] focus:ring-[#C5A059] border-[#D2B681] rounded cursor-pointer"
                         />
                       </td>

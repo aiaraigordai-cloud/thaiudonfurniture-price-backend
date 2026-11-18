@@ -4,6 +4,7 @@ import { getCachedSupabasePriceHistory, getSupabase, getCachedSupabaseProducts, 
 import { loadProductOverrides } from '@/lib/product-store';
 import { findShareLinkByToken } from '@/lib/share-store';
 import { formatImageUrlToR2 } from '@/lib/r2';
+import { getSalesRepContact } from '@/lib/sales-rep';
 import crypto from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
@@ -19,17 +20,32 @@ export async function GET(request: Request, { params }: { params: { token: strin
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const db = getDb();
 
-    // 1. Find link in SQLite first
+    // 1. Find link in SQLite first (including creator profile info for sales rep contact routing)
     let link = (await db.prepare(`
-      SELECT id, token_raw, sharing_mode, catalog_filter, price_tier_id, customer_name, expires_at, is_revoked
-      FROM share_links
-      WHERE token_hash = ? OR token_raw = ?
+      SELECT 
+        sl.id, sl.token_raw, sl.sharing_mode, sl.catalog_filter, sl.price_tier_id, sl.customer_name, sl.expires_at, sl.is_revoked, sl.created_by,
+        p.username as creator_username, p.employee_name as creator_name
+      FROM share_links sl
+      LEFT JOIN profiles p ON sl.created_by = p.id
+      WHERE sl.token_hash = ? OR sl.token_raw = ?
     `).get(tokenHash, rawToken)) as any;
 
     // 2. If not found in SQLite (e.g. serverless cold start), resolve via persistent share-store & canonical dictionary
     if (!link) {
       const persistentLink = await findShareLinkByToken(rawToken, db);
       if (persistentLink) {
+        let creatorUsername = null;
+        let creatorName = null;
+        if (persistentLink.created_by) {
+          try {
+            const prof = (await db.prepare('SELECT username, employee_name FROM profiles WHERE id = ?').get(persistentLink.created_by)) as any;
+            if (prof) {
+              creatorUsername = prof.username;
+              creatorName = prof.employee_name;
+            }
+          } catch {}
+        }
+
         link = {
           id: persistentLink.id,
           token_raw: persistentLink.token_raw,
@@ -39,6 +55,9 @@ export async function GET(request: Request, { params }: { params: { token: strin
           customer_name: persistentLink.customer_name,
           expires_at: persistentLink.expires_at,
           is_revoked: persistentLink.is_revoked,
+          created_by: persistentLink.created_by,
+          creator_username: creatorUsername,
+          creator_name: creatorName,
         };
       }
     }
@@ -438,9 +457,10 @@ export async function GET(request: Request, { params }: { params: { token: strin
         ? activeProducts.filter((p) => p.catalogType === effectiveCatalogFilter)
         : activeProducts;
 
-    // Strategy 4: Data Trimming - Strip internal database IDs and unused heavy fields
+    // Strategy 4: Data Trimming - Strip internal database IDs and unused heavy fields (guarantee unique id for cart/selection)
     const trimmedProducts = finalDisplayProducts.map((p) => {
       const item: any = {
+        id: p.id || p.sku,
         sku: p.sku,
         name: p.name,
         catalogType: p.catalogType,
@@ -468,6 +488,11 @@ export async function GET(request: Request, { params }: { params: { token: strin
     const urlObj = new URL(request.url);
     const forceRefresh = urlObj.searchParams.get('refresh') === '1' || urlObj.searchParams.has('nocache');
 
+    // Resolve Sales Rep Contact (Priority: URL query param ?rep=admin02 / ?sales=admin02 > Link Creator in DB)
+    const repParam = urlObj.searchParams.get('rep') || urlObj.searchParams.get('sales') || urlObj.searchParams.get('seller') || urlObj.searchParams.get('by') || urlObj.searchParams.get('admin');
+    const targetRepIdentifier = repParam || link.creator_username || link.created_by;
+    const salesRep = getSalesRepContact(targetRepIdentifier);
+
     const cacheHeader = forceRefresh
       ? 'no-store, no-cache, must-revalidate, max-age=0'
       : 'public, max-age=0, s-maxage=5, stale-while-revalidate=10';
@@ -477,6 +502,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
       customerName: sanitizedCustomerName,
       sharingMode: link.sharing_mode,
       catalogFilter: link.catalog_filter || 'all',
+      salesRep,
       products: trimmedProducts,
     }, {
       headers: {

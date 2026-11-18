@@ -11,13 +11,27 @@ export async function GET(request: Request) {
     const db = getDb();
     await syncEmployeesToDb(db);
 
-    const user = await db.prepare(`
-      SELECT id, username, email, employee_name, role, status
-      FROM profiles
-      WHERE role = 'SYSTEM_OWNER' OR username = 'davidsuksomboriboon'
-      ORDER BY CASE WHEN role = 'SYSTEM_OWNER' THEN 0 ELSE 1 END
-      LIMIT 1
-    `).get() as any;
+    const { searchParams } = new URL(request.url);
+    const targetUsername = searchParams.get('user') || searchParams.get('username');
+
+    let user: any = null;
+    if (targetUsername) {
+      user = await db.prepare(`
+        SELECT id, username, email, employee_name, role, status
+        FROM profiles
+        WHERE username = ?
+      `).get(targetUsername) as any;
+    }
+
+    if (!user) {
+      user = await db.prepare(`
+        SELECT id, username, email, employee_name, role, status
+        FROM profiles
+        WHERE role = 'SYSTEM_OWNER' OR username = 'davidsuksomboriboon'
+        ORDER BY CASE WHEN role = 'SYSTEM_OWNER' THEN 0 ELSE 1 END
+        LIMIT 1
+      `).get() as any;
+    }
 
     if (!user) {
       return NextResponse.redirect(new URL('/', request.url));
@@ -39,7 +53,6 @@ export async function GET(request: Request) {
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
-    const { searchParams } = new URL(request.url);
     const redirectPath = searchParams.get('redirect') || '/admin/products';
 
     return NextResponse.redirect(new URL(redirectPath, request.url));

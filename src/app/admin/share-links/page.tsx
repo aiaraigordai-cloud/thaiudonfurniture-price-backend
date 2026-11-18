@@ -33,6 +33,7 @@ import {
 
 export default function ShareLinksPage() {
   const [links, setLinks] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -125,6 +126,16 @@ export default function ShareLinksPage() {
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('storage', handleStorage);
 
+    // Fetch current user info for sales rep attribution
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.authenticated && data.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+
     // 2. Real-time background polling every 5 seconds when tab is visible
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
@@ -150,9 +161,12 @@ export default function ShareLinksPage() {
     };
   }, []);
 
-  const handleCopy = (rawToken: string, id: string) => {
+  const handleCopy = (rawToken: string, id: string, linkCreatorUsername?: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const fullUrl = `${origin}/s/${rawToken}`;
+    const isRepAdmin02 = (currentUser?.username === 'admin02') || (linkCreatorUsername === 'admin02');
+    const hasQuery = rawToken.includes('?');
+    const repSuffix = isRepAdmin02 ? (hasQuery ? '&rep=admin02' : '?rep=admin02') : '';
+    const fullUrl = `${origin}/s/${rawToken}${rawToken.includes('rep=') ? '' : repSuffix}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -571,7 +585,7 @@ export default function ShareLinksPage() {
                     </button>
 
                     <Link
-                      href={`/s/${catTier.token}`}
+                      href={`/s/${catTier.token}${currentUser?.username === 'admin02' ? '?rep=admin02' : ''}`}
                       target="_blank"
                       className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
                       title="เปิดดูหน้าลูกค้า"
@@ -797,7 +811,7 @@ export default function ShareLinksPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             {/* Copy Link Button */}
                             <button
-                              onClick={() => handleCopy(link.token_raw, link.id)}
+                              onClick={() => handleCopy(link.token_raw, link.id, link.creator_username)}
                               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer"
                               title="คัดลอกลิงก์"
                             >
@@ -816,7 +830,7 @@ export default function ShareLinksPage() {
 
                             {/* View Live */}
                             <Link
-                              href={`/s/${link.token_raw}`}
+                              href={`/s/${link.token_raw}${link.creator_username === 'admin02' || currentUser?.username === 'admin02' ? '?rep=admin02' : ''}`}
                               target="_blank"
                               className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition"
                               title="เปิดดูหน้าลูกค้า"

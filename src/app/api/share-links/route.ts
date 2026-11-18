@@ -188,11 +188,13 @@ export async function POST(request: Request) {
       customer_name,
     });
 
+    const repSuffix = user.username === 'admin02' ? '?rep=admin02' : '';
+
     return NextResponse.json({
       success: true,
       linkId,
       token: rawToken,
-      url: `/s/${rawToken}`,
+      url: `/s/${rawToken}${repSuffix}`,
       message: 'สร้างลิงก์แชร์ลูกค้าสำเร็จ',
     });
   } catch (error: any) {
